@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="친구들과 커피, 간식, 벌칙, 순서를 가볍게 정하는 미니게임 모음"
+    />
+    <meta name="theme-color" content="#ff5d4c" />
+    <title>딱! 정해 - 내기 게임</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="딱! 정해 처음으로">
+        <span class="brand-mark" aria-hidden="true">딱!</span>
+        <span>
+          <strong>딱! 정해</strong>
+          <small>내기 게임</small>
+        </span>
+      </a>
+      <span class="privacy-note">입력 내용은 이 기기에만 저장돼요</span>
+    </header>
+
+    <main class="app-shell">
+      <aside class="setup-panel" aria-labelledby="setup-title">
+        <div class="section-heading">
+          <span class="step-number">1</span>
+          <div>
+            <h1 id="setup-title">오늘의 멤버</h1>
+            <p>같이 할 사람을 추가해 주세요.</p>
+          </div>
+        </div>
+
+        <form id="participantForm" class="add-form">
+          <label class="sr-only" for="participantInput">참가자 이름</label>
+          <input
+            id="participantInput"
+            maxlength="12"
+            autocomplete="off"
+            placeholder="이름 입력"
+          />
+          <button class="icon-button add-button" type="submit" aria-label="참가자 추가">
+            <span aria-hidden="true">＋</span>
+          </button>
+        </form>
+        <div
+          id="participantList"
+          class="participant-list"
+          aria-label="참가자 목록"
+        ></div>
+        <p id="participantCount" class="field-help"></p>
+
+        <div class="setup-divider"></div>
+
+        <div class="section-heading compact">
+          <span class="step-number yellow">2</span>
+          <div>
+            <h2>무엇을 정할까요?</h2>
+            <p>결과와 함께 보여줄 내용을 골라요.</p>
+          </div>
+        </div>
+        <div id="stakePresets" class="preset-grid" aria-label="내기 항목">
+          <button type="button" data-stake="커피 사기">커피 사기</button>
+          <button type="button" data-stake="간식 사기">간식 사기</button>
+          <button type="button" data-stake="설거지">설거지</button>
+          <button type="button" data-stake="순서 정하기">순서 정하기</button>
+        </div>
+        <label class="sr-only" for="customStake">직접 입력</label>
+        <input
+          id="customStake"
+          class="custom-stake"
+          maxlength="30"
+          autocomplete="off"
+          placeholder="직접 입력하기"
+        />
+      </aside>
+
+      <section class="play-panel" aria-labelledby="game-choice-title">
+        <div class="game-choice-header">
+          <div>
+            <span class="eyebrow">GAME SELECT</span>
+            <h2 id="game-choice-title">어떤 게임으로 정할까요?</h2>
+          </div>
+          <span id="currentStakeBadge" class="stake-badge"></span>
+        </div>
+
+        <nav class="game-tabs" aria-label="게임 선택">
+          <button class="game-tab is-active" type="button" data-game="wheel">
+            <span class="tab-art wheel-art" aria-hidden="true"></span>
+            <span>
+              <strong>돌려돌려 룰렛</strong>
+              <small>운에 맡기는 한 방</small>
+            </span>
+          </button>
+          <button class="game-tab" type="button" data-game="bomb">
+            <span class="tab-art bomb-art" aria-hidden="true"></span>
+            <span>
+              <strong>폭탄 돌리기</strong>
+              <small>언제 멈출지 몰라요</small>
+            </span>
+          </button>
+          <button class="game-tab" type="button" data-game="cards">
+            <span class="tab-art card-art" aria-hidden="true"></span>
+            <span>
+              <strong>복불복 카드</strong>
+              <small>한 장만 피해요</small>
+            </span>
+          </button>
+        </nav>
+
+        <div class="game-stage">
+          <section id="wheelGame" class="game-view is-active" aria-labelledby="wheel-title">
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">01 · RANDOM WHEEL</span>
+                <h3 id="wheel-title">돌려돌려 룰렛</h3>
+              </div>
+              <p id="wheelStatus" class="status-text" aria-live="polite">
+                준비됐다면 힘차게 돌려 보세요.
+              </p>
+            </div>
+            <div class="wheel-area">
+              <div class="wheel-wrap">
+                <div class="wheel-pointer" aria-hidden="true"></div>
+                <canvas id="wheelCanvas" width="720" height="720">
+                  참가자 중 한 명을 무작위로 선택하는 룰렛입니다.
+                </canvas>
+              </div>
+              <button id="spinButton" class="primary-action coral" type="button">
+                룰렛 돌리기
+              </button>
+            </div>
+          </section>
+
+          <section id="bombGame" class="game-view" aria-labelledby="bomb-title" hidden>
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">02 · PASS THE BOMB</span>
+                <h3 id="bomb-title">폭탄 돌리기</h3>
+              </div>
+              <p id="bombStatus" class="status-text" aria-live="assertive">
+                시작하면 휴대폰을 차례대로 넘겨주세요.
+              </p>
+            </div>
+            <div class="bomb-stage">
+              <div id="bombVisual" class="bomb-visual" aria-hidden="true">
+                <span class="bomb-fuse"></span>
+                <span class="bomb-spark">✦</span>
+                <span class="bomb-body"><span>?</span></span>
+              </div>
+              <div id="bombHolder" class="bomb-holder">누구에게서 멈출까요?</div>
+              <button id="bombButton" class="primary-action teal" type="button">
+                폭탄 시작
+              </button>
+              <p class="game-note">남은 시간은 아무도 알 수 없어요.</p>
+            </div>
+          </section>
+
+          <section id="cardsGame" class="game-view" aria-labelledby="cards-title" hidden>
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">03 · LUCKY CARD</span>
+                <h3 id="cards-title">복불복 카드</h3>
+              </div>
+              <p id="cardStatus" class="status-text" aria-live="polite">
+                카드를 섞고 한 명씩 골라 보세요.
+              </p>
+            </div>
+            <div class="card-stage">
+              <div id="cardGrid" class="card-grid" aria-label="복불복 카드"></div>
+              <button id="shuffleButton" class="secondary-action" type="button">
+                카드 다시 섞기
+              </button>
+            </div>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <strong>딱! 정해</strong>
+      <span>가벼운 내기는 가볍게, 결과는 깔끔하게.</span>
+    </footer>
+
+    <dialog id="resultDialog" class="result-dialog">
+      <button id="closeResult" class="dialog-close" type="button" aria-label="결과 닫기">
+        ×
+      </button>
+      <span id="resultGameLabel" class="result-label"></span>
+      <p class="result-lead">오늘의 주인공은</p>
+      <strong id="resultName" class="result-name"></strong>
+      <div class="result-stake">
+        <span>결과</span>
+        <strong id="resultStake"></strong>
+      </div>
+      <div class="result-actions">
+        <button id="playAgain" class="primary-action coral" type="button">한 판 더</button>
+        <button id="copyResult" class="secondary-action" type="button">결과 복사</button>
+        <button id="changeGame" class="text-action" type="button">다른 게임 고르기</button>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
