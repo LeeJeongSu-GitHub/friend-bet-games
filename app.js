@@ -6,7 +6,10 @@ const GAME_LABELS = {
   wheel: "돌려돌려 룰렛",
   bomb: "폭탄 돌리기",
   cards: "복불복 카드",
+  order: "순서 정하기",
+  teams: "팀 나누기",
 };
+const TEAM_COLORS = ["#ffd54a", "#90ddd6", "#a9c0f5", "#ff9f92"];
 
 const elements = {
   participantForm: document.querySelector("#participantForm"),
@@ -21,6 +24,8 @@ const elements = {
     wheel: document.querySelector("#wheelGame"),
     bomb: document.querySelector("#bombGame"),
     cards: document.querySelector("#cardsGame"),
+    order: document.querySelector("#orderGame"),
+    teams: document.querySelector("#teamsGame"),
   },
   wheelCanvas: document.querySelector("#wheelCanvas"),
   wheelStatus: document.querySelector("#wheelStatus"),
@@ -32,10 +37,19 @@ const elements = {
   cardGrid: document.querySelector("#cardGrid"),
   cardStatus: document.querySelector("#cardStatus"),
   shuffleButton: document.querySelector("#shuffleButton"),
+  orderList: document.querySelector("#orderList"),
+  orderStatus: document.querySelector("#orderStatus"),
+  orderButton: document.querySelector("#orderButton"),
+  teamCountControl: document.querySelector("#teamCountControl"),
+  teamBoard: document.querySelector("#teamBoard"),
+  teamStatus: document.querySelector("#teamStatus"),
+  teamButton: document.querySelector("#teamButton"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
+  resultLead: document.querySelector("#resultLead"),
   resultName: document.querySelector("#resultName"),
+  resultStakeLabel: document.querySelector("#resultStakeLabel"),
   resultStake: document.querySelector("#resultStake"),
   playAgain: document.querySelector("#playAgain"),
   copyResult: document.querySelector("#copyResult"),
@@ -47,6 +61,7 @@ const savedState = loadState();
 const state = {
   participants: savedState.participants,
   stake: savedState.stake,
+  teamCount: savedState.teamCount,
   currentGame: "wheel",
   lastResult: null,
 };
@@ -58,6 +73,9 @@ let bombTimer = null;
 let bombRevealTimer = null;
 let bombHolderIndex = 0;
 let cardRound = null;
+let orderRound = null;
+let teamRound = null;
+let resultRevealTimer = null;
 let toastTimer = null;
 
 function loadState() {
@@ -73,15 +91,18 @@ function loadState() {
       typeof parsed?.stake === "string" && parsed.stake.trim()
         ? parsed.stake.trim().slice(0, 30)
         : DEFAULT_STAKE;
+    const teamCount = [2, 3, 4].includes(parsed?.teamCount) ? parsed.teamCount : 2;
 
     return {
       participants: participants.length >= 2 ? participants : [...DEFAULT_PARTICIPANTS],
       stake,
+      teamCount,
     };
   } catch {
     return {
       participants: [...DEFAULT_PARTICIPANTS],
       stake: DEFAULT_STAKE,
+      teamCount: 2,
     };
   }
 }
@@ -93,6 +114,7 @@ function saveState() {
       JSON.stringify({
         participants: state.participants,
         stake: state.stake,
+        teamCount: state.teamCount,
       }),
     );
   } catch {
@@ -133,6 +155,7 @@ function showToast(message) {
 }
 
 function renderParticipants() {
+  window.clearTimeout(resultRevealTimer);
   elements.participantList.replaceChildren();
 
   state.participants.forEach((name, index) => {
@@ -156,6 +179,9 @@ function renderParticipants() {
   drawWheel();
   resetBomb();
   dealCards();
+  resetOrder();
+  normalizeTeamCount();
+  resetTeams();
 }
 
 function addParticipant(rawName) {
@@ -209,6 +235,7 @@ function setStake(value, source = "preset") {
 function selectGame(game) {
   if (!elements.gameViews[game] || state.currentGame === game) return;
 
+  window.clearTimeout(resultRevealTimer);
   if (state.currentGame === "bomb") resetBomb();
   state.currentGame = game;
 
@@ -459,15 +486,167 @@ function revealCard(index) {
 
   renderCards();
   if (card.bad) {
-    window.setTimeout(() => showResult(player, "cards"), 650);
+    window.clearTimeout(resultRevealTimer);
+    resultRevealTimer = window.setTimeout(() => showResult(player, "cards"), 650);
   }
 }
 
-function showResult(name, game) {
-  state.lastResult = { name, game, stake: state.stake };
-  elements.resultGameLabel.textContent = GAME_LABELS[game];
-  elements.resultName.textContent = name;
-  elements.resultStake.textContent = state.stake;
+function resetOrder() {
+  orderRound = null;
+  elements.orderStatus.textContent = "모두의 차례를 한 번에 정해요.";
+  renderOrder();
+}
+
+function renderOrder(order = null) {
+  elements.orderList.replaceChildren();
+  elements.orderList.classList.toggle("is-revealed", Boolean(order));
+
+  (order || state.participants).forEach((name, index) => {
+    const item = document.createElement("li");
+    item.className = "order-item";
+    item.style.setProperty("--reveal-delay", `${index * 45}ms`);
+    if (!order) item.classList.add("is-placeholder");
+
+    const rank = document.createElement("span");
+    rank.className = "order-rank";
+    rank.textContent = order ? String(index + 1) : "?";
+
+    const label = document.createElement("strong");
+    label.textContent = name;
+
+    item.append(rank, label);
+    elements.orderList.append(item);
+  });
+}
+
+function makeOrder() {
+  window.clearTimeout(resultRevealTimer);
+  orderRound = shuffle(state.participants);
+  renderOrder(orderRound);
+  elements.orderStatus.textContent = `${orderRound.length}명의 순서가 정해졌어요.`;
+
+  const displayText = orderRound.map((name, index) => `${index + 1}. ${name}`).join("\n");
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "order",
+      lead: "정해진 순서는",
+      displayText,
+      stakeLabel: "항목",
+      stake: state.stake,
+      copyText: `딱! 정해 순서 · ${state.stake}\n${displayText}`,
+      list: true,
+    });
+  }, 600);
+}
+
+function normalizeTeamCount() {
+  const previousTeamCount = state.teamCount;
+  state.teamCount = Math.min(state.teamCount, state.participants.length);
+  if (state.teamCount < 2) state.teamCount = 2;
+  if (state.teamCount !== previousTeamCount) saveState();
+  updateTeamControls();
+}
+
+function updateTeamControls() {
+  [...elements.teamCountControl.querySelectorAll("[data-team-count]")].forEach((button) => {
+    const count = Number(button.dataset.teamCount);
+    const active = count === state.teamCount;
+    button.disabled = count > state.participants.length;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function setTeamCount(count) {
+  if (![2, 3, 4].includes(count) || count > state.participants.length) return;
+  state.teamCount = count;
+  saveState();
+  updateTeamControls();
+  resetTeams();
+}
+
+function resetTeams() {
+  teamRound = null;
+  elements.teamStatus.textContent = "팀 수를 고르고 멤버를 섞어 보세요.";
+  renderTeams();
+}
+
+function renderTeams(teams = null) {
+  elements.teamBoard.replaceChildren();
+  elements.teamBoard.classList.toggle("is-revealed", Boolean(teams));
+  elements.teamBoard.style.setProperty("--team-count", String(state.teamCount));
+
+  Array.from({ length: state.teamCount }, (_, index) => {
+    const card = document.createElement("section");
+    card.className = "team-card";
+    card.style.setProperty("--team-color", TEAM_COLORS[index]);
+    card.style.setProperty("--reveal-delay", `${index * 80}ms`);
+    if (!teams) card.classList.add("is-placeholder");
+
+    const title = document.createElement("h4");
+    title.textContent = `${String.fromCharCode(65 + index)}팀`;
+
+    const members = document.createElement("ul");
+    members.className = "team-members";
+    const names = teams?.[index] || ["대기 중"];
+    names.forEach((name) => {
+      const item = document.createElement("li");
+      item.textContent = name;
+      members.append(item);
+    });
+
+    card.append(title, members);
+    elements.teamBoard.append(card);
+  });
+}
+
+function makeTeams() {
+  window.clearTimeout(resultRevealTimer);
+  teamRound = Array.from({ length: state.teamCount }, () => []);
+  shuffle(state.participants).forEach((name, index) => {
+    teamRound[index % state.teamCount].push(name);
+  });
+
+  renderTeams(teamRound);
+  elements.teamStatus.textContent = `${state.participants.length}명을 ${state.teamCount}팀으로 나눴어요.`;
+
+  const displayText = teamRound
+    .map((members, index) => `${String.fromCharCode(65 + index)}팀: ${members.join(", ")}`)
+    .join("\n");
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "teams",
+      lead: "오늘의 팀 편성은",
+      displayText,
+      stakeLabel: "항목",
+      stake: state.stake,
+      copyText: `딱! 정해 팀 편성 · ${state.stake}\n${displayText}`,
+      list: true,
+    });
+  }, 550);
+}
+
+function showResult(resultOrName, game) {
+  const result =
+    typeof resultOrName === "string"
+      ? {
+          game,
+          lead: "오늘의 주인공은",
+          displayText: resultOrName,
+          stakeLabel: "결과",
+          stake: state.stake,
+          copyText: `딱! 정해 결과: ${resultOrName} 당첨 · ${state.stake}`,
+          list: false,
+        }
+      : resultOrName;
+
+  state.lastResult = result;
+  elements.resultGameLabel.textContent = GAME_LABELS[result.game];
+  elements.resultLead.textContent = result.lead;
+  elements.resultName.textContent = result.displayText;
+  elements.resultName.classList.toggle("is-list", Boolean(result.list));
+  elements.resultStakeLabel.textContent = result.stakeLabel;
+  elements.resultStake.textContent = result.stake;
 
   if (typeof elements.resultDialog.showModal === "function") {
     elements.resultDialog.showModal();
@@ -494,15 +673,21 @@ function playAgain() {
   } else if (game === "bomb") {
     resetBomb();
     elements.bombButton.focus();
-  } else {
+  } else if (game === "cards") {
     dealCards();
     elements.shuffleButton.focus();
+  } else if (game === "order") {
+    elements.orderStatus.textContent = "한 번 더 순서를 정해 보세요.";
+    elements.orderButton.focus();
+  } else {
+    elements.teamStatus.textContent = "한 번 더 팀을 나눠 보세요.";
+    elements.teamButton.focus();
   }
 }
 
 async function copyResult() {
   if (!state.lastResult) return;
-  const text = `딱! 정해 결과: ${state.lastResult.name} 당첨 · ${state.lastResult.stake}`;
+  const text = state.lastResult.copyText;
 
   try {
     await navigator.clipboard.writeText(text);
@@ -548,6 +733,12 @@ elements.gameTabs.forEach((tab) => {
 elements.spinButton.addEventListener("click", spinWheel);
 elements.bombButton.addEventListener("click", startBomb);
 elements.shuffleButton.addEventListener("click", dealCards);
+elements.orderButton.addEventListener("click", makeOrder);
+elements.teamButton.addEventListener("click", makeTeams);
+elements.teamCountControl.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-team-count]");
+  if (button) setTeamCount(Number(button.dataset.teamCount));
+});
 elements.closeResult.addEventListener("click", closeResult);
 elements.playAgain.addEventListener("click", playAgain);
 elements.copyResult.addEventListener("click", copyResult);
@@ -564,6 +755,7 @@ elements.resultDialog.addEventListener("click", (event) => {
 window.addEventListener("beforeunload", () => {
   window.clearTimeout(bombTimer);
   window.clearTimeout(bombRevealTimer);
+  window.clearTimeout(resultRevealTimer);
 });
 
 renderParticipants();

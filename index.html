@@ -108,6 +108,20 @@
               <small>한 장만 피해요</small>
             </span>
           </button>
+          <button class="game-tab" type="button" data-game="order">
+            <span class="tab-art order-art" aria-hidden="true"></span>
+            <span>
+              <strong>순서 정하기</strong>
+              <small>차례를 한 번에 정해요</small>
+            </span>
+          </button>
+          <button class="game-tab" type="button" data-game="teams">
+            <span class="tab-art team-art" aria-hidden="true"></span>
+            <span>
+              <strong>팀 나누기</strong>
+              <small>공평하게 섞어 나눠요</small>
+            </span>
+          </button>
         </nav>
 
         <div class="game-stage">
@@ -175,6 +189,49 @@
               </button>
             </div>
           </section>
+
+          <section id="orderGame" class="game-view" aria-labelledby="order-title" hidden>
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">04 · RANDOM ORDER</span>
+                <h3 id="order-title">순서 정하기</h3>
+              </div>
+              <p id="orderStatus" class="status-text" aria-live="polite">
+                모두의 차례를 한 번에 정해요.
+              </p>
+            </div>
+            <div class="order-stage">
+              <ol id="orderList" class="order-list" aria-label="정해진 순서"></ol>
+              <button id="orderButton" class="primary-action blue" type="button">
+                순서 정하기
+              </button>
+            </div>
+          </section>
+
+          <section id="teamsGame" class="game-view" aria-labelledby="teams-title" hidden>
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">05 · TEAM MAKER</span>
+                <h3 id="teams-title">팀 나누기</h3>
+              </div>
+              <p id="teamStatus" class="status-text" aria-live="polite">
+                팀 수를 고르고 멤버를 섞어 보세요.
+              </p>
+            </div>
+            <div class="team-stage">
+              <div id="teamCountControl" class="segmented-control" aria-label="팀 수 선택">
+                <button class="is-active" type="button" data-team-count="2" aria-pressed="true">
+                  2팀
+                </button>
+                <button type="button" data-team-count="3" aria-pressed="false">3팀</button>
+                <button type="button" data-team-count="4" aria-pressed="false">4팀</button>
+              </div>
+              <div id="teamBoard" class="team-board" aria-label="팀 배정 결과"></div>
+              <button id="teamButton" class="primary-action yellow" type="button">
+                팀 나누기
+              </button>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -189,10 +246,10 @@
         ×
       </button>
       <span id="resultGameLabel" class="result-label"></span>
-      <p class="result-lead">오늘의 주인공은</p>
+      <p id="resultLead" class="result-lead">오늘의 주인공은</p>
       <strong id="resultName" class="result-name"></strong>
       <div class="result-stake">
-        <span>결과</span>
+        <span id="resultStakeLabel">결과</span>
         <strong id="resultStake"></strong>
       </div>
       <div class="result-actions">
