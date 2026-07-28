@@ -2,10 +2,21 @@ const STORAGE_KEY = "friend-bet-games-v2";
 const LEGACY_STORAGE_KEY = "friend-bet-games-v1";
 const MAX_PARTICIPANTS = 12;
 const MAX_OPTIONS = 12;
+const MAX_MISSIONS = 16;
 const MAX_SAVED_GROUPS = 5;
 const HISTORY_LIMIT = 5;
 const DEFAULT_PARTICIPANTS = ["민지", "준호", "서연", "태윤"];
 const DEFAULT_OPTIONS = ["한식", "분식", "중식", "일식", "치킨", "피자"];
+const DEFAULT_MISSIONS = [
+  "노래 한 소절 부르기",
+  "단체 사진 포즈 정하기",
+  "다음 게임 진행 맡기",
+  "모두에게 칭찬 한마디 하기",
+  "재미있는 표정으로 사진 찍기",
+  "간식 메뉴 정하기",
+  "10초 동안 춤추기",
+  "다음 모임 장소 정하기",
+];
 const DEFAULT_STAKE = "커피 사기";
 const WHEEL_COLORS = [
   "#ff5d4c",
@@ -17,6 +28,15 @@ const WHEEL_COLORS = [
 ];
 const TEAM_COLORS = ["#ffd54a", "#90ddd6", "#a9c0f5", "#ff9f92"];
 const FINGER_COLORS = ["#ff5d4c", "#ffd54a", "#179f92", "#4676e8", "#9b6fe8"];
+const PARTY_SCORE_GAMES = new Set([
+  "wheel",
+  "bomb",
+  "cards",
+  "draw",
+  "finger",
+  "reaction",
+  "timer",
+]);
 const GAME_LABELS = {
   wheel: "돌려돌려 룰렛",
   bomb: "폭탄 돌리기",
@@ -30,13 +50,13 @@ const GAME_LABELS = {
   tournament: "선택 토너먼트",
   finger: "손가락 뽑기",
   reaction: "반응속도 대결",
+  timer: "5초 타이머",
 };
 
 const elements = {
   setupPanel: document.querySelector("#setupPanel"),
   setupToggle: document.querySelector("#setupToggle"),
   setupToggleLabel: document.querySelector(".setup-toggle-label"),
-  setupToggleIcon: document.querySelector(".setup-toggle-icon"),
   setupContent: document.querySelector("#setupContent"),
   setupSummary: document.querySelector("#setupSummary"),
   setupSummaryMembers: document.querySelector("#setupSummaryMembers"),
@@ -59,9 +79,17 @@ const elements = {
   noRepeatToggle: document.querySelector("#noRepeatToggle"),
   stakePresets: document.querySelector("#stakePresets"),
   customStake: document.querySelector("#customStake"),
+  missionForm: document.querySelector("#missionForm"),
+  missionInput: document.querySelector("#missionInput"),
+  missionList: document.querySelector("#missionList"),
+  resetMissions: document.querySelector("#resetMissions"),
   currentStakeBadge: document.querySelector("#currentStakeBadge"),
   resultHistory: document.querySelector("#resultHistory"),
   clearHistory: document.querySelector("#clearHistory"),
+  partySessionStatus: document.querySelector("#party-session-title"),
+  partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
+  endPartySession: document.querySelector("#endPartySession"),
+  partyScoreboard: document.querySelector("#partyScoreboard"),
   gameCategoryButtons: [
     ...document.querySelectorAll("[data-game-category]"),
   ],
@@ -79,6 +107,7 @@ const elements = {
     tournament: document.querySelector("#tournamentGame"),
     finger: document.querySelector("#fingerGame"),
     reaction: document.querySelector("#reactionGame"),
+    timer: document.querySelector("#timerGame"),
   },
   wheelCanvas: document.querySelector("#wheelCanvas"),
   wheelStatus: document.querySelector("#wheelStatus"),
@@ -139,6 +168,13 @@ const elements = {
   reactionRightScore: document.querySelector("#reactionRightScore"),
   reactionReset: document.querySelector("#reactionReset"),
   reactionStart: document.querySelector("#reactionStart"),
+  timerStatus: document.querySelector("#timerStatus"),
+  timerBoard: document.querySelector("#timerBoard"),
+  timerPlayer: document.querySelector("#timerPlayer"),
+  timerDisplay: document.querySelector("#timerDisplay"),
+  timerResults: document.querySelector("#timerResults"),
+  timerReset: document.querySelector("#timerReset"),
+  timerStart: document.querySelector("#timerStart"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
@@ -146,6 +182,10 @@ const elements = {
   resultName: document.querySelector("#resultName"),
   resultStakeLabel: document.querySelector("#resultStakeLabel"),
   resultStake: document.querySelector("#resultStake"),
+  resultParty: document.querySelector("#resultParty"),
+  resultMission: document.querySelector("#resultMission"),
+  resultMissionText: document.querySelector("#resultMissionText"),
+  drawMission: document.querySelector("#drawMission"),
   playAgain: document.querySelector("#playAgain"),
   shareResult: document.querySelector("#shareResult"),
   copyResult: document.querySelector("#copyResult"),
@@ -157,6 +197,7 @@ const savedState = loadState();
 const state = {
   participants: savedState.participants,
   options: savedState.options,
+  missions: savedState.missions,
   stake: savedState.stake,
   teamCount: savedState.teamCount,
   drawCount: savedState.drawCount,
@@ -167,6 +208,8 @@ const state = {
   currentGame: "wheel",
   currentCategory: "quick",
   lastResult: null,
+  lastMission: null,
+  partySession: null,
   excludedWinners: [],
   setupCollapsed: false,
 };
@@ -196,6 +239,10 @@ let reactionTimer = null;
 let reactionPhase = "idle";
 let reactionGoAt = 0;
 let reactionScores = [0, 0];
+let timerRound = null;
+let timerRunning = false;
+let timerStartedAt = 0;
+let timerAnimationFrame = null;
 let resultRevealTimer = null;
 let toastTimer = null;
 
@@ -227,6 +274,9 @@ function loadState() {
       12,
     );
     const options = sanitizeTextList(parsed?.options, MAX_OPTIONS, 18);
+    const missions = Array.isArray(parsed?.missions)
+      ? sanitizeTextList(parsed.missions, MAX_MISSIONS, 30)
+      : [...DEFAULT_MISSIONS];
     const stake =
       typeof parsed?.stake === "string" && parsed.stake.trim()
         ? parsed.stake.trim().slice(0, 30)
@@ -274,6 +324,10 @@ function loadState() {
             game: entry.game,
             summary: entry.summary.slice(0, 120),
             copyText: entry.copyText.slice(0, 1000),
+            mission:
+              typeof entry.mission === "string"
+                ? entry.mission.slice(0, 30)
+                : "",
             createdAt: Number(entry.createdAt) || Date.now(),
           }))
           .slice(0, HISTORY_LIMIT)
@@ -282,6 +336,7 @@ function loadState() {
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
       options: options.length ? options : [...DEFAULT_OPTIONS],
+      missions,
       stake,
       teamCount,
       drawCount,
@@ -295,6 +350,7 @@ function loadState() {
     return {
       participants: [...DEFAULT_PARTICIPANTS],
       options: [...DEFAULT_OPTIONS],
+      missions: [...DEFAULT_MISSIONS],
       stake: DEFAULT_STAKE,
       teamCount: 2,
       drawCount: 1,
@@ -314,6 +370,7 @@ function saveState() {
       JSON.stringify({
         participants: state.participants,
         options: state.options,
+        missions: state.missions,
         stake: state.stake,
         teamCount: state.teamCount,
         drawCount: state.drawCount,
@@ -407,13 +464,13 @@ function setSetupCollapsed(collapsed) {
   elements.setupToggleLabel.textContent = state.setupCollapsed
     ? "설정 열기"
     : "설정 접기";
-  elements.setupToggleIcon.textContent = state.setupCollapsed ? "⌄" : "⌃";
   elements.setupPanel.classList.toggle("is-collapsed", state.setupCollapsed);
   updateSetupSummary();
 }
 
 function renderParticipants() {
   window.clearTimeout(resultRevealTimer);
+  if (state.partySession) stopPartySession(false);
   elements.participantList.replaceChildren();
 
   if (state.participants.length === 0) {
@@ -457,6 +514,7 @@ function renderParticipants() {
   resetSeats();
   resetFinger();
   resetReaction(true);
+  resetTimer();
   updateGameAvailability();
 }
 
@@ -676,6 +734,198 @@ function setStake(value, source = "preset") {
   saveState();
 }
 
+function renderMissions() {
+  elements.missionList.replaceChildren();
+
+  if (!state.missions.length) {
+    const empty = document.createElement("span");
+    empty.className = "inline-empty";
+    empty.textContent = "미션을 추가하면 결과에서 카드를 뽑을 수 있어요.";
+    elements.missionList.append(empty);
+  } else {
+    state.missions.forEach((mission, index) => {
+      const chip = document.createElement("span");
+      chip.className = "mission-chip";
+      const label = document.createElement("span");
+      label.textContent = mission;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "×";
+      remove.setAttribute("aria-label", `${mission} 미션 삭제`);
+      remove.addEventListener("click", () => removeMission(index));
+      chip.append(label, remove);
+      elements.missionList.append(chip);
+    });
+  }
+
+  elements.drawMission.disabled = state.missions.length === 0;
+}
+
+function addMission(rawValue) {
+  const mission = rawValue.trim().slice(0, 30);
+  if (!mission) {
+    showToast("미션을 입력해 주세요.");
+    return;
+  }
+  if (state.missions.length >= MAX_MISSIONS) {
+    showToast(`미션은 최대 ${MAX_MISSIONS}개까지 추가할 수 있어요.`);
+    return;
+  }
+  if (
+    state.missions.some(
+      (value) =>
+        value.toLocaleLowerCase("ko") === mission.toLocaleLowerCase("ko"),
+    )
+  ) {
+    showToast("같은 미션이 이미 있어요.");
+    return;
+  }
+
+  state.missions.push(mission);
+  elements.missionInput.value = "";
+  saveState();
+  renderMissions();
+}
+
+function removeMission(index) {
+  state.missions.splice(index, 1);
+  saveState();
+  renderMissions();
+}
+
+function restoreDefaultMissions() {
+  state.missions = [...DEFAULT_MISSIONS];
+  state.lastMission = null;
+  saveState();
+  renderMissions();
+  showToast("기본 미션으로 되돌렸어요.");
+}
+
+function resetResultMission() {
+  elements.resultMission.hidden = true;
+  elements.resultMission.classList.remove("is-revealed");
+  elements.resultMissionText.textContent = "";
+  elements.drawMission.textContent = "미션 카드 뽑기";
+  elements.drawMission.disabled = state.missions.length === 0;
+}
+
+function drawMissionCard() {
+  if (!state.lastResult || !state.missions.length) return;
+  const candidates =
+    state.missions.length > 1
+      ? state.missions.filter((mission) => mission !== state.lastMission)
+      : state.missions;
+  const mission = candidates[randomInt(candidates.length)];
+  state.lastMission = mission;
+  state.lastResult.mission = mission;
+  state.lastResult.copyText = `${state.lastResult.baseCopyText}\n랜덤 미션: ${mission}`;
+
+  elements.resultMission.hidden = false;
+  elements.resultMissionText.textContent = mission;
+  elements.resultMission.classList.remove("is-revealed");
+  window.requestAnimationFrame(() => {
+    elements.resultMission.classList.add("is-revealed");
+  });
+  elements.drawMission.textContent = "미션 다시 뽑기";
+
+  const historyEntry = state.history.find(
+    (entry) => entry.id === state.lastResult.historyId,
+  );
+  if (historyEntry) {
+    historyEntry.mission = mission;
+    historyEntry.copyText = state.lastResult.copyText;
+    saveState();
+    renderHistory();
+  }
+}
+
+function renderPartySession() {
+  const session = state.partySession;
+  const finished = Boolean(session?.finished);
+
+  elements.partyStartButtons.forEach((button) => {
+    const rounds = Number(button.dataset.partyRounds);
+    button.hidden = Boolean(session) && !finished;
+    button.disabled = state.participants.length < 2;
+    button.textContent = `${rounds}판 ${finished ? "다시" : "시작"}`;
+  });
+  elements.endPartySession.hidden = !session;
+  elements.endPartySession.textContent = finished ? "닫기" : "종료";
+
+  if (!session) {
+    elements.partySessionStatus.textContent = "파티 세션 준비";
+    elements.partyScoreboard.hidden = true;
+    elements.partyScoreboard.replaceChildren();
+    return;
+  }
+
+  elements.partySessionStatus.textContent = session.finished
+    ? `${session.totalRounds}판 완료`
+    : `${session.round} / ${session.totalRounds}판 진행`;
+  elements.partyScoreboard.hidden = false;
+  elements.partyScoreboard.replaceChildren();
+  session.members.forEach((name) => {
+    const score = document.createElement("span");
+    score.className = "party-score";
+    const label = document.createElement("span");
+    label.textContent = name;
+    const value = document.createElement("strong");
+    value.textContent = `★ ${session.scores[name] || 0}`;
+    score.append(label, value);
+    elements.partyScoreboard.append(score);
+  });
+}
+
+function startPartySession(totalRounds) {
+  if (![3, 5].includes(totalRounds) || !hasEnoughParticipants()) return;
+  state.partySession = {
+    totalRounds,
+    round: 0,
+    members: [...state.participants],
+    scores: Object.fromEntries(state.participants.map((name) => [name, 0])),
+    finished: false,
+  };
+  renderPartySession();
+  showToast(`${totalRounds}판 파티 세션을 시작했어요.`);
+}
+
+function stopPartySession(notify = true) {
+  if (!state.partySession) return;
+  state.partySession = null;
+  renderPartySession();
+  if (notify) showToast("파티 세션을 종료했어요.");
+}
+
+function applyPartyResult(result) {
+  const session = state.partySession;
+  if (!session || session.finished) return "";
+
+  session.round += 1;
+  const resultName = result.displayText.trim();
+  const scorer =
+    !result.list && PARTY_SCORE_GAMES.has(result.game)
+      ? session.members.find((name) => name === resultName)
+      : null;
+  if (scorer) session.scores[scorer] += 1;
+
+  if (session.round >= session.totalRounds) {
+    session.finished = true;
+  }
+  renderPartySession();
+
+  if (session.finished) {
+    const topScore = Math.max(...Object.values(session.scores));
+    const leaders = session.members.filter(
+      (name) => session.scores[name] === topScore,
+    );
+    return `세션 종료 · ${leaders.join(", ")} ${topScore}점`;
+  }
+
+  return scorer
+    ? `파티 ${session.round}/${session.totalRounds} · ${scorer} +1점`
+    : `파티 ${session.round}/${session.totalRounds} · 점수 없음`;
+}
+
 function selectGame(game) {
   if (!elements.gameViews[game]) return;
 
@@ -685,6 +935,7 @@ function selectGame(game) {
   if (state.currentGame === "reaction" && game !== "reaction") {
     resetReaction(false);
   }
+  if (state.currentGame === "timer" && game !== "timer") resetTimer();
   state.currentGame = game;
 
   elements.gameTabs.forEach((tab) => {
@@ -704,6 +955,7 @@ function selectGame(game) {
   if (game === "cards" && !cardRound) dealCards();
   if (game === "menu") drawMenuWheel();
   if (game === "ladder") drawLadderCanvas(ladderRound?.selectedIndex);
+  if (game === "timer" && !timerRound) resetTimer();
 
   const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
   activeTab?.scrollIntoView({
@@ -718,7 +970,14 @@ function setGameCategory(category) {
   if (!valid.includes(category)) return;
 
   state.currentCategory = category;
-  elements.gameCategoryButtons.forEach((button) => {
+  elements.partyStartButtons.forEach((button) => {
+  button.addEventListener("click", () =>
+    startPartySession(Number(button.dataset.partyRounds)),
+  );
+});
+elements.endPartySession.addEventListener("click", () => stopPartySession());
+
+elements.gameCategoryButtons.forEach((button) => {
     const active = button.dataset.gameCategory === category;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
@@ -2208,6 +2467,158 @@ function handleReactionTap(side) {
   }
 }
 
+function timerPlayersMatch() {
+  return (
+    timerRound?.players.length === state.participants.length &&
+    timerRound.players.every((name, index) => name === state.participants[index])
+  );
+}
+
+function renderTimerResults() {
+  elements.timerResults.replaceChildren();
+  if (!timerRound?.results.length) {
+    const empty = document.createElement("li");
+    empty.className = "timer-result-empty";
+    empty.textContent = "아직 기록이 없어요.";
+    elements.timerResults.append(empty);
+    return;
+  }
+
+  timerRound.results.forEach((result) => {
+    const item = document.createElement("li");
+    const name = document.createElement("strong");
+    name.textContent = result.name;
+    const record = document.createElement("span");
+    record.textContent = `${(result.elapsed / 1000).toFixed(2)}초`;
+    const difference = document.createElement("small");
+    difference.textContent = `오차 ${(result.difference / 1000).toFixed(2)}초`;
+    item.append(name, record, difference);
+    elements.timerResults.append(item);
+  });
+}
+
+function resetTimer() {
+  window.clearTimeout(resultRevealTimer);
+  if (timerAnimationFrame !== null) {
+    cancelAnimationFrame(timerAnimationFrame);
+  }
+  timerAnimationFrame = null;
+  timerRunning = false;
+  timerStartedAt = 0;
+  timerRound =
+    state.participants.length >= 2
+      ? {
+          players: [...state.participants],
+          index: 0,
+          results: [],
+          complete: false,
+        }
+      : null;
+  elements.timerBoard.dataset.phase = "idle";
+  elements.timerDisplay.textContent = "0.00";
+  elements.timerPlayer.textContent = timerRound
+    ? timerRound.players[0]
+    : "도전자 대기";
+  elements.timerStatus.textContent = timerRound
+    ? "참가자마다 한 번씩 5초에 도전해요."
+    : "참가자를 2명 이상 추가해 주세요.";
+  elements.timerStart.textContent = "도전 시작";
+  elements.timerStart.disabled = !timerRound;
+  elements.timerReset.disabled = !timerRound;
+  renderTimerResults();
+}
+
+function updateTimerFrame(now) {
+  if (!timerRunning) return;
+  const elapsed = now - timerStartedAt;
+  if (elapsed >= 10000) {
+    finishTimerTurn(10000);
+    return;
+  }
+  elements.timerDisplay.textContent =
+    elapsed < 900 ? (elapsed / 1000).toFixed(2) : "•••";
+  timerAnimationFrame = requestAnimationFrame(updateTimerFrame);
+}
+
+function finishTimerTurn(forcedElapsed = null) {
+  if (!timerRunning || !timerRound) return;
+  const elapsed = Math.min(
+    forcedElapsed ?? performance.now() - timerStartedAt,
+    10000,
+  );
+  timerRunning = false;
+  if (timerAnimationFrame !== null) cancelAnimationFrame(timerAnimationFrame);
+  timerAnimationFrame = null;
+
+  const name = timerRound.players[timerRound.index];
+  const result = {
+    name,
+    elapsed,
+    difference: Math.abs(elapsed - 5000),
+  };
+  timerRound.results.push(result);
+  elements.timerBoard.dataset.phase = "stopped";
+  elements.timerDisplay.textContent = (elapsed / 1000).toFixed(2);
+  elements.timerReset.disabled = false;
+  if (navigator.vibrate) navigator.vibrate(45);
+  renderTimerResults();
+
+  if (timerRound.results.length < timerRound.players.length) {
+    timerRound.index = timerRound.results.length;
+    const nextName = timerRound.players[timerRound.index];
+    elements.timerPlayer.textContent = nextName;
+    elements.timerStatus.textContent = `${name} ${(elapsed / 1000).toFixed(2)}초 · 다음은 ${nextName}`;
+    elements.timerStart.textContent = "다음 도전";
+    return;
+  }
+
+  timerRound.complete = true;
+  const bestDifference = Math.min(
+    ...timerRound.results.map((entry) => entry.difference),
+  );
+  const winners = timerRound.results.filter(
+    (entry) => Math.abs(entry.difference - bestDifference) < 1,
+  );
+  const winnerText = winners.map((entry) => entry.name).join("\n");
+  const bestRecord = winners[0];
+  elements.timerPlayer.textContent = winners.map((entry) => entry.name).join(", ");
+  elements.timerStatus.textContent = `${elements.timerPlayer.textContent} 승리 · 오차 ${(bestDifference / 1000).toFixed(2)}초`;
+  elements.timerStart.textContent = "다시 도전";
+
+  window.clearTimeout(resultRevealTimer);
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "timer",
+      lead: winners.length > 1 ? "5초 공동 우승은" : "5초에 가장 가까운 사람은",
+      displayText: winnerText,
+      stakeLabel: "최고 기록",
+      stake: `${(bestRecord.elapsed / 1000).toFixed(2)}초 · 오차 ${(bestDifference / 1000).toFixed(2)}초`,
+      copyText: `딱! 정해 5초 타이머: ${winners.map((entry) => entry.name).join(", ")} 승리 · ${(bestRecord.elapsed / 1000).toFixed(2)}초`,
+      list: winners.length > 1,
+    });
+  }, 550);
+}
+
+function startTimerTurn() {
+  if (timerRunning) {
+    finishTimerTurn();
+    return;
+  }
+  if (!hasEnoughParticipants()) return;
+  if (!timerRound || timerRound.complete || !timerPlayersMatch()) resetTimer();
+  if (!timerRound) return;
+
+  timerRunning = true;
+  timerStartedAt = performance.now();
+  elements.timerBoard.dataset.phase = "running";
+  elements.timerPlayer.textContent = timerRound.players[timerRound.index];
+  elements.timerDisplay.textContent = "0.00";
+  elements.timerStatus.textContent = "5초라고 느껴지는 순간 멈추세요.";
+  elements.timerStart.textContent = "멈추기";
+  elements.timerReset.disabled = true;
+  timerAnimationFrame = requestAnimationFrame(updateTimerFrame);
+}
+
 function updateGameAvailability() {
   const peopleReady = state.participants.length >= 2;
   const optionsReady = state.options.length >= 2;
@@ -2220,6 +2631,7 @@ function updateGameAvailability() {
     elements.drawButton,
     elements.ladderButton,
     elements.seatButton,
+    elements.timerStart,
   ].forEach((button) => {
     button.disabled = !peopleReady;
   });
@@ -2231,20 +2643,24 @@ function updateGameAvailability() {
   renderSavedGroups();
   normalizeDrawCount();
   updateTeamControls();
+  renderPartySession();
 }
 
 function recordResult(result) {
+  const id = `result-${Date.now()}-${randomInt(10000)}`;
   const summary = result.displayText.replace(/\n+/g, " / ").slice(0, 120);
   state.history.unshift({
-    id: `result-${Date.now()}-${randomInt(10000)}`,
+    id,
     game: result.game,
     summary,
     copyText: result.copyText,
+    mission: result.mission || "",
     createdAt: Date.now(),
   });
   state.history = state.history.slice(0, HISTORY_LIMIT);
   saveState();
   renderHistory();
+  return id;
 }
 
 function renderHistory() {
@@ -2268,6 +2684,11 @@ function renderHistory() {
     const summary = document.createElement("strong");
     summary.textContent = entry.summary;
     text.append(game, summary);
+    if (entry.mission) {
+      const mission = document.createElement("em");
+      mission.textContent = `미션 · ${entry.mission}`;
+      text.append(mission);
+    }
 
     const copy = document.createElement("button");
     copy.type = "button";
@@ -2284,7 +2705,7 @@ function renderHistory() {
 }
 
 function showResult(resultOrName, game) {
-  const result =
+  const rawResult =
     typeof resultOrName === "string"
       ? {
           game,
@@ -2296,6 +2717,17 @@ function showResult(resultOrName, game) {
           list: false,
         }
       : resultOrName;
+  const partyMessage = applyPartyResult(rawResult);
+  const copyText = partyMessage
+    ? `${rawResult.copyText}\n파티 세션: ${partyMessage}`
+    : rawResult.copyText;
+  const result = {
+    ...rawResult,
+    copyText,
+    partyMessage,
+    mission: "",
+    baseCopyText: copyText,
+  };
 
   state.lastResult = result;
   elements.resultGameLabel.textContent = GAME_LABELS[result.game];
@@ -2304,7 +2736,10 @@ function showResult(resultOrName, game) {
   elements.resultName.classList.toggle("is-list", Boolean(result.list));
   elements.resultStakeLabel.textContent = result.stakeLabel;
   elements.resultStake.textContent = result.stake;
-  recordResult(result);
+  elements.resultParty.hidden = !result.partyMessage;
+  elements.resultParty.textContent = result.partyMessage;
+  resetResultMission();
+  result.historyId = recordResult(result);
 
   if (typeof elements.resultDialog.showModal === "function") {
     elements.resultDialog.showModal();
@@ -2339,6 +2774,7 @@ function playAgain() {
     tournament: elements.tournamentButton,
     finger: elements.fingerReset,
     reaction: elements.reactionStart,
+    timer: elements.timerStart,
   };
 
   if (game === "wheel") {
@@ -2365,6 +2801,8 @@ function playAgain() {
     resetFinger();
   } else if (game === "reaction") {
     resetReaction(true);
+  } else if (game === "timer") {
+    resetTimer();
   }
   focusByGame[game]?.focus();
 }
@@ -2469,6 +2907,11 @@ elements.customStake.addEventListener("blur", () => {
     setStake(DEFAULT_STAKE, "preset");
   }
 });
+elements.missionForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  addMission(elements.missionInput.value);
+});
+elements.resetMissions.addEventListener("click", restoreDefaultMissions);
 
 elements.clearHistory.addEventListener("click", () => {
   state.history = [];
@@ -2476,6 +2919,13 @@ elements.clearHistory.addEventListener("click", () => {
   renderHistory();
   showToast("최근 결과를 비웠어요.");
 });
+
+elements.partyStartButtons.forEach((button) => {
+  button.addEventListener("click", () =>
+    startPartySession(Number(button.dataset.partyRounds)),
+  );
+});
+elements.endPartySession.addEventListener("click", () => stopPartySession());
 
 elements.gameCategoryButtons.forEach((button) => {
   button.addEventListener("click", () =>
@@ -2549,6 +2999,8 @@ elements.fingerReset.addEventListener("click", resetFinger);
 elements.fingerFallback.addEventListener("click", chooseFingerFromNames);
 elements.reactionStart.addEventListener("click", startReactionRound);
 elements.reactionReset.addEventListener("click", () => resetReaction(true));
+elements.timerStart.addEventListener("click", startTimerTurn);
+elements.timerReset.addEventListener("click", resetTimer);
 [
   [elements.reactionLeft, 0],
   [elements.reactionRight, 1],
@@ -2569,6 +3021,7 @@ elements.closeResult.addEventListener("click", (event) => {
   event.stopPropagation();
   closeResult();
 });
+elements.drawMission.addEventListener("click", drawMissionCard);
 elements.playAgain.addEventListener("click", playAgain);
 elements.shareResult.addEventListener("click", shareResult);
 elements.copyResult.addEventListener("click", copyResult);
@@ -2587,11 +3040,14 @@ window.addEventListener("beforeunload", () => {
   window.clearTimeout(ladderRevealTimer);
   window.clearTimeout(fingerPickTimer);
   window.clearTimeout(reactionTimer);
+  if (timerAnimationFrame !== null) cancelAnimationFrame(timerAnimationFrame);
 });
 
 elements.noRepeatToggle.checked = state.noRepeat;
 renderSavedGroups();
 renderHistory();
+renderMissions();
+renderPartySession();
 renderOptionEditors();
 renderParticipants();
 updateSeatControls();

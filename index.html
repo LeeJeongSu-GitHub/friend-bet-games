@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="룰렛, 제비뽑기, 사다리, 손가락 뽑기와 반응속도 대결을 한곳에서 즐기는 무료 친구 게임"
+      content="룰렛, 제비뽑기, 랜덤 미션, 파티 세션과 5초 타이머를 한곳에서 즐기는 무료 친구 게임"
     />
     <meta name="theme-color" content="#ff5d4c" />
     <meta property="og:type" content="website" />
@@ -14,7 +14,7 @@
       property="og:description"
       content="친구들과 빠르게 정하고 손가락 뽑기와 반응속도 미니게임도 즐겨 보세요."
     />
-    <title>딱! 정해 - 룰렛·손가락 뽑기·반응속도 미니게임</title>
+    <title>딱! 정해 - 룰렛·파티 세션·5초 타이머 미니게임</title>
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./styles.css" />
@@ -50,7 +50,7 @@
             aria-controls="setupContent"
           >
             <span class="setup-toggle-label">설정 접기</span>
-            <span class="setup-toggle-icon" aria-hidden="true">⌃</span>
+            <span class="setup-toggle-icon" aria-hidden="true"></span>
           </button>
         </div>
 
@@ -157,6 +157,26 @@
 
           <div class="setup-divider"></div>
 
+          <section class="mission-settings" aria-labelledby="mission-settings-title">
+            <div class="history-heading">
+              <div>
+                <span class="eyebrow">MISSION</span>
+                <h2 id="mission-settings-title">랜덤 미션</h2>
+              </div>
+              <button id="resetMissions" class="icon-command" type="button" aria-label="기본 미션 복원" title="기본 미션 복원">
+                ↻
+              </button>
+            </div>
+            <form id="missionForm" class="mission-add-form">
+              <label class="sr-only" for="missionInput">미션 추가</label>
+              <input id="missionInput" maxlength="30" autocomplete="off" placeholder="미션 추가" />
+              <button class="icon-button add-button" type="submit" aria-label="미션 추가">＋</button>
+            </form>
+            <div id="missionList" class="mission-list" aria-label="랜덤 미션 목록"></div>
+          </section>
+
+          <div class="setup-divider"></div>
+
           <section class="history-section" aria-labelledby="history-title">
             <div class="history-heading">
               <div>
@@ -187,7 +207,7 @@
             data-game-category="all"
             aria-pressed="false"
           >
-            전체 <span>12</span>
+            전체 <span>13</span>
           </button>
           <button
             class="is-active"
@@ -198,12 +218,27 @@
             빠른 결정 <span>8</span>
           </button>
           <button type="button" data-game-category="mini" aria-pressed="false">
-            미니 대결 <span>2</span>
+            미니 대결 <span>3</span>
           </button>
           <button type="button" data-game-category="party" aria-pressed="false">
             파티 게임 <span>2</span>
           </button>
         </div>
+
+        <section class="party-session" aria-labelledby="party-session-title">
+          <div class="party-session-head">
+            <div>
+              <span class="eyebrow">PARTY SESSION</span>
+              <strong id="party-session-title">파티 세션 준비</strong>
+            </div>
+            <div class="party-session-actions">
+              <button class="compact-action" type="button" data-party-rounds="3">3판 시작</button>
+              <button class="compact-action" type="button" data-party-rounds="5">5판 시작</button>
+              <button id="endPartySession" class="compact-action danger" type="button" hidden>종료</button>
+            </div>
+          </div>
+          <div id="partyScoreboard" class="party-scoreboard" aria-label="파티 세션 점수" hidden></div>
+        </section>
 
         <nav class="game-tabs" role="tablist" aria-label="게임 선택">
           <button
@@ -396,6 +431,22 @@
             <span>
               <strong>반응속도 대결</strong>
               <small>먼저 누르면 1점</small>
+            </span>
+          </button>
+          <button
+            id="timerTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="timerGame"
+            data-game="timer"
+            data-category="mini"
+          >
+            <span class="tab-art timer-art" aria-hidden="true"></span>
+            <span>
+              <strong>5초 타이머</strong>
+              <small>감으로 정확히 멈춰요</small>
             </span>
           </button>
         </nav>
@@ -815,6 +866,37 @@
               </div>
             </div>
           </section>
+
+          <section
+            id="timerGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="timerTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">13 · STOP AT FIVE</span>
+                <h3>5초 타이머</h3>
+              </div>
+              <p id="timerStatus" class="status-text" aria-live="polite">
+                참가자마다 한 번씩 5초에 도전해요.
+              </p>
+            </div>
+            <div class="timer-stage">
+              <div id="timerBoard" class="timer-board" data-phase="idle">
+                <span class="timer-target">TARGET 5.00</span>
+                <strong id="timerPlayer" class="timer-player">도전자 대기</strong>
+                <output id="timerDisplay" class="timer-display">0.00</output>
+                <small>SECONDS</small>
+              </div>
+              <ol id="timerResults" class="timer-results" aria-label="5초 타이머 기록"></ol>
+              <div class="mini-game-actions">
+                <button id="timerReset" class="secondary-action" type="button">기록 초기화</button>
+                <button id="timerStart" class="primary-action blue" type="button">도전 시작</button>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -841,7 +923,13 @@
         <span id="resultStakeLabel">결과</span>
         <strong id="resultStake"></strong>
       </div>
+      <div id="resultParty" class="result-party" hidden></div>
+      <div id="resultMission" class="result-mission" hidden>
+        <span>MISSION CARD</span>
+        <strong id="resultMissionText"></strong>
+      </div>
       <div class="result-actions">
+        <button id="drawMission" class="secondary-action mission-action" type="button">미션 카드 뽑기</button>
         <button id="playAgain" class="primary-action coral" type="button">한 판 더</button>
         <div class="result-share-row">
           <button id="shareResult" class="secondary-action" type="button">결과 공유</button>
