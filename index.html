@@ -5,10 +5,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta
       name="description"
-      content="친구들과 커피, 간식, 벌칙, 순서를 가볍게 정하는 미니게임 모음"
+      content="룰렛, 제비뽑기, 사다리, 손가락 뽑기와 반응속도 대결을 한곳에서 즐기는 무료 친구 게임"
     />
     <meta name="theme-color" content="#ff5d4c" />
-    <title>딱! 정해 - 내기 게임</title>
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="딱! 정해 - 내기 게임" />
+    <meta
+      property="og:description"
+      content="친구들과 빠르게 정하고 손가락 뽑기와 반응속도 미니게임도 즐겨 보세요."
+    />
+    <title>딱! 정해 - 룰렛·손가락 뽑기·반응속도 미니게임</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
@@ -17,64 +25,151 @@
         <span class="brand-mark" aria-hidden="true">딱!</span>
         <span>
           <strong>딱! 정해</strong>
-          <small>내기 게임</small>
+          <small>친구 게임</small>
         </span>
       </a>
       <span class="privacy-note">입력 내용은 이 기기에만 저장돼요</span>
     </header>
 
     <main class="app-shell">
-      <aside class="setup-panel" aria-labelledby="setup-title">
-        <div class="section-heading">
-          <span class="step-number">1</span>
-          <div>
-            <h1 id="setup-title">오늘의 멤버</h1>
-            <p>같이 할 사람을 추가해 주세요.</p>
+      <aside id="setupPanel" class="setup-panel" aria-labelledby="setup-title">
+        <div class="setup-heading-row">
+          <div class="section-heading">
+            <span class="step-number">1</span>
+            <div>
+              <h1 id="setup-title">오늘의 멤버</h1>
+              <p>같이 할 사람을 준비해 주세요.</p>
+            </div>
           </div>
-        </div>
-
-        <form id="participantForm" class="add-form">
-          <label class="sr-only" for="participantInput">참가자 이름</label>
-          <input
-            id="participantInput"
-            maxlength="12"
-            autocomplete="off"
-            placeholder="이름 입력"
-          />
-          <button class="icon-button add-button" type="submit" aria-label="참가자 추가">
-            <span aria-hidden="true">＋</span>
+          <button
+            id="setupToggle"
+            class="setup-toggle"
+            type="button"
+            aria-label="설정 접기"
+            aria-expanded="true"
+            aria-controls="setupContent"
+          >
+            <span class="setup-toggle-label">설정 접기</span>
+            <span class="setup-toggle-icon" aria-hidden="true">⌃</span>
           </button>
-        </form>
-        <div
-          id="participantList"
-          class="participant-list"
-          aria-label="참가자 목록"
-        ></div>
-        <p id="participantCount" class="field-help"></p>
+        </div>
 
-        <div class="setup-divider"></div>
+        <button id="setupSummary" class="setup-summary" type="button" hidden>
+          <strong id="setupSummaryMembers"></strong>
+          <span id="setupSummaryStake"></span>
+        </button>
 
-        <div class="section-heading compact">
-          <span class="step-number yellow">2</span>
-          <div>
-            <h2>무엇을 정할까요?</h2>
-            <p>결과와 함께 보여줄 내용을 골라요.</p>
+        <div id="setupContent" class="setup-content">
+          <form id="participantForm" class="add-form">
+            <label class="sr-only" for="participantInput">참가자 이름</label>
+            <input
+              id="participantInput"
+              maxlength="12"
+              autocomplete="off"
+              placeholder="이름 입력"
+            />
+            <button class="icon-button add-button" type="submit" aria-label="참가자 추가">
+              <span aria-hidden="true">＋</span>
+            </button>
+          </form>
+
+          <div class="participant-actions" aria-label="참가자 편집">
+            <button id="bulkToggle" class="compact-action" type="button" aria-expanded="false">
+              여러 명 입력
+            </button>
+            <button id="shuffleParticipants" class="compact-action" type="button">순서 섞기</button>
+            <button id="clearParticipants" class="compact-action danger" type="button">
+              전체 삭제
+            </button>
           </div>
+
+          <div id="bulkEditor" class="bulk-editor" hidden>
+            <label for="bulkParticipantInput">쉼표나 줄바꿈으로 이름 구분</label>
+            <textarea
+              id="bulkParticipantInput"
+              maxlength="320"
+              rows="4"
+              placeholder="민지, 준호, 서연, 태윤"
+            ></textarea>
+            <div class="bulk-actions">
+              <button id="bulkReplace" class="secondary-action compact" type="button">
+                명단 바꾸기
+              </button>
+              <button id="bulkAppend" class="primary-action compact coral" type="button">
+                명단에 추가
+              </button>
+            </div>
+          </div>
+
+          <div
+            id="participantList"
+            class="participant-list"
+            aria-label="참가자 목록"
+          ></div>
+          <p id="participantCount" class="field-help"></p>
+
+          <div class="saved-group-row">
+            <label class="sr-only" for="savedGroupSelect">저장한 멤버</label>
+            <select id="savedGroupSelect" aria-label="저장한 멤버 선택"></select>
+            <button id="loadGroup" class="icon-command" type="button" aria-label="선택한 멤버 불러오기">
+              ↓
+            </button>
+            <button id="saveGroup" class="icon-command" type="button" aria-label="현재 멤버 저장">
+              ＋
+            </button>
+            <button id="deleteGroup" class="icon-command danger" type="button" aria-label="선택한 멤버 삭제">
+              ×
+            </button>
+          </div>
+
+          <label class="toggle-row">
+            <input id="noRepeatToggle" type="checkbox" />
+            <span class="toggle-track" aria-hidden="true"></span>
+            <span>
+              <strong>연속 당첨 제외</strong>
+              <small>룰렛과 제비뽑기에 적용</small>
+            </span>
+          </label>
+
+          <div class="setup-divider"></div>
+
+          <div class="section-heading compact">
+            <span class="step-number yellow">2</span>
+            <div>
+              <h2>무엇을 정할까요?</h2>
+              <p>결과와 함께 보여줄 내용을 골라요.</p>
+            </div>
+          </div>
+          <div id="stakePresets" class="preset-grid" aria-label="내기 항목">
+            <button type="button" data-stake="커피 사기">커피 사기</button>
+            <button type="button" data-stake="간식 사기">간식 사기</button>
+            <button type="button" data-stake="설거지">설거지</button>
+            <button type="button" data-stake="순서 정하기">순서 정하기</button>
+          </div>
+          <label class="sr-only" for="customStake">직접 입력</label>
+          <input
+            id="customStake"
+            class="custom-stake"
+            maxlength="30"
+            autocomplete="off"
+            placeholder="직접 입력하기"
+          />
+
+          <div class="setup-divider"></div>
+
+          <section class="history-section" aria-labelledby="history-title">
+            <div class="history-heading">
+              <div>
+                <span class="eyebrow">RECENT</span>
+                <h2 id="history-title">최근 결과</h2>
+              </div>
+              <button id="clearHistory" class="icon-command" type="button" aria-label="최근 결과 삭제">
+                ×
+              </button>
+            </div>
+            <ol id="resultHistory" class="history-list"></ol>
+          </section>
         </div>
-        <div id="stakePresets" class="preset-grid" aria-label="내기 항목">
-          <button type="button" data-stake="커피 사기">커피 사기</button>
-          <button type="button" data-stake="간식 사기">간식 사기</button>
-          <button type="button" data-stake="설거지">설거지</button>
-          <button type="button" data-stake="순서 정하기">순서 정하기</button>
-        </div>
-        <label class="sr-only" for="customStake">직접 입력</label>
-        <input
-          id="customStake"
-          class="custom-stake"
-          maxlength="30"
-          autocomplete="off"
-          placeholder="직접 입력하기"
-        />
       </aside>
 
       <section class="play-panel" aria-labelledby="game-choice-title">
@@ -86,50 +181,236 @@
           <span id="currentStakeBadge" class="stake-badge"></span>
         </div>
 
-        <nav class="game-tabs" aria-label="게임 선택">
-          <button class="game-tab is-active" type="button" data-game="wheel">
+        <div class="game-category-control" role="group" aria-label="게임 종류">
+          <button
+            type="button"
+            data-game-category="all"
+            aria-pressed="false"
+          >
+            전체 <span>12</span>
+          </button>
+          <button
+            class="is-active"
+            type="button"
+            data-game-category="quick"
+            aria-pressed="true"
+          >
+            빠른 결정 <span>8</span>
+          </button>
+          <button type="button" data-game-category="mini" aria-pressed="false">
+            미니 대결 <span>2</span>
+          </button>
+          <button type="button" data-game-category="party" aria-pressed="false">
+            파티 게임 <span>2</span>
+          </button>
+        </div>
+
+        <nav class="game-tabs" role="tablist" aria-label="게임 선택">
+          <button
+            id="wheelTab"
+            class="game-tab is-active"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="wheelGame"
+            data-game="wheel"
+            data-category="quick"
+          >
             <span class="tab-art wheel-art" aria-hidden="true"></span>
             <span>
-              <strong>돌려돌려 룰렛</strong>
+              <strong>룰렛</strong>
               <small>운에 맡기는 한 방</small>
             </span>
           </button>
-          <button class="game-tab" type="button" data-game="bomb">
+          <button
+            id="bombTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="bombGame"
+            data-game="bomb"
+            data-category="party"
+          >
             <span class="tab-art bomb-art" aria-hidden="true"></span>
             <span>
               <strong>폭탄 돌리기</strong>
               <small>언제 멈출지 몰라요</small>
             </span>
           </button>
-          <button class="game-tab" type="button" data-game="cards">
+          <button
+            id="cardsTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="cardsGame"
+            data-game="cards"
+            data-category="party"
+          >
             <span class="tab-art card-art" aria-hidden="true"></span>
             <span>
               <strong>복불복 카드</strong>
               <small>한 장만 피해요</small>
             </span>
           </button>
-          <button class="game-tab" type="button" data-game="order">
+          <button
+            id="orderTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="orderGame"
+            data-game="order"
+            data-category="quick"
+          >
             <span class="tab-art order-art" aria-hidden="true"></span>
             <span>
               <strong>순서 정하기</strong>
               <small>차례를 한 번에 정해요</small>
             </span>
           </button>
-          <button class="game-tab" type="button" data-game="teams">
+          <button
+            id="teamsTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="teamsGame"
+            data-game="teams"
+            data-category="quick"
+          >
             <span class="tab-art team-art" aria-hidden="true"></span>
             <span>
               <strong>팀 나누기</strong>
               <small>공평하게 섞어 나눠요</small>
             </span>
           </button>
+          <button
+            id="drawTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="drawGame"
+            data-game="draw"
+            data-category="quick"
+          >
+            <span class="tab-art draw-art" aria-hidden="true"></span>
+            <span>
+              <strong>제비뽑기</strong>
+              <small>여러 명도 한 번에</small>
+            </span>
+          </button>
+          <button
+            id="ladderTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="ladderGame"
+            data-game="ladder"
+            data-category="quick"
+          >
+            <span class="tab-art ladder-art" aria-hidden="true"></span>
+            <span>
+              <strong>사다리 타기</strong>
+              <small>누가 당첨될까요</small>
+            </span>
+          </button>
+          <button
+            id="menuTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="menuGame"
+            data-game="menu"
+            data-category="quick"
+          >
+            <span class="tab-art menu-art" aria-hidden="true"></span>
+            <span>
+              <strong>메뉴 룰렛</strong>
+              <small>오늘 뭐 먹지</small>
+            </span>
+          </button>
+          <button
+            id="seatsTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="seatsGame"
+            data-game="seats"
+            data-category="quick"
+          >
+            <span class="tab-art seats-art" aria-hidden="true"></span>
+            <span>
+              <strong>자리 배치</strong>
+              <small>좌석을 빠르게 섞어요</small>
+            </span>
+          </button>
+          <button
+            id="tournamentTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="tournamentGame"
+            data-game="tournament"
+            data-category="quick"
+          >
+            <span class="tab-art tournament-art" aria-hidden="true"></span>
+            <span>
+              <strong>토너먼트</strong>
+              <small>둘 중 하나씩 선택</small>
+            </span>
+          </button>
+          <button
+            id="fingerTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="fingerGame"
+            data-game="finger"
+            data-category="mini"
+          >
+            <span class="tab-art finger-art" aria-hidden="true"></span>
+            <span>
+              <strong>손가락 뽑기</strong>
+              <small>화면 위에서 바로 선택</small>
+            </span>
+          </button>
+          <button
+            id="reactionTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="reactionGame"
+            data-game="reaction"
+            data-category="mini"
+          >
+            <span class="tab-art reaction-art" aria-hidden="true"></span>
+            <span>
+              <strong>반응속도 대결</strong>
+              <small>먼저 누르면 1점</small>
+            </span>
+          </button>
         </nav>
 
         <div class="game-stage">
-          <section id="wheelGame" class="game-view is-active" aria-labelledby="wheel-title">
+          <section
+            id="wheelGame"
+            class="game-view is-active"
+            role="tabpanel"
+            aria-labelledby="wheelTab"
+          >
             <div class="game-view-header">
               <div>
                 <span class="game-kicker">01 · RANDOM WHEEL</span>
-                <h3 id="wheel-title">돌려돌려 룰렛</h3>
+                <h3>돌려돌려 룰렛</h3>
               </div>
               <p id="wheelStatus" class="status-text" aria-live="polite">
                 준비됐다면 힘차게 돌려 보세요.
@@ -148,11 +429,17 @@
             </div>
           </section>
 
-          <section id="bombGame" class="game-view" aria-labelledby="bomb-title" hidden>
+          <section
+            id="bombGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="bombTab"
+            hidden
+          >
             <div class="game-view-header">
               <div>
                 <span class="game-kicker">02 · PASS THE BOMB</span>
-                <h3 id="bomb-title">폭탄 돌리기</h3>
+                <h3>폭탄 돌리기</h3>
               </div>
               <p id="bombStatus" class="status-text" aria-live="assertive">
                 시작하면 휴대폰을 차례대로 넘겨주세요.
@@ -172,11 +459,17 @@
             </div>
           </section>
 
-          <section id="cardsGame" class="game-view" aria-labelledby="cards-title" hidden>
+          <section
+            id="cardsGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="cardsTab"
+            hidden
+          >
             <div class="game-view-header">
               <div>
                 <span class="game-kicker">03 · LUCKY CARD</span>
-                <h3 id="cards-title">복불복 카드</h3>
+                <h3>복불복 카드</h3>
               </div>
               <p id="cardStatus" class="status-text" aria-live="polite">
                 카드를 섞고 한 명씩 골라 보세요.
@@ -190,11 +483,17 @@
             </div>
           </section>
 
-          <section id="orderGame" class="game-view" aria-labelledby="order-title" hidden>
+          <section
+            id="orderGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="orderTab"
+            hidden
+          >
             <div class="game-view-header">
               <div>
                 <span class="game-kicker">04 · RANDOM ORDER</span>
-                <h3 id="order-title">순서 정하기</h3>
+                <h3>순서 정하기</h3>
               </div>
               <p id="orderStatus" class="status-text" aria-live="polite">
                 모두의 차례를 한 번에 정해요.
@@ -208,11 +507,17 @@
             </div>
           </section>
 
-          <section id="teamsGame" class="game-view" aria-labelledby="teams-title" hidden>
+          <section
+            id="teamsGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="teamsTab"
+            hidden
+          >
             <div class="game-view-header">
               <div>
                 <span class="game-kicker">05 · TEAM MAKER</span>
-                <h3 id="teams-title">팀 나누기</h3>
+                <h3>팀 나누기</h3>
               </div>
               <p id="teamStatus" class="status-text" aria-live="polite">
                 팀 수를 고르고 멤버를 섞어 보세요.
@@ -232,17 +537,301 @@
               </button>
             </div>
           </section>
+
+          <section
+            id="drawGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="drawTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">06 · RANDOM DRAW</span>
+                <h3>제비뽑기</h3>
+              </div>
+              <p id="drawStatus" class="status-text" aria-live="polite">
+                뽑을 인원을 정하고 제비를 열어 보세요.
+              </p>
+            </div>
+            <div class="draw-stage">
+              <div class="inline-control">
+                <span>뽑을 인원</span>
+                <div class="number-stepper" aria-label="뽑을 인원 수">
+                  <button id="drawMinus" type="button" aria-label="뽑을 인원 줄이기">−</button>
+                  <output id="drawCount">1명</output>
+                  <button id="drawPlus" type="button" aria-label="뽑을 인원 늘리기">＋</button>
+                </div>
+              </div>
+              <div id="drawTicketBoard" class="draw-ticket-board" aria-label="제비뽑기 명단"></div>
+              <button id="drawButton" class="primary-action coral" type="button">
+                제비 뽑기
+              </button>
+            </div>
+          </section>
+
+          <section
+            id="ladderGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="ladderTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">07 · GHOST LEG</span>
+                <h3>사다리 타기</h3>
+              </div>
+              <p id="ladderStatus" class="status-text" aria-live="polite">
+                사다리를 만들고 이름을 눌러 경로를 확인하세요.
+              </p>
+            </div>
+            <div class="ladder-stage">
+              <div id="ladderPlayers" class="ladder-player-tabs" aria-label="사다리 참가자"></div>
+              <div class="ladder-canvas-wrap">
+                <canvas id="ladderCanvas" width="1080" height="560">
+                  참가자와 결과를 연결하는 무작위 사다리입니다.
+                </canvas>
+              </div>
+              <div id="ladderResult" class="ladder-result" aria-live="polite"></div>
+              <button id="ladderButton" class="primary-action teal" type="button">
+                사다리 만들기
+              </button>
+            </div>
+          </section>
+
+          <section
+            id="menuGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="menuTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">08 · MENU WHEEL</span>
+                <h3>메뉴 룰렛</h3>
+              </div>
+              <p id="menuStatus" class="status-text" aria-live="polite">
+                후보를 넣고 오늘의 메뉴를 정해 보세요.
+              </p>
+            </div>
+            <div class="menu-stage">
+              <div class="option-editor">
+                <form class="option-add-form" data-option-form>
+                  <label class="sr-only" for="menuOptionInput">메뉴 후보 추가</label>
+                  <input
+                    id="menuOptionInput"
+                    data-option-input
+                    maxlength="18"
+                    autocomplete="off"
+                    placeholder="후보 추가"
+                  />
+                  <button class="icon-button add-button" type="submit" aria-label="후보 추가">＋</button>
+                </form>
+                <div class="option-toolbar">
+                  <div class="option-list" data-option-list aria-label="메뉴 후보"></div>
+                  <button class="text-action" type="button" data-option-reset>기본 후보</button>
+                </div>
+              </div>
+              <div class="menu-wheel-wrap">
+                <div class="wheel-pointer" aria-hidden="true"></div>
+                <canvas id="menuWheelCanvas" width="720" height="720">
+                  메뉴 후보 중 하나를 무작위로 선택하는 룰렛입니다.
+                </canvas>
+              </div>
+              <button id="menuButton" class="primary-action yellow" type="button">
+                메뉴 정하기
+              </button>
+            </div>
+          </section>
+
+          <section
+            id="seatsGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="seatsTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">09 · SEAT SHUFFLE</span>
+                <h3>자리 배치</h3>
+              </div>
+              <p id="seatStatus" class="status-text" aria-live="polite">
+                열 수를 고르고 좌석을 무작위로 배치하세요.
+              </p>
+            </div>
+            <div class="seat-stage">
+              <div id="seatColumnControl" class="segmented-control" aria-label="좌석 열 수">
+                <button type="button" data-seat-columns="2" aria-pressed="false">2열</button>
+                <button class="is-active" type="button" data-seat-columns="3" aria-pressed="true">
+                  3열
+                </button>
+                <button type="button" data-seat-columns="4" aria-pressed="false">4열</button>
+              </div>
+              <div id="seatBoard" class="seat-board" aria-label="좌석 배치 결과"></div>
+              <button id="seatButton" class="primary-action blue" type="button">
+                자리 섞기
+              </button>
+            </div>
+          </section>
+
+          <section
+            id="tournamentGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="tournamentTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">10 · PICK TOURNAMENT</span>
+                <h3>선택 토너먼트</h3>
+              </div>
+              <p id="tournamentStatus" class="status-text" aria-live="polite">
+                후보를 준비하고 둘 중 하나씩 골라 보세요.
+              </p>
+            </div>
+            <div class="tournament-stage">
+              <div class="option-editor">
+                <form class="option-add-form" data-option-form>
+                  <label class="sr-only" for="tournamentOptionInput">토너먼트 후보 추가</label>
+                  <input
+                    id="tournamentOptionInput"
+                    data-option-input
+                    maxlength="18"
+                    autocomplete="off"
+                    placeholder="후보 추가"
+                  />
+                  <button class="icon-button add-button" type="submit" aria-label="후보 추가">＋</button>
+                </form>
+                <div class="option-toolbar">
+                  <div class="option-list" data-option-list aria-label="토너먼트 후보"></div>
+                  <button class="text-action" type="button" data-option-reset>기본 후보</button>
+                </div>
+              </div>
+              <div id="tournamentProgress" class="tournament-progress"></div>
+              <div id="tournamentMatch" class="tournament-match" aria-live="polite">
+                <button class="choice-button" type="button" disabled>?</button>
+                <span class="versus" aria-hidden="true">VS</span>
+                <button class="choice-button" type="button" disabled>?</button>
+              </div>
+              <button id="tournamentButton" class="primary-action coral" type="button">
+                토너먼트 시작
+              </button>
+            </div>
+          </section>
+
+          <section
+            id="fingerGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="fingerTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">11 · FINGER PICKER</span>
+                <h3>손가락 뽑기</h3>
+              </div>
+              <p id="fingerStatus" class="status-text" aria-live="polite">
+                2~5명이 화면에 손가락을 동시에 올려 주세요.
+              </p>
+            </div>
+            <div class="finger-stage">
+              <div
+                id="fingerArena"
+                class="finger-arena"
+                aria-label="손가락을 올리는 터치 영역"
+              >
+                <div class="finger-empty-state" aria-hidden="true">
+                  <strong>2~5</strong>
+                  <span>FINGERS</span>
+                </div>
+                <output id="fingerCount" class="finger-count">0 / 5</output>
+              </div>
+              <div class="mini-game-actions">
+                <button id="fingerReset" class="secondary-action" type="button">
+                  초기화
+                </button>
+                <button id="fingerFallback" class="primary-action yellow" type="button">
+                  명단에서 뽑기
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section
+            id="reactionGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="reactionTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">12 · REACTION DUEL</span>
+                <h3>반응속도 대결</h3>
+              </div>
+              <p id="reactionStatus" class="status-text" aria-live="polite">
+                먼저 3점을 얻으면 승리해요.
+              </p>
+            </div>
+            <div class="reaction-stage">
+              <div id="reactionArena" class="reaction-arena" data-phase="idle">
+                <button
+                  id="reactionLeft"
+                  class="reaction-side is-left"
+                  type="button"
+                  disabled
+                >
+                  <span id="reactionLeftName">왼쪽</span>
+                  <strong id="reactionLeftScore">0</strong>
+                  <small>LEFT</small>
+                </button>
+                <div id="reactionSignal" class="reaction-signal" aria-live="assertive">
+                  <strong>준비</strong>
+                  <span>3점 먼저</span>
+                </div>
+                <button
+                  id="reactionRight"
+                  class="reaction-side is-right"
+                  type="button"
+                  disabled
+                >
+                  <span id="reactionRightName">오른쪽</span>
+                  <strong id="reactionRightScore">0</strong>
+                  <small>RIGHT</small>
+                </button>
+              </div>
+              <div class="mini-game-actions">
+                <button id="reactionReset" class="secondary-action" type="button">
+                  점수 초기화
+                </button>
+                <button id="reactionStart" class="primary-action coral" type="button">
+                  대결 시작
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       </section>
     </main>
 
     <footer>
       <strong>딱! 정해</strong>
-      <span>가벼운 내기는 가볍게, 결과는 깔끔하게.</span>
+      <span>가벼운 선택은 빠르게, 결과는 깔끔하게.</span>
     </footer>
 
     <dialog id="resultDialog" class="result-dialog">
-      <button id="closeResult" class="dialog-close" type="button" aria-label="결과 닫기">
+      <button
+        id="closeResult"
+        class="dialog-close"
+        type="button"
+        aria-label="결과 창 닫기"
+        title="닫기"
+      >
         ×
       </button>
       <span id="resultGameLabel" class="result-label"></span>
@@ -254,7 +843,10 @@
       </div>
       <div class="result-actions">
         <button id="playAgain" class="primary-action coral" type="button">한 판 더</button>
-        <button id="copyResult" class="secondary-action" type="button">결과 복사</button>
+        <div class="result-share-row">
+          <button id="shareResult" class="secondary-action" type="button">결과 공유</button>
+          <button id="copyResult" class="secondary-action" type="button">복사</button>
+        </div>
         <button id="changeGame" class="text-action" type="button">다른 게임 고르기</button>
       </div>
     </dialog>

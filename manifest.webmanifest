@@ -1,0 +1,22 @@
+{
+  "name": "딱! 정해 - 친구 게임",
+  "short_name": "딱! 정해",
+  "description": "룰렛, 제비뽑기, 손가락 뽑기와 반응속도 대결을 한곳에서 즐기는 무료 친구 게임",
+  "lang": "ko",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff5d4c",
+  "orientation": "any",
+  "categories": ["games", "entertainment", "utilities"],
+  "icons": [
+    {
+      "src": "./favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
