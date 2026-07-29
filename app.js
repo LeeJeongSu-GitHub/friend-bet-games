@@ -5,6 +5,9 @@ const MAX_OPTIONS = 12;
 const MAX_MISSIONS = 16;
 const MAX_SAVED_GROUPS = 5;
 const HISTORY_LIMIT = 5;
+const DODGE_WIDTH = 800;
+const DODGE_HEIGHT = 1000;
+const DODGE_SIDE_START = 5000;
 const DEFAULT_PARTICIPANTS = ["민지", "준호", "서연", "태윤"];
 const DEFAULT_OPTIONS = ["한식", "분식", "중식", "일식", "치킨", "피자"];
 const DEFAULT_MISSIONS = [
@@ -51,6 +54,8 @@ const GAME_LABELS = {
   finger: "손가락 뽑기",
   reaction: "반응속도 대결",
   timer: "5초 타이머",
+  dodge: "장애물 피하기",
+  tap: "10초 연타",
 };
 
 const elements = {
@@ -83,9 +88,14 @@ const elements = {
   missionInput: document.querySelector("#missionInput"),
   missionList: document.querySelector("#missionList"),
   resetMissions: document.querySelector("#resetMissions"),
+  gameChoiceTitle: document.querySelector("#game-choice-title"),
   currentStakeBadge: document.querySelector("#currentStakeBadge"),
   resultHistory: document.querySelector("#resultHistory"),
   clearHistory: document.querySelector("#clearHistory"),
+  playModeButtons: [...document.querySelectorAll("[data-play-mode]")],
+  gameCategoryControl: document.querySelector("#gameCategoryControl"),
+  soloModeNote: document.querySelector("#soloModeNote"),
+  partySession: document.querySelector("#partySession"),
   partySessionStatus: document.querySelector("#party-session-title"),
   partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
   endPartySession: document.querySelector("#endPartySession"),
@@ -108,6 +118,8 @@ const elements = {
     finger: document.querySelector("#fingerGame"),
     reaction: document.querySelector("#reactionGame"),
     timer: document.querySelector("#timerGame"),
+    dodge: document.querySelector("#dodgeGame"),
+    tap: document.querySelector("#tapGame"),
   },
   wheelCanvas: document.querySelector("#wheelCanvas"),
   wheelStatus: document.querySelector("#wheelStatus"),
@@ -158,6 +170,12 @@ const elements = {
   fingerReset: document.querySelector("#fingerReset"),
   fingerFallback: document.querySelector("#fingerFallback"),
   reactionStatus: document.querySelector("#reactionStatus"),
+  reactionKicker: document.querySelector("#reactionKicker"),
+  reactionHeading: document.querySelector("#reactionHeading"),
+  reactionTabTitle: document.querySelector("#reactionTabTitle"),
+  reactionTabDescription: document.querySelector("#reactionTabDescription"),
+  reactionDuelStage: document.querySelector("#reactionDuelStage"),
+  reactionSoloStage: document.querySelector("#reactionSoloStage"),
   reactionArena: document.querySelector("#reactionArena"),
   reactionSignal: document.querySelector("#reactionSignal"),
   reactionLeft: document.querySelector("#reactionLeft"),
@@ -168,13 +186,51 @@ const elements = {
   reactionRightScore: document.querySelector("#reactionRightScore"),
   reactionReset: document.querySelector("#reactionReset"),
   reactionStart: document.querySelector("#reactionStart"),
+  reactionSoloPad: document.querySelector("#reactionSoloPad"),
+  reactionSoloSignal: document.querySelector("#reactionSoloSignal"),
+  reactionSoloHint: document.querySelector("#reactionSoloHint"),
+  reactionSoloBest: document.querySelector("#reactionSoloBest"),
+  reactionSoloLast: document.querySelector("#reactionSoloLast"),
+  reactionSoloReset: document.querySelector("#reactionSoloReset"),
+  reactionSoloStart: document.querySelector("#reactionSoloStart"),
   timerStatus: document.querySelector("#timerStatus"),
+  timerKicker: document.querySelector("#timerKicker"),
+  timerHeading: document.querySelector("#timerHeading"),
+  timerTabTitle: document.querySelector("#timerTabTitle"),
+  timerTabDescription: document.querySelector("#timerTabDescription"),
+  timerGroupStage: document.querySelector("#timerGroupStage"),
+  timerSoloStage: document.querySelector("#timerSoloStage"),
   timerBoard: document.querySelector("#timerBoard"),
   timerPlayer: document.querySelector("#timerPlayer"),
   timerDisplay: document.querySelector("#timerDisplay"),
   timerResults: document.querySelector("#timerResults"),
   timerReset: document.querySelector("#timerReset"),
   timerStart: document.querySelector("#timerStart"),
+  timerSoloBoard: document.querySelector("#timerSoloBoard"),
+  timerSoloDisplay: document.querySelector("#timerSoloDisplay"),
+  timerSoloRoundLabel: document.querySelector("#timerSoloRoundLabel"),
+  timerSoloResults: document.querySelector("#timerSoloResults"),
+  timerSoloBest: document.querySelector("#timerSoloBest"),
+  timerSoloProgress: document.querySelector("#timerSoloProgress"),
+  timerSoloReset: document.querySelector("#timerSoloReset"),
+  timerSoloStart: document.querySelector("#timerSoloStart"),
+  dodgeStatus: document.querySelector("#dodgeStatus"),
+  dodgeArena: document.querySelector("#dodgeArena"),
+  dodgeCanvas: document.querySelector("#dodgeCanvas"),
+  dodgeTime: document.querySelector("#dodgeTime"),
+  dodgeBest: document.querySelector("#dodgeBest"),
+  dodgePrompt: document.querySelector("#dodgePrompt"),
+  dodgeReset: document.querySelector("#dodgeReset"),
+  dodgeStart: document.querySelector("#dodgeStart"),
+  tapStatus: document.querySelector("#tapStatus"),
+  tapPad: document.querySelector("#tapPad"),
+  tapCount: document.querySelector("#tapCount"),
+  tapPrompt: document.querySelector("#tapPrompt"),
+  tapTime: document.querySelector("#tapTime"),
+  tapBest: document.querySelector("#tapBest"),
+  tapSpeed: document.querySelector("#tapSpeed"),
+  tapReset: document.querySelector("#tapReset"),
+  tapStart: document.querySelector("#tapStart"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
@@ -205,7 +261,12 @@ const state = {
   savedGroups: savedState.savedGroups,
   noRepeat: savedState.noRepeat,
   history: savedState.history,
+  dodgeBest: savedState.dodgeBest,
+  reactionSoloBest: savedState.reactionSoloBest,
+  timerSoloBest: savedState.timerSoloBest,
+  tapBest: savedState.tapBest,
   currentGame: "wheel",
+  currentMode: "together",
   currentCategory: "quick",
   lastResult: null,
   lastMission: null,
@@ -239,10 +300,38 @@ let reactionTimer = null;
 let reactionPhase = "idle";
 let reactionGoAt = 0;
 let reactionScores = [0, 0];
+let reactionSoloTimer = null;
+let reactionSoloPhase = "idle";
+let reactionSoloGoAt = 0;
+let reactionSoloLast = null;
 let timerRound = null;
 let timerRunning = false;
 let timerStartedAt = 0;
 let timerAnimationFrame = null;
+let timerSoloRound = null;
+let timerSoloRunning = false;
+let timerSoloStartedAt = 0;
+let timerSoloAnimationFrame = null;
+let dodgePhase = "idle";
+let dodgeAnimationFrame = null;
+let dodgeLastFrame = 0;
+let dodgeCountdown = 0;
+let dodgeElapsed = 0;
+let dodgeNextDrop = 0;
+let dodgeNextSide = DODGE_SIDE_START;
+let dodgeNextDoubleWave = 10000;
+let dodgeNextDangerWave = 25000;
+let dodgePendingSideWave = null;
+let dodgePlayer = null;
+let dodgeObstacles = [];
+let dodgeWarnings = [];
+let dodgePointerId = null;
+let dodgeDifficultyTier = -1;
+const dodgeKeys = new Set();
+let tapPhase = "idle";
+let tapPhaseStartedAt = 0;
+let tapCount = 0;
+let tapAnimationFrame = null;
 let resultRevealTimer = null;
 let toastTimer = null;
 
@@ -322,6 +411,10 @@ function loadState() {
                 ? entry.id
                 : `history-${Date.now()}-${index}`,
             game: entry.game,
+            gameLabel:
+              typeof entry.gameLabel === "string"
+                ? entry.gameLabel.slice(0, 30)
+                : "",
             summary: entry.summary.slice(0, 120),
             copyText: entry.copyText.slice(0, 1000),
             mission:
@@ -332,6 +425,22 @@ function loadState() {
           }))
           .slice(0, HISTORY_LIMIT)
       : [];
+    const readOptionalRecord = (value, maximum) => {
+      if (value === null || value === undefined || value === "") return null;
+      const number = Number(value);
+      return Number.isFinite(number)
+        ? Math.min(Math.max(number, 0), maximum)
+        : null;
+    };
+    const dodgeBest = readOptionalRecord(parsed?.dodgeBest, 3600000) || 0;
+    const reactionSoloBest = readOptionalRecord(
+      parsed?.reactionSoloBest,
+      10000,
+    );
+    const timerSoloBest = readOptionalRecord(parsed?.timerSoloBest, 5000);
+    const tapBest = Math.round(
+      readOptionalRecord(parsed?.tapBest, 10000) || 0,
+    );
 
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
@@ -344,6 +453,10 @@ function loadState() {
       savedGroups,
       noRepeat: Boolean(parsed?.noRepeat),
       history,
+      dodgeBest,
+      reactionSoloBest,
+      timerSoloBest,
+      tapBest,
       hasStoredState,
     };
   } catch {
@@ -358,6 +471,10 @@ function loadState() {
       savedGroups: [],
       noRepeat: false,
       history: [],
+      dodgeBest: 0,
+      reactionSoloBest: null,
+      timerSoloBest: null,
+      tapBest: 0,
       hasStoredState: false,
     };
   }
@@ -378,6 +495,10 @@ function saveState() {
         savedGroups: state.savedGroups,
         noRepeat: state.noRepeat,
         history: state.history,
+        dodgeBest: state.dodgeBest,
+        reactionSoloBest: state.reactionSoloBest,
+        timerSoloBest: state.timerSoloBest,
+        tapBest: state.tapBest,
       }),
     );
   } catch {
@@ -802,6 +923,7 @@ function restoreDefaultMissions() {
 }
 
 function resetResultMission() {
+  elements.drawMission.hidden = false;
   elements.resultMission.hidden = true;
   elements.resultMission.classList.remove("is-revealed");
   elements.resultMissionText.textContent = "";
@@ -810,7 +932,13 @@ function resetResultMission() {
 }
 
 function drawMissionCard() {
-  if (!state.lastResult || !state.missions.length) return;
+  if (
+    !state.lastResult ||
+    state.lastResult.allowMission === false ||
+    !state.missions.length
+  ) {
+    return;
+  }
   const candidates =
     state.missions.length > 1
       ? state.missions.filter((mission) => mission !== state.lastMission)
@@ -897,6 +1025,7 @@ function stopPartySession(notify = true) {
 }
 
 function applyPartyResult(result) {
+  if (result.skipParty) return "";
   const session = state.partySession;
   if (!session || session.finished) return "";
 
@@ -926,16 +1055,109 @@ function applyPartyResult(result) {
     : `파티 ${session.round}/${session.totalRounds} · 점수 없음`;
 }
 
+function tabSupportsMode(tab, mode) {
+  const modes = (tab.dataset.mode || "together").split(/\s+/);
+  return modes.includes(mode);
+}
+
+function getVisibleGameTabs() {
+  return elements.gameTabs.filter((tab) => !tab.hidden);
+}
+
+function updateModeLabels() {
+  const solo = state.currentMode === "solo";
+  elements.gameChoiceTitle.textContent = solo
+    ? "어떤 기록에 도전할까요?"
+    : "어떤 게임으로 정할까요?";
+  elements.reactionTabTitle.textContent = solo
+    ? "반응속도 기록"
+    : "반응속도 대결";
+  elements.reactionTabDescription.textContent = solo
+    ? "빛나는 순간 바로 터치"
+    : "먼저 누르면 1점";
+  elements.reactionKicker.textContent = solo
+    ? "12 · SOLO REACTION"
+    : "12 · REACTION DUEL";
+  elements.reactionHeading.textContent = solo
+    ? "개인 반응속도"
+    : "반응속도 대결";
+  elements.timerTabTitle.textContent = solo ? "5초 기록 도전" : "5초 타이머";
+  elements.timerTabDescription.textContent = solo
+    ? "3번의 감각을 측정해요"
+    : "감으로 정확히 멈춰요";
+  elements.timerKicker.textContent = solo
+    ? "13 · SOLO FIVE SECONDS"
+    : "13 · STOP AT FIVE";
+  elements.timerHeading.textContent = solo ? "개인 5초 기록" : "5초 타이머";
+}
+
+function applyGameFilters() {
+  elements.gameTabs.forEach((tab) => {
+    const modeVisible = tabSupportsMode(tab, state.currentMode);
+    const categoryVisible =
+      state.currentMode === "solo" ||
+      state.currentCategory === "all" ||
+      tab.dataset.category === state.currentCategory;
+    tab.hidden = !modeVisible || !categoryVisible;
+  });
+}
+
+function setPlayMode(mode) {
+  if (!["together", "solo"].includes(mode)) return;
+  const changed = state.currentMode !== mode;
+
+  if (changed && state.currentGame === "reaction") {
+    resetReaction(false);
+    resetReactionSolo();
+  }
+  if (changed && state.currentGame === "timer") {
+    resetTimer();
+    resetTimerSolo();
+  }
+
+  state.currentMode = mode;
+  const solo = mode === "solo";
+  elements.playModeButtons.forEach((button) => {
+    const active = button.dataset.playMode === mode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.gameCategoryControl.hidden = solo;
+  elements.soloModeNote.hidden = !solo;
+  elements.partySession.hidden = solo;
+  elements.currentStakeBadge.hidden = solo;
+  updateModeLabels();
+  applyGameFilters();
+
+  const visibleTabs = getVisibleGameTabs();
+  if (!visibleTabs.some((tab) => tab.dataset.game === state.currentGame)) {
+    selectGame(visibleTabs[0]?.dataset.game);
+  } else if (state.currentGame === "reaction") {
+    configureReactionMode();
+  } else if (state.currentGame === "timer") {
+    configureTimerMode();
+  }
+}
+
 function selectGame(game) {
   if (!elements.gameViews[game]) return;
 
+  const changingGame = state.currentGame !== game;
+  const enteringDodge = changingGame && game === "dodge";
+  const enteringTap = changingGame && game === "tap";
   window.clearTimeout(resultRevealTimer);
   if (state.currentGame === "bomb" && game !== "bomb") resetBomb();
   if (state.currentGame === "finger" && game !== "finger") resetFinger();
   if (state.currentGame === "reaction" && game !== "reaction") {
     resetReaction(false);
+    resetReactionSolo();
   }
-  if (state.currentGame === "timer" && game !== "timer") resetTimer();
+  if (state.currentGame === "timer" && game !== "timer") {
+    resetTimer();
+    resetTimerSolo();
+  }
+  if (state.currentGame === "dodge" && game !== "dodge") resetDodge();
+  if (state.currentGame === "tap" && game !== "tap") resetTap();
   state.currentGame = game;
 
   elements.gameTabs.forEach((tab) => {
@@ -955,7 +1177,10 @@ function selectGame(game) {
   if (game === "cards" && !cardRound) dealCards();
   if (game === "menu") drawMenuWheel();
   if (game === "ladder") drawLadderCanvas(ladderRound?.selectedIndex);
-  if (game === "timer" && !timerRound) resetTimer();
+  if (game === "reaction" && changingGame) configureReactionMode();
+  if (game === "timer" && changingGame) configureTimerMode();
+  if (enteringDodge) resetDodge();
+  if (enteringTap) resetTap();
 
   const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
   activeTab?.scrollIntoView({
@@ -970,29 +1195,18 @@ function setGameCategory(category) {
   if (!valid.includes(category)) return;
 
   state.currentCategory = category;
-  elements.partyStartButtons.forEach((button) => {
-  button.addEventListener("click", () =>
-    startPartySession(Number(button.dataset.partyRounds)),
-  );
-});
-elements.endPartySession.addEventListener("click", () => stopPartySession());
-
-elements.gameCategoryButtons.forEach((button) => {
+  elements.gameCategoryButtons.forEach((button) => {
     const active = button.dataset.gameCategory === category;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
   });
+  applyGameFilters();
 
-  elements.gameTabs.forEach((tab) => {
-    tab.hidden = category !== "all" && tab.dataset.category !== category;
-  });
-
-  const visibleTabs = elements.gameTabs.filter((tab) => !tab.hidden);
+  const visibleTabs = getVisibleGameTabs();
   if (!visibleTabs.some((tab) => tab.dataset.game === state.currentGame)) {
     selectGame(visibleTabs[0]?.dataset.game);
   }
 }
-
 function drawWheelCanvas(canvas, items, rotation, centerText) {
   const context = canvas.getContext("2d");
   const size = canvas.width;
@@ -2467,6 +2681,147 @@ function handleReactionTap(side) {
   }
 }
 
+function formatReactionRecord(value) {
+  return value === null ? "--" : `${Math.round(value)}ms`;
+}
+
+function renderReactionSoloRecords() {
+  elements.reactionSoloBest.textContent = formatReactionRecord(
+    state.reactionSoloBest,
+  );
+  elements.reactionSoloLast.textContent = formatReactionRecord(
+    reactionSoloLast,
+  );
+  elements.reactionSoloReset.disabled =
+    state.reactionSoloBest === null ||
+    ["waiting", "go"].includes(reactionSoloPhase);
+}
+
+function resetReactionSolo() {
+  window.clearTimeout(resultRevealTimer);
+  window.clearTimeout(reactionSoloTimer);
+  reactionSoloTimer = null;
+  reactionSoloPhase = "idle";
+  reactionSoloGoAt = 0;
+  elements.reactionSoloPad.dataset.phase = "idle";
+  elements.reactionSoloPad.disabled = true;
+  elements.reactionSoloSignal.textContent = "준비";
+  elements.reactionSoloHint.textContent = "시작 버튼을 눌러 주세요";
+  elements.reactionSoloStart.disabled = false;
+  elements.reactionSoloStart.textContent = "기록 도전";
+  renderReactionSoloRecords();
+  if (state.currentMode === "solo" && state.currentGame === "reaction") {
+    elements.reactionStatus.textContent =
+      "신호가 빛나는 순간 최대한 빠르게 눌러 주세요.";
+  }
+}
+
+function configureReactionMode() {
+  const solo = state.currentMode === "solo";
+  elements.reactionDuelStage.hidden = solo;
+  elements.reactionSoloStage.hidden = !solo;
+  if (solo) {
+    resetReaction(false);
+    resetReactionSolo();
+  } else {
+    resetReactionSolo();
+    resetReaction(false);
+  }
+}
+
+function startReactionSolo() {
+  if (["waiting", "go"].includes(reactionSoloPhase)) return;
+  window.clearTimeout(reactionSoloTimer);
+  reactionSoloPhase = "waiting";
+  elements.reactionSoloPad.dataset.phase = "waiting";
+  elements.reactionSoloPad.disabled = false;
+  elements.reactionSoloSignal.textContent = "기다려요";
+  elements.reactionSoloHint.textContent = "아직 누르지 마세요";
+  elements.reactionSoloStart.disabled = true;
+  elements.reactionStatus.textContent = "색이 바뀔 때까지 기다리세요.";
+  renderReactionSoloRecords();
+
+  reactionSoloTimer = window.setTimeout(
+    () => {
+      reactionSoloTimer = null;
+      reactionSoloPhase = "go";
+      reactionSoloGoAt = performance.now();
+      elements.reactionSoloPad.dataset.phase = "go";
+      elements.reactionSoloSignal.textContent = "지금!";
+      elements.reactionSoloHint.textContent = "바로 터치하세요";
+      elements.reactionStatus.textContent = "지금 누르세요!";
+      if (navigator.vibrate) navigator.vibrate(35);
+    },
+    1400 + randomInt(2800),
+  );
+}
+
+function handleReactionSoloTap() {
+  if (reactionSoloPhase === "waiting") {
+    window.clearTimeout(reactionSoloTimer);
+    reactionSoloTimer = null;
+    reactionSoloPhase = "false-start";
+    elements.reactionSoloPad.dataset.phase = "false-start";
+    elements.reactionSoloPad.disabled = true;
+    elements.reactionSoloSignal.textContent = "너무 빨라요";
+    elements.reactionSoloHint.textContent = "신호 전에 눌렀어요";
+    elements.reactionSoloStart.disabled = false;
+    elements.reactionSoloStart.textContent = "다시 시도";
+    elements.reactionStatus.textContent = "부정 출발 · 기록되지 않았어요.";
+    renderReactionSoloRecords();
+    return;
+  }
+  if (reactionSoloPhase !== "go") return;
+
+  const record = Math.max(
+    1,
+    Math.round(performance.now() - reactionSoloGoAt),
+  );
+  reactionSoloPhase = "complete";
+  reactionSoloLast = record;
+  elements.reactionSoloPad.dataset.phase = "complete";
+  elements.reactionSoloPad.disabled = true;
+  elements.reactionSoloSignal.textContent = `${record}ms`;
+  elements.reactionSoloHint.textContent = "반응 기록";
+  elements.reactionSoloStart.disabled = false;
+  elements.reactionSoloStart.textContent = "다시 도전";
+
+  const newBest =
+    state.reactionSoloBest === null || record < state.reactionSoloBest;
+  if (newBest) {
+    state.reactionSoloBest = record;
+    saveState();
+  }
+  renderReactionSoloRecords();
+  elements.reactionStatus.textContent = newBest
+    ? `${record}ms · 새로운 최고 기록이에요!`
+    : `${record}ms · 최고 ${state.reactionSoloBest}ms`;
+  if (navigator.vibrate) navigator.vibrate([35, 25, 60]);
+
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "reaction",
+      gameLabel: "개인 반응속도",
+      lead: newBest ? "새로운 최고 기록" : "이번 반응 기록",
+      displayText: `${record}ms`,
+      stakeLabel: "개인 최고",
+      stake: `${state.reactionSoloBest}ms`,
+      copyText: `딱! 정해 개인 반응속도: ${record}ms · 최고 ${state.reactionSoloBest}ms`,
+      list: false,
+      playMode: "solo",
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 450);
+}
+
+function clearReactionSoloBest() {
+  if (["waiting", "go"].includes(reactionSoloPhase)) return;
+  state.reactionSoloBest = null;
+  saveState();
+  renderReactionSoloRecords();
+  showToast("개인 반응속도 최고 기록을 초기화했어요.");
+}
 function timerPlayersMatch() {
   return (
     timerRound?.players.length === state.participants.length &&
@@ -2619,6 +2974,843 @@ function startTimerTurn() {
   timerAnimationFrame = requestAnimationFrame(updateTimerFrame);
 }
 
+function formatTimerSoloBest(value) {
+  return value === null ? "--" : `${(value / 1000).toFixed(2)}초`;
+}
+
+function renderTimerSoloResults() {
+  elements.timerSoloResults.replaceChildren();
+  const attempts = timerSoloRound?.attempts || [];
+  elements.timerSoloProgress.textContent = `${attempts.length} / 3`;
+  elements.timerSoloBest.textContent = formatTimerSoloBest(state.timerSoloBest);
+  elements.timerSoloReset.disabled =
+    state.timerSoloBest === null || timerSoloRunning;
+
+  if (!attempts.length) {
+    const empty = document.createElement("li");
+    empty.className = "timer-result-empty";
+    empty.textContent = "3번의 기록이 여기에 쌓여요.";
+    elements.timerSoloResults.append(empty);
+    return;
+  }
+
+  attempts.forEach((attempt, index) => {
+    const item = document.createElement("li");
+    const round = document.createElement("strong");
+    round.textContent = `${index + 1}회`;
+    const record = document.createElement("span");
+    record.textContent = `${(attempt.elapsed / 1000).toFixed(2)}초`;
+    const difference = document.createElement("small");
+    difference.textContent = `오차 ${(attempt.difference / 1000).toFixed(2)}초`;
+    item.append(round, record, difference);
+    elements.timerSoloResults.append(item);
+  });
+}
+
+function resetTimerSolo() {
+  window.clearTimeout(resultRevealTimer);
+  if (timerSoloAnimationFrame !== null) {
+    cancelAnimationFrame(timerSoloAnimationFrame);
+  }
+  timerSoloAnimationFrame = null;
+  timerSoloRunning = false;
+  timerSoloStartedAt = 0;
+  timerSoloRound = { attempts: [], complete: false };
+  elements.timerSoloBoard.dataset.phase = "idle";
+  elements.timerSoloDisplay.textContent = "0.00";
+  elements.timerSoloRoundLabel.textContent = "ROUND 1 / 3";
+  elements.timerSoloStart.disabled = false;
+  elements.timerSoloStart.textContent = "기록 도전";
+  renderTimerSoloResults();
+  if (state.currentMode === "solo" && state.currentGame === "timer") {
+    elements.timerStatus.textContent =
+      "세 번 도전해 평균 오차와 최고 기록을 확인하세요.";
+  }
+}
+
+function configureTimerMode() {
+  const solo = state.currentMode === "solo";
+  elements.timerGroupStage.hidden = solo;
+  elements.timerSoloStage.hidden = !solo;
+  if (solo) {
+    resetTimer();
+    resetTimerSolo();
+  } else {
+    resetTimerSolo();
+    resetTimer();
+  }
+}
+
+function updateTimerSoloFrame(now) {
+  if (!timerSoloRunning) return;
+  const elapsed = now - timerSoloStartedAt;
+  if (elapsed >= 10000) {
+    finishTimerSoloTurn(10000);
+    return;
+  }
+  elements.timerSoloDisplay.textContent =
+    elapsed < 900 ? (elapsed / 1000).toFixed(2) : "•••";
+  timerSoloAnimationFrame = requestAnimationFrame(updateTimerSoloFrame);
+}
+
+function finishTimerSoloTurn(forcedElapsed = null) {
+  if (!timerSoloRunning || !timerSoloRound) return;
+  const elapsed = Math.min(
+    forcedElapsed ?? performance.now() - timerSoloStartedAt,
+    10000,
+  );
+  timerSoloRunning = false;
+  if (timerSoloAnimationFrame !== null) {
+    cancelAnimationFrame(timerSoloAnimationFrame);
+  }
+  timerSoloAnimationFrame = null;
+
+  const attempt = {
+    elapsed,
+    difference: Math.abs(elapsed - 5000),
+  };
+  timerSoloRound.attempts.push(attempt);
+  const newBest =
+    state.timerSoloBest === null || attempt.difference < state.timerSoloBest;
+  if (newBest) {
+    state.timerSoloBest = attempt.difference;
+    saveState();
+  }
+
+  elements.timerSoloBoard.dataset.phase = "stopped";
+  elements.timerSoloDisplay.textContent = (elapsed / 1000).toFixed(2);
+  elements.timerSoloReset.disabled = false;
+  renderTimerSoloResults();
+  if (navigator.vibrate) navigator.vibrate(35);
+
+  const count = timerSoloRound.attempts.length;
+  if (count < 3) {
+    elements.timerSoloRoundLabel.textContent = `ROUND ${count + 1} / 3`;
+    elements.timerSoloStart.textContent = "다음 도전";
+    elements.timerStatus.textContent = `${count}회 기록 ${(elapsed / 1000).toFixed(2)}초 · 오차 ${(attempt.difference / 1000).toFixed(2)}초`;
+    return;
+  }
+
+  timerSoloRound.complete = true;
+  const averageDifference =
+    timerSoloRound.attempts.reduce(
+      (total, entry) => total + entry.difference,
+      0,
+    ) / timerSoloRound.attempts.length;
+  const bestAttempt = timerSoloRound.attempts.reduce((best, entry) =>
+    entry.difference < best.difference ? entry : best,
+  );
+  elements.timerSoloRoundLabel.textContent = "3 ROUNDS COMPLETE";
+  elements.timerSoloStart.textContent = "다시 도전";
+  elements.timerStatus.textContent = `평균 오차 ${(averageDifference / 1000).toFixed(2)}초 · 최고 오차 ${(bestAttempt.difference / 1000).toFixed(2)}초`;
+
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "timer",
+      gameLabel: "개인 5초 기록",
+      lead: "세 번의 평균 오차",
+      displayText: `${(averageDifference / 1000).toFixed(2)}초`,
+      stakeLabel: "개인 최고 오차",
+      stake: formatTimerSoloBest(state.timerSoloBest),
+      copyText: `딱! 정해 개인 5초 기록: 평균 오차 ${(averageDifference / 1000).toFixed(2)}초 · 최고 오차 ${formatTimerSoloBest(state.timerSoloBest)}`,
+      list: false,
+      playMode: "solo",
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 550);
+}
+
+function startTimerSoloTurn() {
+  if (timerSoloRunning) {
+    finishTimerSoloTurn();
+    return;
+  }
+  if (!timerSoloRound || timerSoloRound.complete) resetTimerSolo();
+
+  timerSoloRunning = true;
+  timerSoloStartedAt = performance.now();
+  const round = timerSoloRound.attempts.length + 1;
+  elements.timerSoloBoard.dataset.phase = "running";
+  elements.timerSoloDisplay.textContent = "0.00";
+  elements.timerSoloRoundLabel.textContent = `ROUND ${round} / 3`;
+  elements.timerSoloStart.textContent = "멈추기";
+  elements.timerSoloReset.disabled = true;
+  elements.timerStatus.textContent = "5초라고 느껴지는 순간 멈추세요.";
+  timerSoloAnimationFrame = requestAnimationFrame(updateTimerSoloFrame);
+}
+
+function clearTimerSoloBest() {
+  if (timerSoloRunning) return;
+  state.timerSoloBest = null;
+  saveState();
+  renderTimerSoloResults();
+  showToast("개인 5초 최고 기록을 초기화했어요.");
+}
+function formatDodgeTime(milliseconds) {
+  return (Math.max(0, milliseconds) / 1000).toFixed(2);
+}
+
+function clampDodge(value, minimum, maximum) {
+  return Math.min(Math.max(value, minimum), maximum);
+}
+
+function makeRoundedRectPath(context, x, y, width, height, radius) {
+  const corner = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + corner, y);
+  context.lineTo(x + width - corner, y);
+  context.arcTo(x + width, y, x + width, y + corner, corner);
+  context.lineTo(x + width, y + height - corner);
+  context.arcTo(
+    x + width,
+    y + height,
+    x + width - corner,
+    y + height,
+    corner,
+  );
+  context.lineTo(x + corner, y + height);
+  context.arcTo(x, y + height, x, y + height - corner, corner);
+  context.lineTo(x, y + corner);
+  context.arcTo(x, y, x + corner, y, corner);
+  context.closePath();
+}
+
+function setDodgePrompt(title, detail) {
+  elements.dodgePrompt.querySelector("strong").textContent = title;
+  elements.dodgePrompt.querySelector("span").textContent = detail;
+}
+
+function renderDodgeBest() {
+  elements.dodgeBest.textContent = formatDodgeTime(state.dodgeBest);
+  elements.dodgeReset.disabled =
+    state.dodgeBest <= 0 || ["countdown", "running"].includes(dodgePhase);
+}
+
+function resetDodge() {
+  window.clearTimeout(resultRevealTimer);
+  if (dodgeAnimationFrame !== null) {
+    cancelAnimationFrame(dodgeAnimationFrame);
+  }
+  dodgeAnimationFrame = null;
+  dodgePhase = "idle";
+  dodgeLastFrame = 0;
+  dodgeCountdown = 0;
+  dodgeElapsed = 0;
+  dodgeNextDrop = 80;
+  dodgeNextSide = DODGE_SIDE_START;
+  dodgeNextDoubleWave = 10000;
+  dodgeNextDangerWave = 25000;
+  dodgePendingSideWave = null;
+  dodgeDifficultyTier = -1;
+  dodgeObstacles = [];
+  dodgeWarnings = [];
+  dodgePointerId = null;
+  dodgeKeys.clear();
+  dodgePlayer = {
+    x: DODGE_WIDTH / 2,
+    y: DODGE_HEIGHT * 0.82,
+    width: 68,
+    height: 68,
+  };
+
+  elements.dodgeArena.dataset.phase = "idle";
+  elements.dodgeTime.textContent = "0.00";
+  elements.dodgeStatus.textContent =
+    "처음부터 빠르게 떨어지는 장애물을 피하며 기록에 도전하세요.";
+  elements.dodgeStart.disabled = false;
+  elements.dodgeStart.textContent = "도전 시작";
+  setDodgePrompt("READY", "드래그 또는 방향키로 이동");
+  renderDodgeBest();
+  drawDodgeScene();
+}
+
+function drawDodgeScene() {
+  const context = elements.dodgeCanvas.getContext("2d");
+  context.clearRect(0, 0, DODGE_WIDTH, DODGE_HEIGHT);
+  context.fillStyle = "#f8fbff";
+  context.fillRect(0, 0, DODGE_WIDTH, DODGE_HEIGHT);
+
+  context.save();
+  context.strokeStyle = "#e2eaf2";
+  context.lineWidth = 1;
+  context.setLineDash([10, 14]);
+  for (let x = 200; x < DODGE_WIDTH; x += 200) {
+    context.beginPath();
+    context.moveTo(x, 0);
+    context.lineTo(x, DODGE_HEIGHT);
+    context.stroke();
+  }
+  for (let y = 200; y < DODGE_HEIGHT; y += 200) {
+    context.beginPath();
+    context.moveTo(0, y);
+    context.lineTo(DODGE_WIDTH, y);
+    context.stroke();
+  }
+  context.restore();
+
+  dodgeWarnings.forEach((warning) => {
+    const dangerWave = warning.wave === "danger";
+    const warningWidth = dangerWave ? 22 : 16;
+    const edgeX =
+      warning.side === "left" ? 0 : DODGE_WIDTH - warningWidth;
+    context.fillStyle = dangerWave
+      ? "rgba(213, 54, 82, 0.94)"
+      : "rgba(239, 91, 85, 0.9)";
+    context.fillRect(
+      edgeX,
+      warning.y - 10,
+      warningWidth,
+      warning.height + 20,
+    );
+    context.fillStyle = "#17191d";
+    context.font = dangerWave
+      ? "900 21px Arial, sans-serif"
+      : "900 26px Arial, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(
+      dangerWave ? "!!" : "!",
+      edgeX + warningWidth / 2,
+      warning.y + warning.height / 2,
+    );
+  });
+
+  dodgeObstacles.forEach((obstacle) => {
+    makeRoundedRectPath(
+      context,
+      obstacle.x,
+      obstacle.y,
+      obstacle.width,
+      obstacle.height,
+      Math.min(15, obstacle.height / 3),
+    );
+    context.fillStyle = obstacle.color;
+    context.fill();
+    context.strokeStyle = "#17191d";
+    context.lineWidth = 5;
+    context.stroke();
+
+    if (obstacle.kind === "side") {
+      context.fillStyle = "#ffffff";
+      context.font = '900 22px Arial, sans-serif';
+      context.textAlign = "center";
+      context.textBaseline = "middle";
+      context.fillText(
+        obstacle.velocityX > 0 ? ">" : "<",
+        obstacle.x + obstacle.width / 2,
+        obstacle.y + obstacle.height / 2,
+      );
+    }
+  });
+
+  if (!dodgePlayer) return;
+  const playerX = dodgePlayer.x - dodgePlayer.width / 2;
+  const playerY = dodgePlayer.y - dodgePlayer.height / 2;
+  makeRoundedRectPath(
+    context,
+    playerX,
+    playerY + 5,
+    dodgePlayer.width,
+    dodgePlayer.height - 5,
+    23,
+  );
+  context.fillStyle = dodgePhase === "gameover" ? "#ff8a80" : "#5f7fe8";
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 5;
+  context.stroke();
+
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.arc(dodgePlayer.x - 13, dodgePlayer.y - 7, 7, 0, Math.PI * 2);
+  context.arc(dodgePlayer.x + 13, dodgePlayer.y - 7, 7, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#17191d";
+  context.beginPath();
+  context.arc(dodgePlayer.x - 11, dodgePlayer.y - 6, 2.7, 0, Math.PI * 2);
+  context.arc(dodgePlayer.x + 15, dodgePlayer.y - 6, 2.7, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.arc(dodgePlayer.x, dodgePlayer.y + 7, 11, 0.15, Math.PI - 0.15);
+  context.stroke();
+}
+
+function spawnDodgeDrop() {
+  const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const width = 54 + randomInt(76);
+  const height = 38 + randomInt(42);
+  let x = 24 + randomInt(DODGE_WIDTH - width - 48);
+
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    const blocked = dodgeObstacles.some(
+      (obstacle) =>
+        obstacle.kind === "drop" &&
+        obstacle.y < 170 &&
+        x < obstacle.x + obstacle.width + 34 &&
+        x + width + 34 > obstacle.x,
+    );
+    if (!blocked) break;
+    x = 24 + randomInt(DODGE_WIDTH - width - 48);
+  }
+
+  const colors = ["#ff7268", "#f4c84c", "#35aa9d", "#6682df"];
+  dodgeObstacles.push({
+    kind: "drop",
+    x,
+    y: -height - 12,
+    width,
+    height,
+    velocityX:
+      dodgeElapsed >= 8000 && randomInt(100) < 58
+        ? (randomInt(2) === 0 ? -1 : 1) * (70 + tier * 12)
+        : 0,
+    velocityY: 380 + tier * 46 + randomInt(120),
+    color: colors[randomInt(colors.length)],
+  });
+}
+
+function spawnDodgeSideWave(count = 1, wave = "single") {
+  const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const waveCount = Math.min(Math.max(count, 1), 3);
+  const laneCenters = [220, 410, 600, 790];
+
+  for (let index = laneCenters.length - 1; index > 0; index -= 1) {
+    const swapIndex = randomInt(index + 1);
+    [laneCenters[index], laneCenters[swapIndex]] = [
+      laneCenters[swapIndex],
+      laneCenters[index],
+    ];
+  }
+
+  const fromLeft = randomInt(2) === 0;
+  laneCenters.slice(0, waveCount).forEach((center, index) => {
+    const height = wave === "danger" ? 54 : 44 + randomInt(28);
+    const duration =
+      wave === "danger"
+        ? 850
+        : wave === "double"
+          ? 700
+          : Math.max(360, 580 - tier * 16);
+    dodgeWarnings.push({
+      side: (index % 2 === 0) === fromLeft ? "left" : "right",
+      y: clampDodge(
+        center - height / 2,
+        150,
+        DODGE_HEIGHT - height - 150,
+      ),
+      height,
+      elapsed: 0,
+      duration,
+      wave,
+    });
+  });
+}
+
+function releaseDodgeSideObstacle(warning) {
+  const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const width = 132;
+  const speed = 560 + tier * 48;
+  const fromLeft = warning.side === "left";
+  dodgeObstacles.push({
+    kind: "side",
+    x: fromLeft ? -width - 10 : DODGE_WIDTH + 10,
+    y: warning.y,
+    width,
+    height: warning.height,
+    velocityX: fromLeft ? speed : -speed,
+    velocityY: 0,
+    color: warning.wave === "danger" ? "#d53652" : "#ef5b55",
+    wave: warning.wave,
+  });
+}
+
+function moveDodgePlayer(delta) {
+  let horizontal = 0;
+  let vertical = 0;
+  if (dodgeKeys.has("ArrowLeft") || dodgeKeys.has("a")) horizontal -= 1;
+  if (dodgeKeys.has("ArrowRight") || dodgeKeys.has("d")) horizontal += 1;
+  if (dodgeKeys.has("ArrowUp") || dodgeKeys.has("w")) vertical -= 1;
+  if (dodgeKeys.has("ArrowDown") || dodgeKeys.has("s")) vertical += 1;
+
+  if (horizontal || vertical) {
+    const length = Math.hypot(horizontal, vertical) || 1;
+    const speed = 640;
+    dodgePlayer.x += (horizontal / length) * speed * delta;
+    dodgePlayer.y += (vertical / length) * speed * delta;
+  }
+
+  const halfWidth = dodgePlayer.width / 2;
+  const halfHeight = dodgePlayer.height / 2;
+  dodgePlayer.x = clampDodge(
+    dodgePlayer.x,
+    halfWidth + 18,
+    DODGE_WIDTH - halfWidth - 18,
+  );
+  dodgePlayer.y = clampDodge(
+    dodgePlayer.y,
+    halfHeight + 96,
+    DODGE_HEIGHT - halfHeight - 18,
+  );
+}
+
+function dodgeObjectsCollide(obstacle) {
+  const playerInsetX = dodgePlayer.width * 0.18;
+  const playerInsetY = dodgePlayer.height * 0.18;
+  const playerLeft = dodgePlayer.x - dodgePlayer.width / 2 + playerInsetX;
+  const playerTop = dodgePlayer.y - dodgePlayer.height / 2 + playerInsetY;
+  const playerRight =
+    dodgePlayer.x + dodgePlayer.width / 2 - playerInsetX;
+  const playerBottom =
+    dodgePlayer.y + dodgePlayer.height / 2 - playerInsetY;
+  const obstacleInset = 3;
+
+  return (
+    playerLeft < obstacle.x + obstacle.width - obstacleInset &&
+    playerRight > obstacle.x + obstacleInset &&
+    playerTop < obstacle.y + obstacle.height - obstacleInset &&
+    playerBottom > obstacle.y + obstacleInset
+  );
+}
+
+function finishDodge() {
+  if (dodgePhase !== "running") return;
+  dodgePhase = "gameover";
+  dodgeAnimationFrame = null;
+  elements.dodgeArena.dataset.phase = "gameover";
+
+  const record = Math.max(0, Math.round(dodgeElapsed));
+  const newBest = record > state.dodgeBest;
+  if (newBest) {
+    state.dodgeBest = record;
+    saveState();
+  }
+  renderDodgeBest();
+  elements.dodgeStart.disabled = false;
+  elements.dodgeStart.textContent = "다시 도전";
+  elements.dodgeStatus.textContent = newBest
+    ? `${formatDodgeTime(record)}초 · 새로운 최고 기록이에요!`
+    : `${formatDodgeTime(record)}초 생존 · 최고 ${formatDodgeTime(state.dodgeBest)}초`;
+  setDodgePrompt(
+    "GAME OVER",
+    newBest ? "NEW BEST" : `${formatDodgeTime(record)}초 생존`,
+  );
+  drawDodgeScene();
+  if (navigator.vibrate) navigator.vibrate([70, 40, 110]);
+
+  window.clearTimeout(resultRevealTimer);
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "dodge",
+      lead: newBest ? "새로운 최고 기록" : "이번 생존 기록",
+      displayText: `${formatDodgeTime(record)}초`,
+      stakeLabel: "개인 최고",
+      stake: `${formatDodgeTime(state.dodgeBest)}초`,
+      copyText: `딱! 정해 장애물 피하기: ${formatDodgeTime(record)}초 생존 · 최고 ${formatDodgeTime(state.dodgeBest)}초`,
+      list: false,
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 500);
+}
+
+function updateDodgeGame(delta) {
+  dodgeElapsed += delta * 1000;
+  elements.dodgeTime.textContent = formatDodgeTime(dodgeElapsed);
+  moveDodgePlayer(delta);
+
+  const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  if (tier !== dodgeDifficultyTier) {
+    dodgeDifficultyTier = tier;
+    elements.dodgeStatus.textContent =
+      dodgeElapsed < DODGE_SIDE_START
+        ? `${tier + 1}단계 · 위에서 떨어지는 장애물을 피하세요.`
+        : `${tier + 1}단계 · 좌우 장애물까지 조심하세요.`;
+  }
+
+  if (dodgeElapsed >= dodgeNextDrop) {
+    spawnDodgeDrop();
+    if (randomInt(100) < Math.min(82, 16 + tier * 8)) {
+      spawnDodgeDrop();
+    }
+    const interval = Math.max(120, 460 - tier * 28);
+    dodgeNextDrop = dodgeElapsed + interval + randomInt(50);
+  }
+
+  if (dodgeElapsed >= dodgeNextSide) {
+    const sidePressure =
+      dodgeWarnings.length +
+      dodgeObstacles.filter((obstacle) => obstacle.kind === "side").length;
+    const sideLimit = tier >= 5 ? 3 : 2;
+    if (!dodgePendingSideWave && dodgeElapsed >= dodgeNextDangerWave) {
+      dodgePendingSideWave = { count: 3, wave: "danger" };
+      dodgeNextDangerWave = dodgeElapsed + 20000 + randomInt(6000);
+      dodgeNextDoubleWave = Math.max(
+        dodgeNextDoubleWave,
+        dodgeElapsed + 5000,
+      );
+    } else if (!dodgePendingSideWave && dodgeElapsed >= dodgeNextDoubleWave) {
+      dodgePendingSideWave = { count: 2, wave: "double" };
+      dodgeNextDoubleWave = dodgeElapsed + 7000 + randomInt(4000);
+    }
+
+    if (dodgePendingSideWave) {
+      if (sidePressure === 0) {
+        const pendingWave = dodgePendingSideWave;
+        dodgePendingSideWave = null;
+        spawnDodgeSideWave(pendingWave.count, pendingWave.wave);
+        elements.dodgeStatus.textContent =
+          pendingWave.wave === "danger"
+            ? "위험 파도 · 비어 있는 높이로 이동하세요!"
+            : tier + 1 + "단계 · 좌우 2개 동시 공격!";
+        dodgeNextSide = dodgeElapsed + 900;
+      } else {
+        dodgeNextSide = dodgeElapsed + 120;
+      }
+    } else if (sidePressure < sideLimit) {
+      spawnDodgeSideWave();
+      elements.dodgeStatus.textContent =
+        tier + 1 + "단계 · 좌우 경고를 확인하세요.";
+      const interval = Math.max(700, 1600 - tier * 80);
+      dodgeNextSide = dodgeElapsed + interval + randomInt(180);
+    } else {
+      dodgeNextSide = dodgeElapsed + 180;
+    }
+  }
+
+  dodgeWarnings = dodgeWarnings.filter((warning) => {
+    warning.elapsed += delta * 1000;
+    if (warning.elapsed < warning.duration) return true;
+    releaseDodgeSideObstacle(warning);
+    return false;
+  });
+
+  dodgeObstacles.forEach((obstacle) => {
+    obstacle.x += obstacle.velocityX * delta;
+    obstacle.y += obstacle.velocityY * delta;
+    if (
+      obstacle.kind === "drop" &&
+      obstacle.velocityX !== 0 &&
+      (obstacle.x < 14 || obstacle.x + obstacle.width > DODGE_WIDTH - 14)
+    ) {
+      obstacle.velocityX *= -1;
+      obstacle.x = clampDodge(
+        obstacle.x,
+        14,
+        DODGE_WIDTH - obstacle.width - 14,
+      );
+    }
+  });
+  dodgeObstacles = dodgeObstacles.filter(
+    (obstacle) =>
+      obstacle.y < DODGE_HEIGHT + obstacle.height + 20 &&
+      obstacle.x < DODGE_WIDTH + obstacle.width + 30 &&
+      obstacle.x + obstacle.width > -30,
+  );
+
+  if (dodgeObstacles.some(dodgeObjectsCollide)) {
+    finishDodge();
+  }
+}
+
+function runDodgeFrame(now) {
+  if (!["countdown", "running"].includes(dodgePhase)) return;
+  if (!dodgeLastFrame) dodgeLastFrame = now;
+  const delta = Math.min((now - dodgeLastFrame) / 1000, 0.034);
+  dodgeLastFrame = now;
+
+  if (dodgePhase === "countdown") {
+    dodgeCountdown -= delta * 1000;
+    setDodgePrompt(String(Math.max(1, Math.ceil(dodgeCountdown / 1000))), "곧 시작해요");
+    if (dodgeCountdown <= 0) {
+      dodgePhase = "running";
+      elements.dodgeArena.dataset.phase = "running";
+      elements.dodgeStart.textContent = "피하는 중";
+      elements.dodgeStatus.textContent = "1단계 · 처음부터 빠른 장애물을 피하세요.";
+      dodgeLastFrame = now;
+    }
+  } else {
+    updateDodgeGame(delta);
+  }
+
+  drawDodgeScene();
+  if (["countdown", "running"].includes(dodgePhase)) {
+    dodgeAnimationFrame = requestAnimationFrame(runDodgeFrame);
+  } else {
+    dodgeAnimationFrame = null;
+  }
+}
+
+function startDodge() {
+  if (["countdown", "running"].includes(dodgePhase)) return;
+  resetDodge();
+  dodgePhase = "countdown";
+  dodgeCountdown = 3000;
+  dodgeLastFrame = 0;
+  elements.dodgeArena.dataset.phase = "countdown";
+  elements.dodgeStart.disabled = true;
+  elements.dodgeStart.textContent = "준비 중";
+  elements.dodgeReset.disabled = true;
+  elements.dodgeStatus.textContent = "잠시 후 시작합니다. 움직일 준비를 하세요.";
+  setDodgePrompt("3", "곧 시작해요");
+  elements.dodgeCanvas.focus({ preventScroll: true });
+  dodgeAnimationFrame = requestAnimationFrame(runDodgeFrame);
+}
+
+function clearDodgeBest() {
+  if (["countdown", "running"].includes(dodgePhase)) return;
+  state.dodgeBest = 0;
+  saveState();
+  renderDodgeBest();
+  elements.dodgeStatus.textContent = "최고 기록을 초기화했어요.";
+  showToast("장애물 피하기 최고 기록을 초기화했어요.");
+}
+
+function moveDodgeWithPointer(event) {
+  if (!["countdown", "running"].includes(dodgePhase) || !dodgePlayer) return;
+  const rect = elements.dodgeCanvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const x = ((event.clientX - rect.left) / rect.width) * DODGE_WIDTH;
+  const touchLift = event.pointerType === "touch" ? 78 : 0;
+  const y =
+    ((event.clientY - rect.top) / rect.height) * DODGE_HEIGHT - touchLift;
+  dodgePlayer.x = x;
+  dodgePlayer.y = y;
+  moveDodgePlayer(0);
+}
+function renderTapBest() {
+  elements.tapBest.textContent = String(state.tapBest);
+  elements.tapReset.disabled =
+    state.tapBest <= 0 || ["countdown", "running"].includes(tapPhase);
+}
+
+function resetTap() {
+  window.clearTimeout(resultRevealTimer);
+  if (tapAnimationFrame !== null) cancelAnimationFrame(tapAnimationFrame);
+  tapAnimationFrame = null;
+  tapPhase = "idle";
+  tapPhaseStartedAt = 0;
+  tapCount = 0;
+  elements.tapPad.dataset.phase = "idle";
+  elements.tapPad.disabled = true;
+  elements.tapCount.textContent = "0";
+  elements.tapPrompt.textContent = "시작하면 여기를 빠르게 누르세요";
+  elements.tapTime.textContent = "10.0";
+  elements.tapSpeed.textContent = "0.0/s";
+  elements.tapStart.disabled = false;
+  elements.tapStart.textContent = "도전 시작";
+  elements.tapStatus.textContent = "10초 동안 얼마나 빠르게 누를 수 있을까요?";
+  renderTapBest();
+}
+
+function finishTap() {
+  if (tapPhase !== "running") return;
+  tapPhase = "complete";
+  tapAnimationFrame = null;
+  elements.tapPad.dataset.phase = "complete";
+  elements.tapPad.disabled = true;
+  elements.tapTime.textContent = "0.0";
+  elements.tapSpeed.textContent = `${(tapCount / 10).toFixed(1)}/s`;
+  elements.tapPrompt.textContent = "도전 완료!";
+  elements.tapStart.disabled = false;
+  elements.tapStart.textContent = "다시 도전";
+
+  const newBest = tapCount > state.tapBest;
+  if (newBest) {
+    state.tapBest = tapCount;
+    saveState();
+  }
+  renderTapBest();
+  elements.tapStatus.textContent = newBest
+    ? `${tapCount}회 · 새로운 최고 기록이에요!`
+    : `${tapCount}회 · 최고 ${state.tapBest}회`;
+  if (navigator.vibrate) navigator.vibrate([45, 30, 80]);
+
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "tap",
+      gameLabel: "10초 연타",
+      lead: newBest ? "새로운 최고 기록" : "이번 연타 기록",
+      displayText: `${tapCount}회`,
+      stakeLabel: "평균 속도",
+      stake: `${(tapCount / 10).toFixed(1)}회/초 · 최고 ${state.tapBest}회`,
+      copyText: `딱! 정해 10초 연타: ${tapCount}회 · ${(tapCount / 10).toFixed(1)}회/초 · 최고 ${state.tapBest}회`,
+      list: false,
+      playMode: "solo",
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 500);
+}
+
+function runTapFrame(now) {
+  if (tapPhase === "countdown") {
+    const elapsed = now - tapPhaseStartedAt;
+    const remaining = Math.max(0, 3000 - elapsed);
+    elements.tapPrompt.textContent = `${Math.max(1, Math.ceil(remaining / 1000))}`;
+    if (remaining <= 0) {
+      tapPhase = "running";
+      tapPhaseStartedAt = now;
+      elements.tapPad.dataset.phase = "running";
+      elements.tapPad.disabled = false;
+      elements.tapPrompt.textContent = "빠르게 눌러요!";
+      elements.tapStatus.textContent = "지금부터 10초! 최대한 빠르게 누르세요.";
+      if (navigator.vibrate) navigator.vibrate(35);
+    }
+  } else if (tapPhase === "running") {
+    const elapsed = now - tapPhaseStartedAt;
+    const remaining = Math.max(0, 10000 - elapsed);
+    elements.tapTime.textContent = (remaining / 1000).toFixed(1);
+    const seconds = Math.max(elapsed / 1000, 0.1);
+    elements.tapSpeed.textContent = `${(tapCount / seconds).toFixed(1)}/s`;
+    if (remaining <= 0) {
+      finishTap();
+      return;
+    }
+  } else {
+    return;
+  }
+
+  tapAnimationFrame = requestAnimationFrame(runTapFrame);
+}
+
+function startTap() {
+  if (["countdown", "running"].includes(tapPhase)) return;
+  resetTap();
+  tapPhase = "countdown";
+  tapPhaseStartedAt = performance.now();
+  elements.tapPad.dataset.phase = "countdown";
+  elements.tapPad.disabled = false;
+  elements.tapCount.textContent = "0";
+  elements.tapPrompt.textContent = "3";
+  elements.tapStart.disabled = true;
+  elements.tapStart.textContent = "준비 중";
+  elements.tapReset.disabled = true;
+  elements.tapStatus.textContent = "손가락을 준비하세요. 곧 시작합니다.";
+  elements.tapPad.focus({ preventScroll: true });
+  tapAnimationFrame = requestAnimationFrame(runTapFrame);
+}
+
+function handleTapPress() {
+  if (tapPhase !== "running") return;
+  tapCount += 1;
+  elements.tapCount.textContent = String(tapCount);
+  elements.tapPad.classList.remove("is-hit");
+  window.requestAnimationFrame(() => {
+    elements.tapPad.classList.add("is-hit");
+  });
+  if (navigator.vibrate && tapCount % 10 === 0) navigator.vibrate(8);
+}
+
+function clearTapBest() {
+  if (["countdown", "running"].includes(tapPhase)) return;
+  state.tapBest = 0;
+  saveState();
+  renderTapBest();
+  showToast("10초 연타 최고 기록을 초기화했어요.");
+}
 function updateGameAvailability() {
   const peopleReady = state.participants.length >= 2;
   const optionsReady = state.options.length >= 2;
@@ -2652,6 +3844,7 @@ function recordResult(result) {
   state.history.unshift({
     id,
     game: result.game,
+    gameLabel: result.gameLabel || "",
     summary,
     copyText: result.copyText,
     mission: result.mission || "",
@@ -2680,7 +3873,8 @@ function renderHistory() {
     item.className = "history-item";
     const text = document.createElement("span");
     const game = document.createElement("small");
-    game.textContent = GAME_LABELS[entry.game] || "게임 결과";
+    game.textContent =
+      entry.gameLabel || GAME_LABELS[entry.game] || "게임 결과";
     const summary = document.createElement("strong");
     summary.textContent = entry.summary;
     text.append(game, summary);
@@ -2730,7 +3924,8 @@ function showResult(resultOrName, game) {
   };
 
   state.lastResult = result;
-  elements.resultGameLabel.textContent = GAME_LABELS[result.game];
+  elements.resultGameLabel.textContent =
+    result.gameLabel || GAME_LABELS[result.game];
   elements.resultLead.textContent = result.lead;
   elements.resultName.textContent = result.displayText;
   elements.resultName.classList.toggle("is-list", Boolean(result.list));
@@ -2739,6 +3934,7 @@ function showResult(resultOrName, game) {
   elements.resultParty.hidden = !result.partyMessage;
   elements.resultParty.textContent = result.partyMessage;
   resetResultMission();
+  elements.drawMission.hidden = result.allowMission === false;
   result.historyId = recordResult(result);
 
   if (typeof elements.resultDialog.showModal === "function") {
@@ -2773,8 +3969,16 @@ function playAgain() {
     seats: elements.seatButton,
     tournament: elements.tournamentButton,
     finger: elements.fingerReset,
-    reaction: elements.reactionStart,
-    timer: elements.timerStart,
+    reaction:
+      state.lastResult?.playMode === "solo"
+        ? elements.reactionSoloStart
+        : elements.reactionStart,
+    timer:
+      state.lastResult?.playMode === "solo"
+        ? elements.timerSoloStart
+        : elements.timerStart,
+    dodge: elements.dodgeStart,
+    tap: elements.tapStart,
   };
 
   if (game === "wheel") {
@@ -2800,9 +4004,21 @@ function playAgain() {
   } else if (game === "finger") {
     resetFinger();
   } else if (game === "reaction") {
-    resetReaction(true);
+    if (state.lastResult?.playMode === "solo") {
+      resetReactionSolo();
+    } else {
+      resetReaction(true);
+    }
   } else if (game === "timer") {
-    resetTimer();
+    if (state.lastResult?.playMode === "solo") {
+      resetTimerSolo();
+    } else {
+      resetTimer();
+    }
+  } else if (game === "dodge") {
+    resetDodge();
+  } else if (game === "tap") {
+    resetTap();
   }
   focusByGame[game]?.focus();
 }
@@ -2927,6 +4143,10 @@ elements.partyStartButtons.forEach((button) => {
 });
 elements.endPartySession.addEventListener("click", () => stopPartySession());
 
+elements.playModeButtons.forEach((button) => {
+  button.addEventListener("click", () => setPlayMode(button.dataset.playMode));
+});
+
 elements.gameCategoryButtons.forEach((button) => {
   button.addEventListener("click", () =>
     setGameCategory(button.dataset.gameCategory),
@@ -2999,8 +4219,66 @@ elements.fingerReset.addEventListener("click", resetFinger);
 elements.fingerFallback.addEventListener("click", chooseFingerFromNames);
 elements.reactionStart.addEventListener("click", startReactionRound);
 elements.reactionReset.addEventListener("click", () => resetReaction(true));
+elements.reactionSoloStart.addEventListener("click", startReactionSolo);
+elements.reactionSoloReset.addEventListener("click", clearReactionSoloBest);
+elements.reactionSoloPad.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  handleReactionSoloTap();
+});
+elements.reactionSoloPad.addEventListener("keydown", (event) => {
+  if (!["Enter", " "].includes(event.key)) return;
+  event.preventDefault();
+  handleReactionSoloTap();
+});
 elements.timerStart.addEventListener("click", startTimerTurn);
 elements.timerReset.addEventListener("click", resetTimer);
+elements.timerSoloStart.addEventListener("click", startTimerSoloTurn);
+elements.timerSoloReset.addEventListener("click", clearTimerSoloBest);
+elements.dodgeStart.addEventListener("click", startDodge);
+elements.dodgeReset.addEventListener("click", clearDodgeBest);
+elements.dodgeCanvas.addEventListener("pointerdown", (event) => {
+  if (!["countdown", "running"].includes(dodgePhase)) return;
+  event.preventDefault();
+  dodgePointerId = event.pointerId;
+  elements.dodgeCanvas.setPointerCapture?.(event.pointerId);
+  elements.dodgeCanvas.focus({ preventScroll: true });
+  moveDodgeWithPointer(event);
+});
+elements.dodgeCanvas.addEventListener("pointermove", (event) => {
+  if (event.pointerId !== dodgePointerId) return;
+  event.preventDefault();
+  moveDodgeWithPointer(event);
+});
+["pointerup", "pointercancel"].forEach((eventName) => {
+  elements.dodgeCanvas.addEventListener(eventName, (event) => {
+    if (event.pointerId === dodgePointerId) dodgePointerId = null;
+  });
+});
+elements.dodgeCanvas.addEventListener("keydown", (event) => {
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "w", "a", "s", "d"].includes(key)) return;
+  event.preventDefault();
+  dodgeKeys.add(key);
+});
+elements.dodgeCanvas.addEventListener("keyup", (event) => {
+  const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+  dodgeKeys.delete(key);
+});
+elements.dodgeCanvas.addEventListener("blur", () => dodgeKeys.clear());
+elements.dodgeCanvas.addEventListener("contextmenu", (event) =>
+  event.preventDefault(),
+);
+elements.tapStart.addEventListener("click", startTap);
+elements.tapReset.addEventListener("click", clearTapBest);
+elements.tapPad.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  handleTapPress();
+});
+elements.tapPad.addEventListener("keydown", (event) => {
+  if (!["Enter", " "].includes(event.key)) return;
+  event.preventDefault();
+  handleTapPress();
+});
 [
   [elements.reactionLeft, 0],
   [elements.reactionRight, 1],
@@ -3040,7 +4318,13 @@ window.addEventListener("beforeunload", () => {
   window.clearTimeout(ladderRevealTimer);
   window.clearTimeout(fingerPickTimer);
   window.clearTimeout(reactionTimer);
+  window.clearTimeout(reactionSoloTimer);
   if (timerAnimationFrame !== null) cancelAnimationFrame(timerAnimationFrame);
+  if (timerSoloAnimationFrame !== null) {
+    cancelAnimationFrame(timerSoloAnimationFrame);
+  }
+  if (dodgeAnimationFrame !== null) cancelAnimationFrame(dodgeAnimationFrame);
+  if (tapAnimationFrame !== null) cancelAnimationFrame(tapAnimationFrame);
 });
 
 elements.noRepeatToggle.checked = state.noRepeat;
@@ -3049,6 +4333,10 @@ renderHistory();
 renderMissions();
 renderPartySession();
 renderOptionEditors();
+resetReactionSolo();
+resetTimerSolo();
+resetDodge();
+resetTap();
 renderParticipants();
 updateSeatControls();
 
@@ -3065,6 +4353,7 @@ if (savedStakeIsPreset) {
 elements.gameTabs.forEach((tab, index) => {
   tab.tabIndex = index === 0 ? 0 : -1;
 });
+setPlayMode("together");
 setGameCategory("quick");
 if (
   savedState.hasStoredState &&

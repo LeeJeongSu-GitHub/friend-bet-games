@@ -742,6 +742,105 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
+.play-mode-control {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #eef0f3;
+}
+
+.play-mode-control button {
+  min-width: 0;
+  min-height: 62px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+}
+
+.play-mode-control button.is-active {
+  background: #fff;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.play-mode-control button > span:last-child {
+  min-width: 0;
+}
+
+.play-mode-control strong,
+.play-mode-control small {
+  display: block;
+}
+
+.play-mode-control strong {
+  font-size: 14px;
+}
+
+.play-mode-control small {
+  margin-top: 3px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mode-symbol {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 38px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--teal);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.mode-symbol.solo {
+  background: var(--yellow);
+  color: var(--ink);
+}
+
+.solo-mode-note {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #f4fbfa;
+}
+
+.game-category-control[hidden],
+.solo-mode-note[hidden],
+.party-session[hidden] {
+  display: none;
+}
+
+.solo-mode-note strong {
+  color: var(--teal-dark);
+  font-size: 10px;
+}
+
+.solo-mode-note span {
+  color: var(--muted);
+  font-size: 11px;
+}
 .game-category-control {
   display: flex;
   gap: 7px;
@@ -1301,6 +1400,77 @@ textarea::placeholder {
   font-weight: 900;
 }
 
+.dodge-art {
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: 5px;
+  background: #eef3ff;
+}
+
+.dodge-art::before {
+  content: "";
+  width: 15px;
+  height: 15px;
+  position: absolute;
+  left: 7px;
+  bottom: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: var(--blue);
+}
+
+.dodge-art::after {
+  content: "";
+  width: 10px;
+  height: 14px;
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  background: var(--coral);
+  box-shadow:
+    19px 9px 0 -2px var(--yellow),
+    19px 9px 0 0 var(--ink),
+    27px 26px 0 -2px var(--teal),
+    27px 26px 0 0 var(--ink);
+}
+
+.tap-art {
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--coral);
+  box-shadow: inset 0 0 0 6px #fff;
+}
+
+.tap-art::before {
+  content: "10";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.tap-art::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  position: absolute;
+  top: -2px;
+  right: 1px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow:
+    5px 13px 0 -2px var(--teal),
+    5px 13px 0 0 var(--ink),
+    -35px 35px 0 -2px var(--blue),
+    -35px 35px 0 0 var(--ink);
+}
+
 .game-stage {
   min-height: 650px;
   margin-top: 26px;
@@ -1345,7 +1515,9 @@ textarea::placeholder {
 .tournament-stage,
 .finger-stage,
 .reaction-stage,
-.timer-stage {
+.timer-stage,
+.dodge-stage,
+.tap-stage {
   min-height: 470px;
   display: flex;
   flex-direction: column;
@@ -2478,6 +2650,152 @@ textarea::placeholder {
   cursor: pointer;
 }
 
+.reaction-stage[hidden],
+.timer-stage[hidden] {
+  display: none;
+}
+
+.reaction-solo-stage {
+  gap: 14px;
+}
+
+.reaction-solo-pad {
+  width: min(760px, 100%);
+  height: 390px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 9px;
+  position: relative;
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+  background: #eef3ff;
+  box-shadow: 6px 6px 0 var(--ink);
+  cursor: pointer;
+  color: var(--ink);
+  touch-action: manipulation;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.reaction-solo-pad::before,
+.reaction-solo-pad::after {
+  content: "";
+  width: 74px;
+  height: 74px;
+  position: absolute;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  opacity: 0.34;
+}
+
+.reaction-solo-pad::before {
+  top: 28px;
+  left: 34px;
+}
+
+.reaction-solo-pad::after {
+  right: 42px;
+  bottom: 34px;
+  background: var(--coral);
+}
+
+.reaction-solo-pad:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.reaction-solo-pad > * {
+  position: relative;
+  z-index: 1;
+}
+
+.reaction-solo-pad > span {
+  padding: 5px 8px;
+  border-radius: 5px;
+  background: #fff;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.reaction-solo-pad strong {
+  margin-top: 8px;
+  font-size: 64px;
+  line-height: 1;
+}
+
+.reaction-solo-pad small {
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.reaction-solo-pad[data-phase="waiting"] {
+  background: var(--yellow);
+}
+
+.reaction-solo-pad[data-phase="go"] {
+  background: var(--teal);
+  color: #fff;
+}
+
+.reaction-solo-pad[data-phase="false-start"] {
+  background: var(--coral);
+  color: #fff;
+}
+
+.reaction-solo-pad[data-phase="complete"] {
+  background: var(--blue);
+  color: #fff;
+}
+
+.solo-record-row {
+  width: min(760px, 100%);
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+.solo-record-row > span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+}
+
+.solo-record-row > span + span {
+  border-left: 1px solid var(--line);
+}
+
+.solo-record-row small,
+.solo-record-row strong {
+  display: block;
+}
+
+.solo-record-row small {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.solo-record-row strong {
+  overflow: hidden;
+  color: var(--blue);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timer-best-row {
+  width: min(760px, 100%);
+}
 .timer-stage {
   gap: 14px;
 }
@@ -2596,6 +2914,311 @@ textarea::placeholder {
   font-size: 11px;
 }
 
+.dodge-stage {
+  min-height: 660px;
+  gap: 14px;
+  padding: 24px 0 10px;
+}
+
+.dodge-arena {
+  width: min(520px, 100%);
+  aspect-ratio: 4 / 5;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #f8fbff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.dodge-arena[data-phase="gameover"] {
+  box-shadow: 4px 4px 0 #d75d55;
+}
+
+#dodgeCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: crosshair;
+  touch-action: none;
+}
+
+#dodgeCanvas:focus-visible {
+  outline: 4px solid rgba(70, 118, 232, 0.42);
+  outline-offset: -7px;
+}
+
+.dodge-hud {
+  display: flex;
+  justify-content: space-between;
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  left: 12px;
+  pointer-events: none;
+}
+
+.dodge-hud span {
+  min-width: 88px;
+  padding: 7px 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 2px 0 rgba(23, 25, 29, 0.12);
+}
+
+.dodge-hud span:last-child {
+  text-align: right;
+}
+
+.dodge-hud small,
+.dodge-hud strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.dodge-hud small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.dodge-hud strong {
+  margin-top: 2px;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.dodge-prompt {
+  min-width: 158px;
+  min-height: 82px;
+  display: grid;
+  place-content: center;
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  padding: 12px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--ink);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.16s ease;
+}
+
+.dodge-prompt strong,
+.dodge-prompt span {
+  display: block;
+}
+
+.dodge-prompt strong {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.dodge-prompt span {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.dodge-arena[data-phase="countdown"] .dodge-prompt {
+  background: var(--yellow);
+}
+
+.dodge-arena[data-phase="running"] .dodge-prompt {
+  opacity: 0;
+}
+
+.dodge-arena[data-phase="gameover"] .dodge-prompt {
+  background: var(--coral);
+  color: #fff;
+}
+
+.dodge-arena[data-phase="gameover"] .dodge-prompt span {
+  color: #fff;
+}
+
+.dodge-actions {
+  width: min(520px, 100%);
+}
+
+.dodge-stage .game-note {
+  margin: 0;
+  text-align: center;
+}
+
+.dodge-hud span:first-child {
+  background: rgba(255, 248, 215, 0.96);
+}
+
+.dodge-hud span:last-child {
+  background: rgba(229, 247, 244, 0.96);
+}
+
+.tap-stage {
+  min-height: 600px;
+  gap: 14px;
+  padding: 24px 0 10px;
+}
+
+.tap-pad {
+  width: min(460px, 100%);
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  position: relative;
+  overflow: hidden;
+  border: 4px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  box-shadow: 8px 8px 0 var(--ink);
+  cursor: pointer;
+  color: var(--ink);
+  touch-action: manipulation;
+}
+
+.tap-pad::before,
+.tap-pad::after {
+  content: "";
+  position: absolute;
+  border: 3px solid var(--ink);
+  border-radius: 50%;
+  background: #fff;
+}
+
+.tap-pad::before {
+  width: 54px;
+  height: 54px;
+  top: 52px;
+  left: 55px;
+  box-shadow: 295px 250px 0 -3px var(--coral), 295px 250px 0 0 var(--ink);
+}
+
+.tap-pad::after {
+  width: 24px;
+  height: 24px;
+  right: 72px;
+  bottom: 75px;
+  background: var(--teal);
+  box-shadow: -280px -245px 0 -3px var(--blue), -280px -245px 0 0 var(--ink);
+}
+
+.tap-pad:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
+.tap-pad > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tap-badge {
+  padding: 6px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: #fff;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.tap-pad strong {
+  min-width: 3ch;
+  font-size: 112px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  text-align: center;
+}
+
+.tap-pad small {
+  max-width: 240px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.tap-pad[data-phase="countdown"] {
+  background: #ffb2a9;
+}
+
+.tap-pad[data-phase="running"] {
+  background: var(--yellow);
+}
+
+.tap-pad[data-phase="complete"] {
+  background: #a9e1da;
+}
+
+.tap-pad.is-hit {
+  animation: tap-pop 0.1s ease-out;
+}
+
+.tap-stats {
+  width: min(520px, 100%);
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.tap-stats span {
+  min-width: 0;
+  display: grid;
+  place-content: center;
+  padding: 8px;
+  text-align: center;
+}
+
+.tap-stats span + span {
+  border-left: 1px solid var(--line);
+}
+
+.tap-stats small,
+.tap-stats strong {
+  display: block;
+}
+
+.tap-stats small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.tap-stats strong {
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tap-actions {
+  width: min(520px, 100%);
+}
+
+@keyframes tap-pop {
+  0% {
+    transform: scale(1);
+  }
+  55% {
+    transform: scale(0.975);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
 .result-dialog {
   width: min(430px, calc(100% - 32px));
   max-height: calc(100dvh - 32px);
@@ -2980,6 +3603,33 @@ footer strong {
     font-size: 21px;
   }
 
+  .play-mode-control button {
+    min-height: 58px;
+    gap: 7px;
+    padding: 7px 8px;
+  }
+
+  .play-mode-control strong {
+    font-size: 13px;
+  }
+
+  .play-mode-control small {
+    font-size: 9px;
+  }
+
+  .mode-symbol {
+    width: 32px;
+    height: 32px;
+    flex-basis: 32px;
+    font-size: 9px;
+  }
+
+  .solo-mode-note {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
   .party-session-head {
     align-items: flex-start;
     flex-direction: column;
@@ -3193,16 +3843,91 @@ footer strong {
 
   .finger-stage,
   .reaction-stage,
-  .timer-stage {
+  .timer-stage,
+  .dodge-stage,
+  .tap-stage {
     min-height: 520px;
+  }
+
+  .dodge-stage {
+    padding-top: 18px;
+  }
+
+  .dodge-hud {
+    top: 9px;
+    right: 9px;
+    left: 9px;
+  }
+
+  .dodge-hud span {
+    min-width: 76px;
+    padding: 6px 8px;
+  }
+
+  .dodge-hud strong {
+    font-size: 16px;
+  }
+
+  .dodge-prompt {
+    min-width: 142px;
+    min-height: 74px;
+    padding: 10px 14px;
+  }
+
+  .dodge-prompt strong {
+    font-size: 21px;
   }
 
   .finger-arena {
     height: 370px;
   }
 
-  .reaction-arena {
+  .reaction-arena,
+  .reaction-solo-pad {
     height: 380px;
+  }
+
+  .reaction-solo-pad strong {
+    font-size: 48px;
+  }
+
+  .solo-record-row > span {
+    padding: 9px 10px;
+  }
+
+  .solo-record-row strong {
+    font-size: 14px;
+  }
+
+  .tap-stage {
+    padding-top: 18px;
+  }
+
+  .tap-pad {
+    width: min(340px, 88vw);
+  }
+
+  .tap-pad::before {
+    width: 40px;
+    height: 40px;
+    top: 35px;
+    left: 38px;
+    box-shadow: 215px 185px 0 -3px var(--coral), 215px 185px 0 0 var(--ink);
+  }
+
+  .tap-pad::after {
+    right: 48px;
+    bottom: 52px;
+    box-shadow: -205px -180px 0 -3px var(--blue), -205px -180px 0 0 var(--ink);
+  }
+
+  .tap-pad strong {
+    font-size: 84px;
+  }
+
+  .tap-pad small {
+    max-width: 190px;
+    font-size: 11px;
   }
 
   .timer-board {
