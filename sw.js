@@ -1,4 +1,4 @@
-const CACHE_NAME = "friend-bet-games-v17";
+const CACHE_NAME = "friend-bet-games-v19";
 const APP_FILES = [
   "./",
   "./index.html",

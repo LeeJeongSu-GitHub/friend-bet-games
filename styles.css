@@ -1471,6 +1471,39 @@ textarea::placeholder {
     -35px 35px 0 0 var(--ink);
 }
 
+.runner-art {
+  overflow: hidden;
+  border: 3px solid var(--ink);
+  border-radius: 5px;
+  background: #e9f6ef;
+}
+
+.runner-art::before {
+  content: "";
+  width: 19px;
+  height: 16px;
+  position: absolute;
+  left: 5px;
+  bottom: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 7px 7px 5px 5px;
+  background: #e9ad62;
+  box-shadow: 17px -17px 0 -5px #fff, 17px -17px 0 -3px var(--ink);
+}
+
+.runner-art::after {
+  content: "";
+  width: 12px;
+  height: 15px;
+  position: absolute;
+  top: 8px;
+  right: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 8px 8px 10px 10px;
+  background: var(--coral);
+  transform: rotate(18deg);
+}
+
 .game-stage {
   min-height: 650px;
   margin-top: 26px;
@@ -1517,7 +1550,8 @@ textarea::placeholder {
 .reaction-stage,
 .timer-stage,
 .dodge-stage,
-.tap-stage {
+.tap-stage,
+.runner-stage {
   min-height: 470px;
   display: flex;
   flex-direction: column;
@@ -3219,6 +3253,286 @@ textarea::placeholder {
     transform: scale(1);
   }
 }
+.runner-stage {
+  min-height: 610px;
+  gap: 14px;
+  padding: 24px 0 10px;
+}
+
+.runner-arena {
+  width: min(820px, 100%);
+  aspect-ratio: 16 / 9;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #f7fbff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.runner-arena[data-phase="gameover"] {
+  box-shadow: 4px 4px 0 #d75d55;
+}
+
+.runner-arena.is-fever {
+  box-shadow: 0 0 0 4px #ffd45b, 5px 5px 0 var(--ink);
+}
+
+.runner-arena.has-shield:not(.is-fever) {
+  box-shadow: 0 0 0 3px #78d2ef, 5px 5px 0 var(--ink);
+}
+
+#runnerCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+  touch-action: none;
+}
+
+#runnerCanvas:focus-visible {
+  outline: 4px solid rgba(70, 118, 232, 0.42);
+  outline-offset: -7px;
+}
+
+.runner-hud {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(72px, auto));
+  gap: 6px;
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  left: 12px;
+  pointer-events: none;
+}
+
+.runner-hud span {
+  min-width: 86px;
+  padding: 7px 10px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 0 rgba(23, 25, 29, 0.12);
+}
+
+.runner-hud small,
+.runner-hud strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.runner-hud small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.runner-hud strong {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 16px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runner-power {
+  width: 270px;
+  display: grid;
+  gap: 5px;
+  position: absolute;
+  z-index: 2;
+  top: 75px;
+  left: 12px;
+  padding: 7px 9px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 0 rgba(23, 25, 29, 0.12);
+  pointer-events: none;
+}
+
+.runner-fever-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.runner-fever-label strong {
+  color: #c55443;
+}
+
+.runner-fever-track {
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: #edf0f4;
+}
+
+.runner-fever-track i {
+  width: 0;
+  height: 100%;
+  display: block;
+  background: var(--coral);
+  transition: width 0.12s linear;
+}
+
+.runner-effect {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runner-arena.is-fever .runner-power {
+  border-color: #e2a825;
+  background: rgba(255, 248, 202, 0.96);
+}
+
+.runner-arena.is-fever .runner-fever-track i {
+  background: #f5aa2c;
+}
+
+.runner-recipe {
+  display: flex;
+  gap: 5px;
+  position: absolute;
+  z-index: 2;
+  right: 12px;
+  bottom: 12px;
+  pointer-events: none;
+}
+
+.runner-recipe span {
+  min-width: 62px;
+  min-height: 42px;
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 0 5px;
+  padding: 5px 7px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.runner-recipe i {
+  grid-row: 1 / 3;
+  width: 20px;
+  height: 18px;
+  display: block;
+  position: relative;
+  border: 2px solid var(--ink);
+}
+
+.runner-recipe small {
+  color: var(--muted);
+  font-size: 7px;
+  font-weight: 900;
+}
+
+.runner-recipe strong {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.runner-recipe .bread i {
+  border-radius: 7px 7px 4px 4px;
+  background: #e9ad62;
+}
+
+.runner-recipe .cream i {
+  border-radius: 50% 50% 45% 45%;
+  background: #fff;
+  box-shadow: inset 0 -5px 0 #b9ebe6;
+}
+
+.runner-recipe .berry i {
+  width: 17px;
+  height: 17px;
+  margin-left: 2px;
+  border-radius: 8px 8px 10px 10px;
+  background: #f45f5b;
+  transform: rotate(18deg);
+}
+
+.runner-recipe .complete {
+  min-width: 58px;
+  display: grid;
+  grid-template-columns: 1fr;
+  place-content: center;
+  background: rgba(255, 238, 166, 0.96);
+  text-align: center;
+}
+
+.runner-prompt {
+  min-width: 166px;
+  min-height: 78px;
+  display: grid;
+  place-content: center;
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  padding: 11px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--ink);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.16s ease;
+}
+
+.runner-prompt strong,
+.runner-prompt span {
+  display: block;
+}
+
+.runner-prompt strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.runner-prompt span {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.runner-arena[data-phase="countdown"] .runner-prompt {
+  background: var(--yellow);
+}
+
+.runner-arena[data-phase="running"] .runner-prompt {
+  opacity: 0;
+}
+
+.runner-arena[data-phase="gameover"] .runner-prompt {
+  background: var(--coral);
+  color: #fff;
+}
+
+.runner-arena[data-phase="gameover"] .runner-prompt span {
+  color: #fff;
+}
+
+.runner-actions {
+  width: min(620px, 100%);
+}
+
+.runner-stage .game-note {
+  margin: 0;
+  text-align: center;
+}
+
 .result-dialog {
   width: min(430px, calc(100% - 32px));
   max-height: calc(100dvh - 32px);
@@ -3845,7 +4159,8 @@ footer strong {
   .reaction-stage,
   .timer-stage,
   .dodge-stage,
-  .tap-stage {
+  .tap-stage,
+  .runner-stage {
     min-height: 520px;
   }
 
@@ -3928,6 +4243,99 @@ footer strong {
   .tap-pad small {
     max-width: 190px;
     font-size: 11px;
+  }
+
+  .runner-stage {
+    padding-top: 18px;
+  }
+
+  .runner-arena {
+    width: 100%;
+  }
+
+  .runner-hud {
+    top: 6px;
+    left: 6px;
+    width: calc(100% - 12px);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .runner-hud span {
+    min-width: 0;
+    padding: 5px 6px;
+  }
+
+  .runner-hud strong {
+    font-size: 12px;
+  }
+
+  .runner-power {
+    width: 158px;
+    gap: 3px;
+    top: 49px;
+    left: 6px;
+    padding: 4px 5px;
+  }
+
+  .runner-fever-label {
+    font-size: 7px;
+  }
+
+  .runner-fever-track {
+    height: 6px;
+    border-width: 1px;
+  }
+
+  .runner-effect {
+    font-size: 7px;
+  }
+
+  .runner-recipe {
+    right: 6px;
+    bottom: 6px;
+    gap: 3px;
+  }
+
+  .runner-recipe span {
+    min-width: 42px;
+    min-height: 34px;
+    grid-template-columns: 16px 1fr;
+    gap: 0 3px;
+    padding: 3px 4px;
+  }
+
+  .runner-recipe i {
+    width: 14px;
+    height: 13px;
+    border-width: 1px;
+  }
+
+  .runner-recipe .berry i {
+    width: 12px;
+    height: 12px;
+  }
+
+  .runner-recipe .complete {
+    min-width: 40px;
+  }
+
+  .runner-recipe small {
+    font-size: 6px;
+  }
+
+  .runner-recipe strong {
+    font-size: 11px;
+  }
+
+  .runner-prompt {
+    min-width: 142px;
+    min-height: 68px;
+    padding: 9px 13px;
+  }
+
+  .runner-prompt strong {
+    font-size: 19px;
   }
 
   .timer-board {

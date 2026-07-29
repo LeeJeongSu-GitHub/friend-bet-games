@@ -8,6 +8,12 @@ const HISTORY_LIMIT = 5;
 const DODGE_WIDTH = 800;
 const DODGE_HEIGHT = 1000;
 const DODGE_SIDE_START = 5000;
+const RUNNER_WIDTH = 960;
+const RUNNER_HEIGHT = 540;
+const RUNNER_GROUND_Y = 438;
+const RUNNER_FEVER_DURATION = 6000;
+const RUNNER_MAGNET_DURATION = 7000;
+const RUNNER_INGREDIENT_TYPES = ["bread", "cream", "berry"];
 const DEFAULT_PARTICIPANTS = ["민지", "준호", "서연", "태윤"];
 const DEFAULT_OPTIONS = ["한식", "분식", "중식", "일식", "치킨", "피자"];
 const DEFAULT_MISSIONS = [
@@ -56,6 +62,7 @@ const GAME_LABELS = {
   timer: "5초 타이머",
   dodge: "장애물 피하기",
   tap: "10초 연타",
+  runner: "간식 재료 러너",
 };
 
 const elements = {
@@ -120,6 +127,7 @@ const elements = {
     timer: document.querySelector("#timerGame"),
     dodge: document.querySelector("#dodgeGame"),
     tap: document.querySelector("#tapGame"),
+    runner: document.querySelector("#runnerGame"),
   },
   wheelCanvas: document.querySelector("#wheelCanvas"),
   wheelStatus: document.querySelector("#wheelStatus"),
@@ -231,6 +239,22 @@ const elements = {
   tapSpeed: document.querySelector("#tapSpeed"),
   tapReset: document.querySelector("#tapReset"),
   tapStart: document.querySelector("#tapStart"),
+  runnerStatus: document.querySelector("#runnerStatus"),
+  runnerArena: document.querySelector("#runnerArena"),
+  runnerCanvas: document.querySelector("#runnerCanvas"),
+  runnerScore: document.querySelector("#runnerScore"),
+  runnerDistance: document.querySelector("#runnerDistance"),
+  runnerBest: document.querySelector("#runnerBest"),
+  runnerBread: document.querySelector("#runnerBread"),
+  runnerCream: document.querySelector("#runnerCream"),
+  runnerBerry: document.querySelector("#runnerBerry"),
+  runnerSnacks: document.querySelector("#runnerSnacks"),
+  runnerFever: document.querySelector("#runnerFever"),
+  runnerFeverBar: document.querySelector("#runnerFeverBar"),
+  runnerEffect: document.querySelector("#runnerEffect"),
+  runnerPrompt: document.querySelector("#runnerPrompt"),
+  runnerReset: document.querySelector("#runnerReset"),
+  runnerStart: document.querySelector("#runnerStart"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
@@ -265,6 +289,8 @@ const state = {
   reactionSoloBest: savedState.reactionSoloBest,
   timerSoloBest: savedState.timerSoloBest,
   tapBest: savedState.tapBest,
+  runnerBest: savedState.runnerBest,
+  runnerBestDistance: savedState.runnerBestDistance,
   currentGame: "wheel",
   currentMode: "together",
   currentCategory: "quick",
@@ -332,6 +358,31 @@ let tapPhase = "idle";
 let tapPhaseStartedAt = 0;
 let tapCount = 0;
 let tapAnimationFrame = null;
+let runnerPhase = "idle";
+let runnerAnimationFrame = null;
+let runnerLastFrame = 0;
+let runnerCountdown = 0;
+let runnerElapsed = 0;
+let runnerDistanceValue = 0;
+let runnerScoreValue = 0;
+let runnerIngredientScore = 0;
+let runnerSpeed = 360;
+let runnerNextObstacle = 0;
+let runnerNextIngredient = 0;
+let runnerNextItem = 0;
+let runnerPlayer = null;
+let runnerObstacles = [];
+let runnerIngredients = [];
+let runnerItems = [];
+let runnerRecipe = { bread: 0, cream: 0, berry: 0 };
+let runnerSnackCount = 0;
+let runnerCombo = 0;
+let runnerFever = 0;
+let runnerFeverUntil = 0;
+let runnerFeverCount = 0;
+let runnerMagnetUntil = 0;
+let runnerShield = 0;
+let runnerInvulnerableUntil = 0;
 let resultRevealTimer = null;
 let toastTimer = null;
 
@@ -441,6 +492,12 @@ function loadState() {
     const tapBest = Math.round(
       readOptionalRecord(parsed?.tapBest, 10000) || 0,
     );
+    const runnerBest = Math.round(
+      readOptionalRecord(parsed?.runnerBest, 999999999) || 0,
+    );
+    const runnerBestDistance = Math.round(
+      readOptionalRecord(parsed?.runnerBestDistance, 10000000) || 0,
+    );
 
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
@@ -457,6 +514,8 @@ function loadState() {
       reactionSoloBest,
       timerSoloBest,
       tapBest,
+      runnerBest,
+      runnerBestDistance,
       hasStoredState,
     };
   } catch {
@@ -475,6 +534,8 @@ function loadState() {
       reactionSoloBest: null,
       timerSoloBest: null,
       tapBest: 0,
+      runnerBest: 0,
+      runnerBestDistance: 0,
       hasStoredState: false,
     };
   }
@@ -499,6 +560,8 @@ function saveState() {
         reactionSoloBest: state.reactionSoloBest,
         timerSoloBest: state.timerSoloBest,
         tapBest: state.tapBest,
+        runnerBest: state.runnerBest,
+        runnerBestDistance: state.runnerBestDistance,
       }),
     );
   } catch {
@@ -1145,6 +1208,7 @@ function selectGame(game) {
   const changingGame = state.currentGame !== game;
   const enteringDodge = changingGame && game === "dodge";
   const enteringTap = changingGame && game === "tap";
+  const enteringRunner = changingGame && game === "runner";
   window.clearTimeout(resultRevealTimer);
   if (state.currentGame === "bomb" && game !== "bomb") resetBomb();
   if (state.currentGame === "finger" && game !== "finger") resetFinger();
@@ -1158,6 +1222,7 @@ function selectGame(game) {
   }
   if (state.currentGame === "dodge" && game !== "dodge") resetDodge();
   if (state.currentGame === "tap" && game !== "tap") resetTap();
+  if (state.currentGame === "runner" && game !== "runner") resetRunner();
   state.currentGame = game;
 
   elements.gameTabs.forEach((tab) => {
@@ -1181,6 +1246,7 @@ function selectGame(game) {
   if (game === "timer" && changingGame) configureTimerMode();
   if (enteringDodge) resetDodge();
   if (enteringTap) resetTap();
+  if (enteringRunner) resetRunner();
 
   const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
   activeTab?.scrollIntoView({
@@ -3811,6 +3877,813 @@ function clearTapBest() {
   renderTapBest();
   showToast("10초 연타 최고 기록을 초기화했어요.");
 }
+
+function getRunnerScore() {
+  return Math.floor(runnerDistanceValue * 10) + runnerIngredientScore;
+}
+
+function isRunnerFeverActive() {
+  return runnerPhase === "running" && runnerElapsed < runnerFeverUntil;
+}
+
+function isRunnerMagnetActive() {
+  return isRunnerFeverActive() || runnerElapsed < runnerMagnetUntil;
+}
+
+function setRunnerPrompt(title, detail) {
+  elements.runnerPrompt.querySelector("strong").textContent = title;
+  elements.runnerPrompt.querySelector("span").textContent = detail;
+}
+
+function renderRunnerHud() {
+  const feverActive = isRunnerFeverActive();
+  const magnetActive = runnerElapsed < runnerMagnetUntil;
+  const feverRemaining = Math.max(0, runnerFeverUntil - runnerElapsed);
+  const feverPercent = feverActive
+    ? (feverRemaining / RUNNER_FEVER_DURATION) * 100
+    : runnerFever;
+  const effects = [];
+  if (feverActive) {
+    effects.push("무적", "자석", "2배");
+  } else {
+    if (runnerShield > 0) effects.push("보호막");
+    if (magnetActive) {
+      effects.push(
+        "자석 " +
+          ((runnerMagnetUntil - runnerElapsed) / 1000).toFixed(1) +
+          "초",
+      );
+    }
+  }
+
+  runnerScoreValue = getRunnerScore();
+  elements.runnerScore.textContent = runnerScoreValue.toLocaleString();
+  elements.runnerDistance.textContent = Math.floor(runnerDistanceValue) + "m";
+  elements.runnerBest.textContent = state.runnerBest.toLocaleString();
+  elements.runnerBread.textContent = String(runnerRecipe.bread);
+  elements.runnerCream.textContent = String(runnerRecipe.cream);
+  elements.runnerBerry.textContent = String(runnerRecipe.berry);
+  elements.runnerSnacks.textContent = String(runnerSnackCount);
+  elements.runnerFever.textContent = feverActive
+    ? (feverRemaining / 1000).toFixed(1) + "초"
+    : Math.floor(runnerFever) + "%";
+  elements.runnerFeverBar.style.width = Math.max(0, feverPercent) + "%";
+  elements.runnerEffect.textContent = effects.length
+    ? effects.join(" · ")
+    : "속도 " + Math.round(runnerSpeed);
+  elements.runnerArena.classList.toggle("is-fever", feverActive);
+  elements.runnerArena.classList.toggle("has-shield", runnerShield > 0);
+  elements.runnerReset.disabled =
+    (state.runnerBest <= 0 && state.runnerBestDistance <= 0) ||
+    ["countdown", "running"].includes(runnerPhase);
+}
+
+function resetRunner() {
+  window.clearTimeout(resultRevealTimer);
+  if (runnerAnimationFrame !== null) {
+    cancelAnimationFrame(runnerAnimationFrame);
+  }
+  runnerAnimationFrame = null;
+  runnerPhase = "idle";
+  runnerLastFrame = 0;
+  runnerCountdown = 0;
+  runnerElapsed = 0;
+  runnerDistanceValue = 0;
+  runnerScoreValue = 0;
+  runnerIngredientScore = 0;
+  runnerSpeed = 390;
+  runnerNextObstacle = 850;
+  runnerNextIngredient = 560;
+  runnerNextItem = 4500;
+  runnerObstacles = [];
+  runnerIngredients = [];
+  runnerItems = [];
+  runnerRecipe = { bread: 0, cream: 0, berry: 0 };
+  runnerSnackCount = 0;
+  runnerCombo = 0;
+  runnerFever = 0;
+  runnerFeverUntil = 0;
+  runnerFeverCount = 0;
+  runnerMagnetUntil = 0;
+  runnerShield = 0;
+  runnerInvulnerableUntil = 0;
+  runnerPlayer = {
+    x: 150,
+    y: RUNNER_GROUND_Y - 72,
+    width: 62,
+    height: 72,
+    velocityY: 0,
+    jumps: 0,
+  };
+  elements.runnerArena.dataset.phase = "idle";
+  elements.runnerArena.classList.remove("is-fever", "has-shield");
+  elements.runnerStart.disabled = false;
+  elements.runnerStart.textContent = "달리기 시작";
+  elements.runnerStatus.textContent =
+    "함정과 공중 장애물을 구분해 피하고 피버를 완성하세요.";
+  setRunnerPrompt("READY", "화면을 눌러 2단 점프");
+  renderRunnerHud();
+  drawRunnerScene();
+}
+
+function jumpRunner() {
+  if (runnerPhase !== "running" || !runnerPlayer) return;
+  if (runnerPlayer.jumps >= 2) return;
+  runnerPlayer.velocityY = runnerPlayer.jumps === 0 ? -900 : -760;
+  runnerPlayer.jumps += 1;
+  if (navigator.vibrate) navigator.vibrate(8);
+}
+
+function spawnRunnerObstacle() {
+  const tier = Math.min(12, Math.floor(runnerElapsed / 8000));
+  const roll = randomInt(100);
+  let type = "crate";
+  if (runnerElapsed >= 6000 && roll < 34) type = "trap";
+  if (runnerElapsed >= 10000 && roll >= 66) type = "air";
+
+  let width = 56 + randomInt(34);
+  let height = Math.min(132, 62 + randomInt(42 + tier * 2));
+  let y = RUNNER_GROUND_Y - height;
+  let color = ["#ff7268", "#f4c84c", "#35aa9d"][randomInt(3)];
+
+  if (type === "trap") {
+    width = 92 + randomInt(54);
+    height = 25 + randomInt(9);
+    y = RUNNER_GROUND_Y - height;
+    color = "#ef5f67";
+  } else if (type === "air") {
+    width = 74 + randomInt(34);
+    height = 48 + randomInt(15);
+    y = RUNNER_GROUND_Y - 165 - randomInt(28);
+    color = "#6f72df";
+  }
+
+  runnerObstacles.push({
+    x: RUNNER_WIDTH + 36,
+    y,
+    width,
+    height,
+    color,
+    type,
+    bobOffset: randomInt(628) / 100,
+  });
+}
+
+function spawnRunnerIngredient() {
+  const smallest = Math.min(
+    ...RUNNER_INGREDIENT_TYPES.map((type) => runnerRecipe[type]),
+  );
+  const needed = RUNNER_INGREDIENT_TYPES.filter(
+    (type) => runnerRecipe[type] === smallest,
+  );
+  const type =
+    randomInt(100) < 72
+      ? needed[randomInt(needed.length)]
+      : RUNNER_INGREDIENT_TYPES[randomInt(RUNNER_INGREDIENT_TYPES.length)];
+  const levels = [
+    RUNNER_GROUND_Y - 82,
+    RUNNER_GROUND_Y - 142,
+    RUNNER_GROUND_Y - 205,
+  ];
+  runnerIngredients.push({
+    x: RUNNER_WIDTH + 42,
+    y: levels[randomInt(levels.length)],
+    radius: 23,
+    type,
+  });
+}
+
+function spawnRunnerItem() {
+  const levels = [
+    RUNNER_GROUND_Y - 94,
+    RUNNER_GROUND_Y - 154,
+    RUNNER_GROUND_Y - 214,
+  ];
+  runnerItems.push({
+    x: RUNNER_WIDTH + 48,
+    y: levels[randomInt(levels.length)],
+    radius: 27,
+    type: randomInt(100) < 52 ? "shield" : "magnet",
+    bobOffset: randomInt(628) / 100,
+  });
+}
+
+function runnerObjectsCollide(object, circular = false) {
+  const playerInsetX = 9;
+  const playerInsetY = 7;
+  const left = runnerPlayer.x + playerInsetX;
+  const top = runnerPlayer.y + playerInsetY;
+  const right = runnerPlayer.x + runnerPlayer.width - playerInsetX;
+  const bottom = runnerPlayer.y + runnerPlayer.height - playerInsetY;
+  const objectLeft = circular ? object.x - object.radius : object.x + 4;
+  const objectTop = circular ? object.y - object.radius : object.y + 4;
+  const objectRight = circular
+    ? object.x + object.radius
+    : object.x + object.width - 4;
+  const objectBottom = circular
+    ? object.y + object.radius
+    : object.y + object.height - 3;
+  return (
+    left < objectRight &&
+    right > objectLeft &&
+    top < objectBottom &&
+    bottom > objectTop
+  );
+}
+
+function activateRunnerFever() {
+  if (isRunnerFeverActive() || runnerFever < 100) return;
+  runnerFever = 0;
+  runnerFeverUntil = runnerElapsed + RUNNER_FEVER_DURATION;
+  runnerFeverCount += 1;
+  runnerIngredientScore += 600 + runnerFeverCount * 150;
+  elements.runnerStatus.textContent =
+    "FEVER! 6초 동안 무적·자석·점수 2배가 적용돼요.";
+  if (navigator.vibrate) navigator.vibrate([35, 20, 35, 20, 70]);
+}
+
+function completeRunnerSnack() {
+  const complete = RUNNER_INGREDIENT_TYPES.every(
+    (type) => runnerRecipe[type] > 0,
+  );
+  if (!complete) return;
+  RUNNER_INGREDIENT_TYPES.forEach((type) => {
+    runnerRecipe[type] -= 1;
+  });
+  runnerSnackCount += 1;
+  runnerCombo += 1;
+  const multiplier = isRunnerFeverActive() ? 2 : 1;
+  runnerIngredientScore += (450 + runnerCombo * 120) * multiplier;
+  if (!isRunnerFeverActive()) runnerFever = Math.min(100, runnerFever + 13);
+  elements.runnerStatus.textContent =
+    runnerCombo + "콤보 · 간식 " + runnerSnackCount + "개 완성!";
+  if (navigator.vibrate) navigator.vibrate([18, 18, 35]);
+}
+
+function collectRunnerIngredient(ingredient) {
+  runnerRecipe[ingredient.type] += 1;
+  const multiplier = isRunnerFeverActive() ? 2 : 1;
+  runnerIngredientScore += (120 + runnerCombo * 30) * multiplier;
+  if (!isRunnerFeverActive()) runnerFever = Math.min(100, runnerFever + 9);
+  completeRunnerSnack();
+  activateRunnerFever();
+  renderRunnerHud();
+}
+
+function collectRunnerItem(item) {
+  runnerIngredientScore += 250;
+  if (item.type === "shield") {
+    runnerShield = 1;
+    elements.runnerStatus.textContent =
+      "보호막 획득! 장애물 충돌을 한 번 막아줘요.";
+  } else {
+    runnerMagnetUntil =
+      Math.max(runnerElapsed, runnerMagnetUntil) + RUNNER_MAGNET_DURATION;
+    elements.runnerStatus.textContent =
+      "재료 자석 획득! 7초 동안 재료를 끌어당겨요.";
+  }
+  if (navigator.vibrate) navigator.vibrate([20, 15, 25]);
+}
+
+function drawRunnerIngredient(context, ingredient) {
+  context.save();
+  context.translate(ingredient.x, ingredient.y);
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 4;
+  if (ingredient.type === "bread") {
+    makeRoundedRectPath(context, -22, -18, 44, 36, 11);
+    context.fillStyle = "#e9ad62";
+    context.fill();
+    context.stroke();
+    context.strokeStyle = "#a96336";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(-10, -5);
+    context.lineTo(-4, 4);
+    context.moveTo(3, -7);
+    context.lineTo(9, 2);
+    context.stroke();
+  } else if (ingredient.type === "cream") {
+    context.beginPath();
+    context.moveTo(-22, 17);
+    context.bezierCurveTo(-23, 4, -15, 1, -10, 2);
+    context.bezierCurveTo(-11, -11, 0, -20, 7, -10);
+    context.bezierCurveTo(17, -12, 24, -2, 18, 7);
+    context.bezierCurveTo(25, 12, 19, 19, 8, 18);
+    context.closePath();
+    context.fillStyle = "#ffffff";
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#8edbd3";
+    context.beginPath();
+    context.arc(5, -5, 4, 0, Math.PI * 2);
+    context.fill();
+  } else {
+    context.beginPath();
+    context.moveTo(0, 23);
+    context.bezierCurveTo(-27, 6, -22, -17, 0, -14);
+    context.bezierCurveTo(22, -17, 27, 6, 0, 23);
+    context.closePath();
+    context.fillStyle = "#f45f5b";
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#2f9d78";
+    context.beginPath();
+    context.moveTo(-13, -12);
+    context.lineTo(0, -25);
+    context.lineTo(4, -12);
+    context.lineTo(16, -18);
+    context.lineTo(11, -8);
+    context.closePath();
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#ffe9a5";
+    [-8, 7].forEach((x) => {
+      context.beginPath();
+      context.arc(x, 2, 2.2, 0, Math.PI * 2);
+      context.fill();
+    });
+  }
+  context.restore();
+}
+
+function drawRunnerItem(context, item) {
+  const bob = Math.sin(runnerElapsed / 240 + item.bobOffset) * 6;
+  context.save();
+  context.translate(item.x, item.y + bob);
+  context.fillStyle = item.type === "shield" ? "#64c8f0" : "#a875e8";
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 4;
+  context.beginPath();
+  context.arc(0, 0, item.radius, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = "rgba(255, 255, 255, 0.45)";
+  context.beginPath();
+  context.arc(-8, -9, 7, 0, Math.PI * 2);
+  context.fill();
+
+  context.strokeStyle = "#ffffff";
+  context.fillStyle = "#ffffff";
+  context.lineWidth = 6;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  if (item.type === "shield") {
+    context.beginPath();
+    context.moveTo(0, -15);
+    context.lineTo(14, -8);
+    context.lineTo(10, 8);
+    context.quadraticCurveTo(0, 18, -10, 8);
+    context.lineTo(-14, -8);
+    context.closePath();
+    context.stroke();
+  } else {
+    context.beginPath();
+    context.arc(0, -1, 12, Math.PI * 0.12, Math.PI * 0.88, true);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(-12, 7);
+    context.lineTo(-12, 15);
+    context.moveTo(12, 7);
+    context.lineTo(12, 15);
+    context.stroke();
+  }
+  context.restore();
+}
+
+function drawRunnerObstacle(context, obstacle) {
+  context.save();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 5;
+
+  if (obstacle.type === "trap") {
+    const spikeWidth = 22;
+    context.fillStyle = obstacle.color;
+    context.beginPath();
+    context.moveTo(obstacle.x, obstacle.y + obstacle.height);
+    for (
+      let x = obstacle.x;
+      x < obstacle.x + obstacle.width;
+      x += spikeWidth
+    ) {
+      context.lineTo(x + spikeWidth / 2, obstacle.y);
+      context.lineTo(
+        Math.min(x + spikeWidth, obstacle.x + obstacle.width),
+        obstacle.y + obstacle.height,
+      );
+    }
+    context.closePath();
+    context.fill();
+    context.stroke();
+    context.fillStyle = "#ffd9d7";
+    context.fillRect(
+      obstacle.x + 7,
+      obstacle.y + obstacle.height - 7,
+      obstacle.width - 14,
+      4,
+    );
+    context.restore();
+    return;
+  }
+
+  if (obstacle.type === "air") {
+    context.strokeStyle = "#5357bd";
+    context.lineWidth = 6;
+    context.beginPath();
+    context.moveTo(obstacle.x + 16, obstacle.y - 16);
+    context.lineTo(obstacle.x + 16, obstacle.y);
+    context.moveTo(obstacle.x + obstacle.width - 16, obstacle.y - 16);
+    context.lineTo(obstacle.x + obstacle.width - 16, obstacle.y);
+    context.stroke();
+    context.strokeStyle = "#17191d";
+    context.lineWidth = 5;
+  }
+
+  makeRoundedRectPath(
+    context,
+    obstacle.x,
+    obstacle.y,
+    obstacle.width,
+    obstacle.height,
+    9,
+  );
+  context.fillStyle = obstacle.color;
+  context.fill();
+  context.stroke();
+  context.save();
+  context.beginPath();
+  context.rect(
+    obstacle.x + 5,
+    obstacle.y + 5,
+    obstacle.width - 10,
+    obstacle.height - 10,
+  );
+  context.clip();
+  context.strokeStyle = "rgba(255,255,255,0.7)";
+  context.lineWidth = 8;
+  for (let stripe = -obstacle.height; stripe < obstacle.width; stripe += 26) {
+    context.beginPath();
+    context.moveTo(obstacle.x + stripe, obstacle.y + obstacle.height);
+    context.lineTo(obstacle.x + stripe + obstacle.height, obstacle.y);
+    context.stroke();
+  }
+  context.restore();
+  context.fillStyle = "#17191d";
+  context.font = "900 22px Arial, sans-serif";
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText(
+    obstacle.type === "air" ? "↓" : "!",
+    obstacle.x + obstacle.width / 2,
+    obstacle.y + obstacle.height / 2,
+  );
+  context.restore();
+}
+
+function drawRunnerScene() {
+  const context = elements.runnerCanvas.getContext("2d");
+  const feverActive = isRunnerFeverActive();
+  context.clearRect(0, 0, RUNNER_WIDTH, RUNNER_HEIGHT);
+  context.fillStyle = feverActive ? "#fff4bd" : "#f7fbff";
+  context.fillRect(0, 0, RUNNER_WIDTH, RUNNER_HEIGHT);
+
+  context.fillStyle = "#ffe28a";
+  context.beginPath();
+  context.arc(832, 92, 38, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = "#ffffff";
+  [[130, 96], [430, 135], [690, 78]].forEach(([x, y]) => {
+    context.beginPath();
+    context.arc(x, y, 28, 0, Math.PI * 2);
+    context.arc(x + 30, y - 12, 34, 0, Math.PI * 2);
+    context.arc(x + 64, y, 27, 0, Math.PI * 2);
+    context.fill();
+  });
+
+  context.fillStyle = "#dcecf1";
+  context.fillRect(0, 318, RUNNER_WIDTH, RUNNER_GROUND_Y - 318);
+  context.fillStyle = "#eaf5ec";
+  context.fillRect(0, RUNNER_GROUND_Y, RUNNER_WIDTH, RUNNER_HEIGHT - RUNNER_GROUND_Y);
+  context.fillStyle = "#4ca876";
+  context.fillRect(0, RUNNER_GROUND_Y, RUNNER_WIDTH, 9);
+
+  if (feverActive) {
+    context.strokeStyle = "rgba(255, 161, 56, 0.28)";
+    context.lineWidth = 8;
+    for (let line = 0; line < 7; line += 1) {
+      const x = (line * 170 - (runnerElapsed * 0.55) % 1190) + 160;
+      context.beginPath();
+      context.moveTo(x, 190 + line * 28);
+      context.lineTo(x + 95, 190 + line * 28);
+      context.stroke();
+    }
+  }
+
+  const groundOffset = (runnerDistanceValue * 12) % 82;
+  context.fillStyle = "#b8d7c1";
+  for (let x = -groundOffset; x < RUNNER_WIDTH; x += 82) {
+    context.fillRect(x, RUNNER_GROUND_Y + 38, 44, 7);
+  }
+
+  runnerObstacles.forEach((obstacle) => drawRunnerObstacle(context, obstacle));
+
+  runnerIngredients.forEach((ingredient) => {
+    drawRunnerIngredient(context, ingredient);
+  });
+  runnerItems.forEach((item) => drawRunnerItem(context, item));
+
+  if (!runnerPlayer) return;
+  context.fillStyle = "rgba(23, 25, 29, 0.16)";
+  context.beginPath();
+  context.ellipse(
+    runnerPlayer.x + runnerPlayer.width / 2,
+    RUNNER_GROUND_Y + 4,
+    34,
+    9,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+
+  if (feverActive || runnerShield > 0) {
+    context.fillStyle = feverActive
+      ? "rgba(255, 205, 63, 0.25)"
+      : "rgba(73, 190, 239, 0.2)";
+    context.strokeStyle = feverActive ? "#ffad33" : "#56bce6";
+    context.lineWidth = 5;
+    context.beginPath();
+    context.ellipse(
+      runnerPlayer.x + runnerPlayer.width / 2,
+      runnerPlayer.y + runnerPlayer.height / 2,
+      48,
+      54,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+    context.stroke();
+  }
+
+  context.save();
+  if (
+    runnerElapsed < runnerInvulnerableUntil &&
+    Math.floor(runnerElapsed / 90) % 2 === 0
+  ) {
+    context.globalAlpha = 0.38;
+  }
+  makeRoundedRectPath(
+    context,
+    runnerPlayer.x,
+    runnerPlayer.y + 12,
+    runnerPlayer.width,
+    runnerPlayer.height - 12,
+    20,
+  );
+  context.fillStyle = runnerPhase === "gameover" ? "#ff8a80" : "#5f7fe8";
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 5;
+  context.stroke();
+
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.arc(runnerPlayer.x + 18, runnerPlayer.y + 35, 6, 0, Math.PI * 2);
+  context.arc(runnerPlayer.x + 42, runnerPlayer.y + 35, 6, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#17191d";
+  context.beginPath();
+  context.arc(runnerPlayer.x + 20, runnerPlayer.y + 36, 2.5, 0, Math.PI * 2);
+  context.arc(runnerPlayer.x + 44, runnerPlayer.y + 36, 2.5, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = "#ffffff";
+  context.beginPath();
+  context.arc(runnerPlayer.x + 20, runnerPlayer.y + 12, 15, Math.PI, 0);
+  context.arc(runnerPlayer.x + 31, runnerPlayer.y + 5, 17, Math.PI, 0);
+  context.arc(runnerPlayer.x + 44, runnerPlayer.y + 12, 15, Math.PI, 0);
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 4;
+  context.beginPath();
+  context.moveTo(runnerPlayer.x + 10, runnerPlayer.y + 13);
+  context.lineTo(runnerPlayer.x + 52, runnerPlayer.y + 13);
+  context.stroke();
+  context.restore();
+}
+
+function finishRunner() {
+  if (runnerPhase !== "running") return;
+  runnerPhase = "gameover";
+  runnerAnimationFrame = null;
+  elements.runnerArena.dataset.phase = "gameover";
+  runnerScoreValue = getRunnerScore();
+  const distance = Math.floor(runnerDistanceValue);
+  const newScoreBest = runnerScoreValue > state.runnerBest;
+  const newDistanceBest = distance > state.runnerBestDistance;
+  if (newScoreBest) state.runnerBest = runnerScoreValue;
+  if (newDistanceBest) state.runnerBestDistance = distance;
+  if (newScoreBest || newDistanceBest) saveState();
+  renderRunnerHud();
+  elements.runnerStart.disabled = false;
+  elements.runnerStart.textContent = "다시 달리기";
+  elements.runnerStatus.textContent =
+    newScoreBest
+      ? "새로운 최고 점수! " + runnerScoreValue.toLocaleString() + "점"
+      : distance +
+        "m · 간식 " +
+        runnerSnackCount +
+        "개 · 피버 " +
+        runnerFeverCount +
+        "회";
+  setRunnerPrompt(
+    newScoreBest ? "NEW BEST" : "FINISH",
+    distance + "m · " + runnerSnackCount + " SNACKS",
+  );
+  drawRunnerScene();
+  if (navigator.vibrate) navigator.vibrate([65, 35, 95]);
+
+  window.clearTimeout(resultRevealTimer);
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "runner",
+      lead: newScoreBest ? "새로운 최고 기록!" : "이번 달리기 기록",
+      displayText: runnerScoreValue.toLocaleString() + "점",
+      stakeLabel: "달린 기록",
+      stake:
+        distance +
+        "m · 간식 " +
+        runnerSnackCount +
+        "개 · 피버 " +
+        runnerFeverCount +
+        "회",
+      copyText:
+        "딱! 정해 간식 러너: " +
+        runnerScoreValue.toLocaleString() + "점 · " +
+        distance +
+        "m · 간식 " +
+        runnerSnackCount +
+        "개 · 피버 " +
+        runnerFeverCount +
+        "회",
+      list: false,
+      playMode: "solo",
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 500);
+}
+
+function updateRunnerGame(delta) {
+  runnerElapsed += delta * 1000;
+  const baseSpeed = Math.min(980, 390 + (runnerElapsed / 1000) * 14);
+  runnerSpeed = baseSpeed + (isRunnerFeverActive() ? 120 : 0);
+  runnerDistanceValue += (runnerSpeed * delta) / 10;
+
+  runnerPlayer.velocityY += 2300 * delta;
+  runnerPlayer.y += runnerPlayer.velocityY * delta;
+  const groundTop = RUNNER_GROUND_Y - runnerPlayer.height;
+  if (runnerPlayer.y >= groundTop) {
+    runnerPlayer.y = groundTop;
+    runnerPlayer.velocityY = 0;
+    runnerPlayer.jumps = 0;
+  }
+
+  const tier = Math.min(12, Math.floor(runnerElapsed / 8000));
+  if (runnerElapsed >= runnerNextObstacle) {
+    spawnRunnerObstacle();
+    const interval = Math.max(820, 1420 - tier * 50);
+    runnerNextObstacle = runnerElapsed + interval + randomInt(280);
+  }
+  if (runnerElapsed >= runnerNextIngredient) {
+    spawnRunnerIngredient();
+    runnerNextIngredient = runnerElapsed + 700 + randomInt(430);
+  }
+  if (runnerElapsed >= runnerNextItem) {
+    spawnRunnerItem();
+    runnerNextItem = runnerElapsed + 7200 + randomInt(4200);
+  }
+
+  runnerObstacles.forEach((obstacle) => {
+    obstacle.x -= runnerSpeed * delta;
+  });
+  runnerIngredients.forEach((ingredient) => {
+    ingredient.x -= runnerSpeed * delta;
+    if (isRunnerMagnetActive()) {
+      const pull = 1 - Math.exp(-delta * 5.5);
+      const targetX = runnerPlayer.x + runnerPlayer.width / 2;
+      const targetY = runnerPlayer.y + runnerPlayer.height / 2;
+      ingredient.x += (targetX - ingredient.x) * pull;
+      ingredient.y += (targetY - ingredient.y) * pull;
+    }
+  });
+  runnerItems.forEach((item) => {
+    item.x -= runnerSpeed * delta;
+  });
+
+  runnerIngredients = runnerIngredients.filter((ingredient) => {
+    if (runnerObjectsCollide(ingredient, true)) {
+      collectRunnerIngredient(ingredient);
+      return false;
+    }
+    return ingredient.x + ingredient.radius > -20;
+  });
+  runnerItems = runnerItems.filter((item) => {
+    if (runnerObjectsCollide(item, true)) {
+      collectRunnerItem(item);
+      return false;
+    }
+    return item.x + item.radius > -30;
+  });
+  runnerObstacles = runnerObstacles.filter(
+    (obstacle) => obstacle.x + obstacle.width > -30,
+  );
+
+  const collisionIndex = runnerObstacles.findIndex((obstacle) =>
+    runnerObjectsCollide(obstacle),
+  );
+  if (collisionIndex >= 0 && runnerElapsed >= runnerInvulnerableUntil) {
+    if (isRunnerFeverActive()) {
+      runnerObstacles.splice(collisionIndex, 1);
+      runnerIngredientScore += 360;
+      if (navigator.vibrate) navigator.vibrate(10);
+    } else if (runnerShield > 0) {
+      runnerShield = 0;
+      runnerInvulnerableUntil = runnerElapsed + 900;
+      runnerCombo = Math.max(0, runnerCombo - 1);
+      runnerObstacles.splice(collisionIndex, 1);
+      elements.runnerStatus.textContent =
+        "보호막이 충돌을 막았어요. 다음 장애물을 조심하세요!";
+      if (navigator.vibrate) navigator.vibrate([45, 20, 45]);
+    } else {
+      finishRunner();
+      return;
+    }
+  }
+  renderRunnerHud();
+}
+
+function runRunnerFrame(now) {
+  if (!["countdown", "running"].includes(runnerPhase)) return;
+  if (!runnerLastFrame) runnerLastFrame = now;
+  const delta = Math.min((now - runnerLastFrame) / 1000, 0.034);
+  runnerLastFrame = now;
+
+  if (runnerPhase === "countdown") {
+    runnerCountdown -= delta * 1000;
+    setRunnerPrompt(
+      String(Math.max(1, Math.ceil(runnerCountdown / 1000))),
+      "점프할 준비!",
+    );
+    if (runnerCountdown <= 0) {
+      runnerPhase = "running";
+      elements.runnerArena.dataset.phase = "running";
+      elements.runnerStart.textContent = "달리는 중";
+      elements.runnerStatus.textContent =
+        "낮은 함정은 점프, 공중 장애물은 낮게 통과하세요!";
+      runnerLastFrame = now;
+    }
+  } else {
+    updateRunnerGame(delta);
+  }
+
+  drawRunnerScene();
+  if (["countdown", "running"].includes(runnerPhase)) {
+    runnerAnimationFrame = requestAnimationFrame(runRunnerFrame);
+  } else {
+    runnerAnimationFrame = null;
+  }
+}
+
+function startRunner() {
+  if (["countdown", "running"].includes(runnerPhase)) return;
+  resetRunner();
+  runnerPhase = "countdown";
+  runnerCountdown = 3000;
+  runnerLastFrame = 0;
+  elements.runnerArena.dataset.phase = "countdown";
+  elements.runnerStart.disabled = true;
+  elements.runnerStart.textContent = "준비 중";
+  elements.runnerReset.disabled = true;
+  elements.runnerStatus.textContent = "3초 뒤 달리기가 시작돼요.";
+  setRunnerPrompt("3", "점프할 준비!");
+  elements.runnerCanvas.focus({ preventScroll: true });
+  runnerAnimationFrame = requestAnimationFrame(runRunnerFrame);
+}
+
+function clearRunnerBest() {
+  if (["countdown", "running"].includes(runnerPhase)) return;
+  state.runnerBest = 0;
+  state.runnerBestDistance = 0;
+  saveState();
+  renderRunnerHud();
+  elements.runnerStatus.textContent = "간식 러너 최고 기록을 초기화했어요.";
+  showToast("간식 러너 최고 기록을 초기화했어요.");
+}
+
 function updateGameAvailability() {
   const peopleReady = state.participants.length >= 2;
   const optionsReady = state.options.length >= 2;
@@ -3979,6 +4852,7 @@ function playAgain() {
         : elements.timerStart,
     dodge: elements.dodgeStart,
     tap: elements.tapStart,
+    runner: elements.runnerStart,
   };
 
   if (game === "wheel") {
@@ -4019,6 +4893,8 @@ function playAgain() {
     resetDodge();
   } else if (game === "tap") {
     resetTap();
+  } else if (game === "runner") {
+    resetRunner();
   }
   focusByGame[game]?.focus();
 }
@@ -4279,6 +5155,20 @@ elements.tapPad.addEventListener("keydown", (event) => {
   event.preventDefault();
   handleTapPress();
 });
+elements.runnerStart.addEventListener("click", startRunner);
+elements.runnerReset.addEventListener("click", clearRunnerBest);
+elements.runnerCanvas.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  jumpRunner();
+});
+elements.runnerCanvas.addEventListener("keydown", (event) => {
+  if (!["Enter", " ", "ArrowUp"].includes(event.key)) return;
+  event.preventDefault();
+  jumpRunner();
+});
+elements.runnerCanvas.addEventListener("contextmenu", (event) =>
+  event.preventDefault(),
+);
 [
   [elements.reactionLeft, 0],
   [elements.reactionRight, 1],
@@ -4325,6 +5215,7 @@ window.addEventListener("beforeunload", () => {
   }
   if (dodgeAnimationFrame !== null) cancelAnimationFrame(dodgeAnimationFrame);
   if (tapAnimationFrame !== null) cancelAnimationFrame(tapAnimationFrame);
+  if (runnerAnimationFrame !== null) cancelAnimationFrame(runnerAnimationFrame);
 });
 
 elements.noRepeatToggle.checked = state.noRepeat;
@@ -4337,6 +5228,7 @@ resetReactionSolo();
 resetTimerSolo();
 resetDodge();
 resetTap();
+resetRunner();
 renderParticipants();
 updateSeatControls();
 
