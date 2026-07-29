@@ -321,7 +321,9 @@
             data-game="order"
             data-category="quick"
           >
-            <span class="tab-art order-art" aria-hidden="true"></span>
+            <span class="tab-art order-art" aria-hidden="true">
+              <i>1</i><i>2</i><i>3</i>
+            </span>
             <span>
               <strong>순서 정하기</strong>
               <small>차례를 한 번에 정해요</small>
@@ -484,7 +486,9 @@
             data-category="mini"
             data-mode="solo"
           >
-            <span class="tab-art dodge-art" aria-hidden="true"></span>
+            <span class="tab-art dodge-art" aria-hidden="true">
+              <i></i><b>↓ ↓</b>
+            </span>
             <span>
               <strong>장애물 피하기</strong>
               <small>끝까지 살아남아요</small>
@@ -501,7 +505,9 @@
             data-category="mini"
             data-mode="solo"
           >
-            <span class="tab-art tap-art" aria-hidden="true"></span>
+            <span class="tab-art tap-art" aria-hidden="true">
+              <i>10s</i><b>TAP</b>
+            </span>
             <span>
               <strong>10초 연타</strong>
               <small>손끝 속도를 측정해요</small>
@@ -518,7 +524,9 @@
             data-category="mini"
             data-mode="solo"
           >
-            <span class="tab-art runner-art" aria-hidden="true"></span>
+            <span class="tab-art runner-art" aria-hidden="true">
+              <i></i><b></b>
+            </span>
             <span>
               <strong>간식 러너</strong>
               <small>재료를 모아 완성해요</small>
@@ -1134,7 +1142,7 @@
                 <canvas
                   id="runnerCanvas"
                   width="960"
-                  height="540"
+                  height="720"
                   tabindex="0"
                   aria-label="지상과 공중 장애물을 피하고 아이템과 간식 재료를 모으는 러너 게임 영역"
                 >
@@ -1153,7 +1161,7 @@
                   <div class="runner-fever-track">
                     <i id="runnerFeverBar"></i>
                   </div>
-                  <strong id="runnerEffect" class="runner-effect">속도 390</strong>
+                  <strong id="runnerEffect" class="runner-effect">속도 430</strong>
                 </div>
                 <div class="runner-recipe" aria-hidden="true">
                   <span class="bread"><i></i><small>빵</small><strong id="runnerBread">0</strong></span>

@@ -1112,33 +1112,40 @@ textarea::placeholder {
 }
 
 .order-art {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+  padding: 4px;
   border: 3px solid var(--ink);
   border-radius: 5px;
   background: #fff;
   box-shadow: 4px 4px 0 var(--coral);
 }
 
-.order-art::before {
-  content: "1\A 2\A 3";
-  position: absolute;
-  top: 4px;
-  left: 7px;
-  color: var(--coral-dark);
-  font-size: 10px;
+.order-art i {
+  min-width: 0;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  background: var(--yellow);
+  color: var(--ink);
+  font-size: 9px;
+  font-style: normal;
   font-weight: 900;
-  line-height: 12px;
-  white-space: pre;
 }
 
-.order-art::after {
-  content: "";
-  width: 21px;
-  height: 3px;
-  position: absolute;
-  top: 8px;
-  right: 5px;
-  background: var(--ink);
-  box-shadow: 0 12px 0 var(--ink), 0 24px 0 var(--ink);
+.order-art i:nth-child(2) {
+  background: var(--teal);
+  color: #fff;
+}
+
+.order-art i:nth-child(3) {
+  background: var(--coral);
+  color: #fff;
 }
 
 .team-art::before,
@@ -1409,31 +1416,51 @@ textarea::placeholder {
 
 .dodge-art::before {
   content: "";
-  width: 15px;
-  height: 15px;
+  width: 7px;
+  height: 7px;
   position: absolute;
-  left: 7px;
-  bottom: 5px;
+  top: 17px;
+  left: 4px;
   border: 2px solid var(--ink);
-  border-radius: 5px;
-  background: var(--blue);
+  border-radius: 2px;
+  background: var(--yellow);
+  box-shadow: 27px 4px 0 -2px var(--coral), 27px 4px 0 0 var(--ink);
 }
 
-.dodge-art::after {
+.dodge-art i {
+  width: 14px;
+  height: 16px;
+  position: absolute;
+  z-index: 2;
+  bottom: 3px;
+  left: 50%;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: var(--blue);
+  transform: translateX(-50%);
+}
+
+.dodge-art i::after {
   content: "";
-  width: 10px;
-  height: 14px;
+  width: 3px;
+  height: 3px;
   position: absolute;
   top: 4px;
-  left: 7px;
-  border: 2px solid var(--ink);
-  border-radius: 3px;
-  background: var(--coral);
-  box-shadow:
-    19px 9px 0 -2px var(--yellow),
-    19px 9px 0 0 var(--ink),
-    27px 26px 0 -2px var(--teal),
-    27px 26px 0 0 var(--ink);
+  left: 3px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 5px 0 0 #fff;
+}
+
+.dodge-art b {
+  position: absolute;
+  top: -1px;
+  right: 0;
+  left: 0;
+  color: var(--coral-dark);
+  font-size: 15px;
+  line-height: 1;
+  text-align: center;
 }
 
 .tap-art {
@@ -1443,65 +1470,123 @@ textarea::placeholder {
   box-shadow: inset 0 0 0 6px #fff;
 }
 
-.tap-art::before {
-  content: "10";
+.tap-art i {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
   color: #fff;
-  font-size: 13px;
+  font-size: 12px;
+  font-style: normal;
   font-weight: 900;
 }
 
-.tap-art::after {
-  content: "";
-  width: 7px;
-  height: 7px;
+.tap-art b {
+  min-width: 26px;
+  height: 13px;
+  display: grid;
+  place-items: center;
   position: absolute;
-  top: -2px;
-  right: 1px;
+  z-index: 2;
+  right: 50%;
+  bottom: -2px;
+  padding: 0 3px;
   border: 2px solid var(--ink);
-  border-radius: 50%;
+  border-radius: 4px;
   background: var(--yellow);
-  box-shadow:
-    5px 13px 0 -2px var(--teal),
-    5px 13px 0 0 var(--ink),
-    -35px 35px 0 -2px var(--blue),
-    -35px 35px 0 0 var(--ink);
+  color: var(--ink);
+  font-size: 6px;
+  line-height: 1;
+  transform: translateX(50%);
 }
 
 .runner-art {
   overflow: hidden;
   border: 3px solid var(--ink);
   border-radius: 5px;
-  background: #e9f6ef;
+  background: #eaf8ff;
 }
 
 .runner-art::before {
   content: "";
-  width: 19px;
-  height: 16px;
+  width: 8px;
+  height: 9px;
   position: absolute;
-  left: 5px;
-  bottom: 5px;
+  z-index: 3;
+  top: 5px;
+  right: 5px;
   border: 2px solid var(--ink);
-  border-radius: 7px 7px 5px 5px;
-  background: #e9ad62;
-  box-shadow: 17px -17px 0 -5px #fff, 17px -17px 0 -3px var(--ink);
+  border-radius: 5px 5px 6px 6px;
+  background: var(--coral);
+  transform: rotate(15deg);
 }
 
 .runner-art::after {
   content: "";
-  width: 12px;
+  height: 8px;
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  border-top: 2px solid var(--ink);
+  background: #89cc9b;
+}
+
+.runner-art i {
+  width: 14px;
+  height: 17px;
+  position: absolute;
+  z-index: 3;
+  top: 9px;
+  left: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: var(--blue);
+  transform: rotate(-8deg);
+}
+
+.runner-art i::before {
+  content: "";
+  width: 10px;
+  height: 5px;
+  position: absolute;
+  top: -6px;
+  left: 0;
+  border: 2px solid var(--ink);
+  border-radius: 6px 6px 2px 2px;
+  background: #fff;
+}
+
+.runner-art i::after {
+  content: "";
+  width: 10px;
+  height: 3px;
+  position: absolute;
+  right: -6px;
+  bottom: -5px;
+  border-radius: 2px;
+  background: var(--blue);
+  transform: rotate(22deg);
+}
+
+.runner-art b {
+  width: 19px;
   height: 15px;
   position: absolute;
-  top: 8px;
-  right: 5px;
-  border: 2px solid var(--ink);
-  border-radius: 8px 8px 10px 10px;
+  z-index: 2;
+  right: 3px;
+  bottom: 7px;
+  background: var(--ink);
+  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+}
+
+.runner-art b::before {
+  content: "";
+  position: absolute;
+  inset: 3px 3px 2px;
   background: var(--coral);
-  transform: rotate(18deg);
+  clip-path: polygon(0 100%, 50% 0, 100% 100%);
 }
 
 .game-stage {
@@ -3254,14 +3339,14 @@ textarea::placeholder {
   }
 }
 .runner-stage {
-  min-height: 610px;
+  min-height: 760px;
   gap: 14px;
   padding: 24px 0 10px;
 }
 
 .runner-arena {
   width: min(820px, 100%);
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 4 / 3;
   position: relative;
   overflow: hidden;
   border: 2px solid var(--ink);
@@ -3985,6 +4070,47 @@ footer strong {
     height: 38px;
   }
 
+  .order-art {
+    gap: 1px;
+    padding: 2px;
+    box-shadow: 2px 2px 0 var(--coral);
+  }
+
+  .order-art i {
+    border-width: 1px;
+    font-size: 7px;
+  }
+
+  .tap-art {
+    box-shadow: inset 0 0 0 4px #fff;
+  }
+
+  .tap-art i {
+    font-size: 10px;
+  }
+
+  .tap-art b {
+    min-width: 22px;
+    height: 11px;
+    bottom: -1px;
+    border-width: 1px;
+    font-size: 5px;
+  }
+
+  .dodge-art b {
+    font-size: 12px;
+  }
+
+  .runner-art i {
+    top: 7px;
+    left: 4px;
+  }
+
+  .runner-art b {
+    width: 16px;
+    height: 13px;
+  }
+
   .seats-art::before,
   .seats-art::after {
     width: 16px;
@@ -4250,7 +4376,19 @@ footer strong {
   }
 
   .runner-arena {
-    width: 100%;
+    width: calc(100% + 32px);
+    max-width: none;
+    margin-inline: -16px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .runner-arena.is-fever,
+  .runner-arena.has-shield:not(.is-fever),
+  .runner-arena[data-phase="gameover"] {
+    box-shadow: none;
   }
 
   .runner-hud {

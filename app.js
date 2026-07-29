@@ -9,8 +9,8 @@ const DODGE_WIDTH = 800;
 const DODGE_HEIGHT = 1000;
 const DODGE_SIDE_START = 5000;
 const RUNNER_WIDTH = 960;
-const RUNNER_HEIGHT = 540;
-const RUNNER_GROUND_Y = 438;
+const RUNNER_HEIGHT = 720;
+const RUNNER_GROUND_Y = 598;
 const RUNNER_FEVER_DURATION = 6000;
 const RUNNER_MAGNET_DURATION = 7000;
 const RUNNER_INGREDIENT_TYPES = ["bread", "cream", "berry"];
@@ -366,7 +366,7 @@ let runnerElapsed = 0;
 let runnerDistanceValue = 0;
 let runnerScoreValue = 0;
 let runnerIngredientScore = 0;
-let runnerSpeed = 360;
+let runnerSpeed = 430;
 let runnerNextObstacle = 0;
 let runnerNextIngredient = 0;
 let runnerNextItem = 0;
@@ -3951,7 +3951,7 @@ function resetRunner() {
   runnerDistanceValue = 0;
   runnerScoreValue = 0;
   runnerIngredientScore = 0;
-  runnerSpeed = 390;
+  runnerSpeed = 430;
   runnerNextObstacle = 850;
   runnerNextIngredient = 560;
   runnerNextItem = 4500;
@@ -3994,39 +3994,55 @@ function jumpRunner() {
   if (navigator.vibrate) navigator.vibrate(8);
 }
 
-function spawnRunnerObstacle() {
-  const tier = Math.min(12, Math.floor(runnerElapsed / 8000));
-  const roll = randomInt(100);
-  let type = "crate";
-  if (runnerElapsed >= 6000 && roll < 34) type = "trap";
-  if (runnerElapsed >= 10000 && roll >= 66) type = "air";
-
+function createRunnerObstacle(type, tier, x) {
   let width = 56 + randomInt(34);
-  let height = Math.min(132, 62 + randomInt(42 + tier * 2));
+  let height = Math.min(145, 70 + randomInt(44 + tier * 3));
   let y = RUNNER_GROUND_Y - height;
   let color = ["#ff7268", "#f4c84c", "#35aa9d"][randomInt(3)];
 
   if (type === "trap") {
-    width = 92 + randomInt(54);
-    height = 25 + randomInt(9);
+    width = 110 + randomInt(60);
+    height = 27 + randomInt(10);
     y = RUNNER_GROUND_Y - height;
     color = "#ef5f67";
   } else if (type === "air") {
-    width = 74 + randomInt(34);
-    height = 48 + randomInt(15);
-    y = RUNNER_GROUND_Y - 165 - randomInt(28);
+    width = 90 + randomInt(40);
+    height = 55 + randomInt(18);
+    y = RUNNER_GROUND_Y - 178 - randomInt(24);
     color = "#6f72df";
   }
 
-  runnerObstacles.push({
-    x: RUNNER_WIDTH + 36,
+  return {
+    x,
     y,
     width,
     height,
     color,
     type,
     bobOffset: randomInt(628) / 100,
-  });
+  };
+}
+
+function spawnRunnerObstacle() {
+  const tier = Math.min(12, Math.floor(runnerElapsed / 5000));
+  const roll = randomInt(100);
+  let type = "crate";
+  if (runnerElapsed >= 4500 && roll < 38) type = "trap";
+  if (runnerElapsed >= 7500 && roll >= 68) type = "air";
+
+  const startX = RUNNER_WIDTH + 36;
+  runnerObstacles.push(createRunnerObstacle(type, tier, startX));
+
+  let trailingOffset = 0;
+  if (runnerElapsed >= 18000 && randomInt(100) < 38) {
+    const followType = randomInt(100) < 58 ? "trap" : "crate";
+    const baseOffset = type === "air" ? 430 : 250;
+    trailingOffset = baseOffset + randomInt(type === "air" ? 80 : 100);
+    runnerObstacles.push(
+      createRunnerObstacle(followType, tier, startX + trailingOffset),
+    );
+  }
+  return trailingOffset;
 }
 
 function spawnRunnerIngredient() {
@@ -4362,8 +4378,9 @@ function drawRunnerScene() {
     context.fill();
   });
 
+  const horizonY = RUNNER_GROUND_Y - 130;
   context.fillStyle = "#dcecf1";
-  context.fillRect(0, 318, RUNNER_WIDTH, RUNNER_GROUND_Y - 318);
+  context.fillRect(0, horizonY, RUNNER_WIDTH, RUNNER_GROUND_Y - horizonY);
   context.fillStyle = "#eaf5ec";
   context.fillRect(0, RUNNER_GROUND_Y, RUNNER_WIDTH, RUNNER_HEIGHT - RUNNER_GROUND_Y);
   context.fillStyle = "#4ca876";
@@ -4539,8 +4556,8 @@ function finishRunner() {
 
 function updateRunnerGame(delta) {
   runnerElapsed += delta * 1000;
-  const baseSpeed = Math.min(980, 390 + (runnerElapsed / 1000) * 14);
-  runnerSpeed = baseSpeed + (isRunnerFeverActive() ? 120 : 0);
+  const baseSpeed = Math.min(1120, 430 + (runnerElapsed / 1000) * 18);
+  runnerSpeed = baseSpeed + (isRunnerFeverActive() ? 140 : 0);
   runnerDistanceValue += (runnerSpeed * delta) / 10;
 
   runnerPlayer.velocityY += 2300 * delta;
@@ -4552,11 +4569,16 @@ function updateRunnerGame(delta) {
     runnerPlayer.jumps = 0;
   }
 
-  const tier = Math.min(12, Math.floor(runnerElapsed / 8000));
+  const tier = Math.min(12, Math.floor(runnerElapsed / 5000));
   if (runnerElapsed >= runnerNextObstacle) {
-    spawnRunnerObstacle();
-    const interval = Math.max(820, 1420 - tier * 50);
-    runnerNextObstacle = runnerElapsed + interval + randomInt(280);
+    const trailingOffset = spawnRunnerObstacle();
+    const interval = Math.max(820, 1320 - tier * 55);
+    const patternDelay =
+      trailingOffset > 0
+        ? (trailingOffset / Math.max(1, runnerSpeed)) * 1000
+        : 0;
+    runnerNextObstacle =
+      runnerElapsed + interval + patternDelay + randomInt(220);
   }
   if (runnerElapsed >= runnerNextIngredient) {
     spawnRunnerIngredient();
@@ -4572,12 +4594,17 @@ function updateRunnerGame(delta) {
   });
   runnerIngredients.forEach((ingredient) => {
     ingredient.x -= runnerSpeed * delta;
-    if (isRunnerMagnetActive()) {
-      const pull = 1 - Math.exp(-delta * 5.5);
-      const targetX = runnerPlayer.x + runnerPlayer.width / 2;
+    const targetX = runnerPlayer.x + runnerPlayer.width / 2;
+    if (
+      isRunnerMagnetActive() &&
+      (ingredient.magnetCaptured || ingredient.x >= targetX)
+    ) {
+      ingredient.magnetCaptured = true;
+      const pull = 1 - Math.exp(-delta * 8.5);
       const targetY = runnerPlayer.y + runnerPlayer.height / 2;
       ingredient.x += (targetX - ingredient.x) * pull;
       ingredient.y += (targetY - ingredient.y) * pull;
+      ingredient.x = Math.max(targetX, ingredient.x);
     }
   });
   runnerItems.forEach((item) => {
