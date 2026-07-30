@@ -9,11 +9,17 @@ const DODGE_WIDTH = 800;
 const DODGE_HEIGHT = 1000;
 const DODGE_SIDE_START = 5000;
 const RUNNER_WIDTH = 960;
-const RUNNER_HEIGHT = 720;
-const RUNNER_GROUND_Y = 598;
+const RUNNER_HEIGHT = 800;
+const RUNNER_GROUND_Y = 670;
 const RUNNER_FEVER_DURATION = 6000;
 const RUNNER_MAGNET_DURATION = 7000;
 const RUNNER_INGREDIENT_TYPES = ["bread", "cream", "berry"];
+const STACK_WIDTH = 720;
+const STACK_HEIGHT = 900;
+const STACK_BLOCK_HEIGHT = 58;
+const STACK_BASE_Y = 760;
+const STACK_PERFECT_TOLERANCE = 7;
+const STACK_COLORS = ["#ff786e", "#ffd45b", "#5fc7bb", "#6f8ee8", "#ef9f53"];
 const DEFAULT_PARTICIPANTS = ["민지", "준호", "서연", "태윤"];
 const DEFAULT_OPTIONS = ["한식", "분식", "중식", "일식", "치킨", "피자"];
 const DEFAULT_MISSIONS = [
@@ -63,6 +69,7 @@ const GAME_LABELS = {
   dodge: "장애물 피하기",
   tap: "10초 연타",
   runner: "간식 재료 러너",
+  stack: "아슬아슬 탑 쌓기",
 };
 
 const elements = {
@@ -128,6 +135,7 @@ const elements = {
     dodge: document.querySelector("#dodgeGame"),
     tap: document.querySelector("#tapGame"),
     runner: document.querySelector("#runnerGame"),
+    stack: document.querySelector("#stackGame"),
   },
   wheelCanvas: document.querySelector("#wheelCanvas"),
   wheelStatus: document.querySelector("#wheelStatus"),
@@ -255,6 +263,15 @@ const elements = {
   runnerPrompt: document.querySelector("#runnerPrompt"),
   runnerReset: document.querySelector("#runnerReset"),
   runnerStart: document.querySelector("#runnerStart"),
+  stackStatus: document.querySelector("#stackStatus"),
+  stackArena: document.querySelector("#stackArena"),
+  stackCanvas: document.querySelector("#stackCanvas"),
+  stackScore: document.querySelector("#stackScore"),
+  stackBest: document.querySelector("#stackBest"),
+  stackCombo: document.querySelector("#stackCombo"),
+  stackPrompt: document.querySelector("#stackPrompt"),
+  stackReset: document.querySelector("#stackReset"),
+  stackStart: document.querySelector("#stackStart"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
@@ -291,6 +308,7 @@ const state = {
   tapBest: savedState.tapBest,
   runnerBest: savedState.runnerBest,
   runnerBestDistance: savedState.runnerBestDistance,
+  stackBest: savedState.stackBest,
   currentGame: "wheel",
   currentMode: "together",
   currentCategory: "quick",
@@ -383,6 +401,17 @@ let runnerFeverCount = 0;
 let runnerMagnetUntil = 0;
 let runnerShield = 0;
 let runnerInvulnerableUntil = 0;
+let stackPhase = "idle";
+let stackAnimationFrame = null;
+let stackLastFrame = 0;
+let stackBlocks = [];
+let stackActive = null;
+let stackFragments = [];
+let stackScoreValue = 0;
+let stackComboValue = 0;
+let stackPeakCombo = 0;
+let stackCamera = 0;
+let stackFeedback = null;
 let resultRevealTimer = null;
 let toastTimer = null;
 
@@ -498,6 +527,9 @@ function loadState() {
     const runnerBestDistance = Math.round(
       readOptionalRecord(parsed?.runnerBestDistance, 10000000) || 0,
     );
+    const stackBest = Math.round(
+      readOptionalRecord(parsed?.stackBest, 10000) || 0,
+    );
 
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
@@ -516,6 +548,7 @@ function loadState() {
       tapBest,
       runnerBest,
       runnerBestDistance,
+      stackBest,
       hasStoredState,
     };
   } catch {
@@ -536,6 +569,7 @@ function loadState() {
       tapBest: 0,
       runnerBest: 0,
       runnerBestDistance: 0,
+      stackBest: 0,
       hasStoredState: false,
     };
   }
@@ -562,6 +596,7 @@ function saveState() {
         tapBest: state.tapBest,
         runnerBest: state.runnerBest,
         runnerBestDistance: state.runnerBestDistance,
+        stackBest: state.stackBest,
       }),
     );
   } catch {
@@ -1209,6 +1244,7 @@ function selectGame(game) {
   const enteringDodge = changingGame && game === "dodge";
   const enteringTap = changingGame && game === "tap";
   const enteringRunner = changingGame && game === "runner";
+  const enteringStack = changingGame && game === "stack";
   window.clearTimeout(resultRevealTimer);
   if (state.currentGame === "bomb" && game !== "bomb") resetBomb();
   if (state.currentGame === "finger" && game !== "finger") resetFinger();
@@ -1223,6 +1259,7 @@ function selectGame(game) {
   if (state.currentGame === "dodge" && game !== "dodge") resetDodge();
   if (state.currentGame === "tap" && game !== "tap") resetTap();
   if (state.currentGame === "runner" && game !== "runner") resetRunner();
+  if (state.currentGame === "stack" && game !== "stack") resetStack();
   state.currentGame = game;
 
   elements.gameTabs.forEach((tab) => {
@@ -1247,6 +1284,7 @@ function selectGame(game) {
   if (enteringDodge) resetDodge();
   if (enteringTap) resetTap();
   if (enteringRunner) resetRunner();
+  if (enteringStack) resetStack();
 
   const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
   activeTab?.scrollIntoView({
@@ -4711,6 +4749,408 @@ function clearRunnerBest() {
   showToast("간식 러너 최고 기록을 초기화했어요.");
 }
 
+function setStackPrompt(title, detail) {
+  elements.stackPrompt.querySelector("strong").textContent = title;
+  elements.stackPrompt.querySelector("span").textContent = detail;
+}
+
+function renderStackHud() {
+  elements.stackScore.textContent = String(stackScoreValue);
+  elements.stackBest.textContent = String(state.stackBest);
+  elements.stackCombo.textContent = String(stackComboValue);
+  elements.stackReset.disabled =
+    state.stackBest <= 0 || stackPhase === "running";
+}
+
+function calculateStackPlacement(active, top) {
+  return StackGameLogic.calculatePlacement(
+    active,
+    top,
+    STACK_PERFECT_TOLERANCE,
+  );
+}
+
+function createStackFragment(fragment, source) {
+  if (!fragment || fragment.width <= 0) return;
+  const placedCenter = source.x + source.width / 2;
+  const fragmentCenter = fragment.x + fragment.width / 2;
+  stackFragments.push({
+    x: fragment.x,
+    y: source.y,
+    width: fragment.width,
+    height: source.height,
+    color: source.color,
+    velocityX: fragmentCenter < placedCenter ? -75 : 75,
+    velocityY: 80,
+    rotation: 0,
+    rotationSpeed: fragmentCenter < placedCenter ? -2.1 : 2.1,
+  });
+}
+
+function spawnStackBlock() {
+  const top = stackBlocks[stackBlocks.length - 1];
+  const fromLeft = stackBlocks.length % 2 === 1;
+  const width = top.width;
+  stackActive = {
+    x: fromLeft ? 0 : STACK_WIDTH - width,
+    y: top.y - STACK_BLOCK_HEIGHT,
+    width,
+    height: STACK_BLOCK_HEIGHT,
+    color: STACK_COLORS[stackScoreValue % STACK_COLORS.length],
+    direction: fromLeft ? 1 : -1,
+    speed: Math.min(620, 225 + stackScoreValue * 19),
+  };
+}
+
+function drawStackBlock(context, block, active = false) {
+  const screenY = block.y + stackCamera;
+  if (screenY > STACK_HEIGHT + block.height || screenY < -block.height * 2) {
+    return;
+  }
+
+  makeRoundedRectPath(
+    context,
+    block.x,
+    screenY,
+    block.width,
+    block.height,
+    Math.min(12, block.width / 4),
+  );
+  context.fillStyle = block.color;
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = active ? 5 : 4;
+  context.stroke();
+
+  if (block.width >= 24) {
+    context.save();
+    makeRoundedRectPath(
+      context,
+      block.x + 7,
+      screenY + 7,
+      block.width - 14,
+      7,
+      4,
+    );
+    context.fillStyle = "rgba(255, 255, 255, 0.36)";
+    context.fill();
+    context.restore();
+  }
+
+  if (block.width < 62) return;
+  const centerX = block.x + block.width / 2;
+  const faceY = screenY + block.height / 2 + 2;
+  context.fillStyle = "#17191d";
+  context.beginPath();
+  context.arc(centerX - 11, faceY - 4, 3.2, 0, Math.PI * 2);
+  context.arc(centerX + 11, faceY - 4, 3.2, 0, Math.PI * 2);
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.arc(centerX, faceY + 1, 9, 0.18 * Math.PI, 0.82 * Math.PI);
+  context.stroke();
+}
+
+function drawStackFragment(context, fragment) {
+  const screenY = fragment.y + stackCamera;
+  context.save();
+  context.translate(
+    fragment.x + fragment.width / 2,
+    screenY + fragment.height / 2,
+  );
+  context.rotate(fragment.rotation);
+  makeRoundedRectPath(
+    context,
+    -fragment.width / 2,
+    -fragment.height / 2,
+    fragment.width,
+    fragment.height,
+    Math.min(8, fragment.width / 3),
+  );
+  context.fillStyle = fragment.color;
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 4;
+  context.stroke();
+  context.restore();
+}
+
+function drawStackScene() {
+  const context = elements.stackCanvas.getContext("2d");
+  context.clearRect(0, 0, STACK_WIDTH, STACK_HEIGHT);
+  context.fillStyle = "#edf9ff";
+  context.fillRect(0, 0, STACK_WIDTH, STACK_HEIGHT);
+
+  context.fillStyle = "#ffe28a";
+  context.beginPath();
+  context.arc(618, 120, 46, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = "rgba(255, 255, 255, 0.94)";
+  [[90, 120], [330, 185], [510, 82]].forEach(([x, y]) => {
+    context.beginPath();
+    context.arc(x, y, 24, 0, Math.PI * 2);
+    context.arc(x + 28, y - 9, 31, 0, Math.PI * 2);
+    context.arc(x + 58, y, 22, 0, Math.PI * 2);
+    context.fill();
+  });
+
+  context.fillStyle = "#dcecf1";
+  [
+    [0, 710, 92, 190],
+    [75, 660, 110, 240],
+    [170, 735, 84, 165],
+    [245, 625, 128, 275],
+    [360, 695, 96, 205],
+    [445, 645, 122, 255],
+    [552, 720, 78, 180],
+    [620, 675, 100, 225],
+  ].forEach(([x, y, width, height]) => {
+    context.fillRect(x, y, width, height);
+  });
+
+  const platformY =
+    STACK_BASE_Y + STACK_BLOCK_HEIGHT + stackCamera;
+  if (platformY < STACK_HEIGHT) {
+    context.fillStyle = "#85c99a";
+    context.fillRect(0, platformY, STACK_WIDTH, STACK_HEIGHT - platformY);
+    context.fillStyle = "#4f9d70";
+    context.fillRect(0, platformY, STACK_WIDTH, 10);
+  }
+
+  stackBlocks.forEach((block) => drawStackBlock(context, block));
+  if (stackActive) drawStackBlock(context, stackActive, true);
+  stackFragments.forEach((fragment) => drawStackFragment(context, fragment));
+
+  if (stackFeedback) {
+    const feedbackY = Math.max(150, stackFeedback.y + stackCamera);
+    context.save();
+    context.globalAlpha = Math.min(1, stackFeedback.remaining / 260);
+    context.fillStyle =
+      stackFeedback.type === "perfect" ? "#d75d55" : "#17191d";
+    context.font = "900 29px Arial, sans-serif";
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.fillText(stackFeedback.text, STACK_WIDTH / 2, feedbackY);
+    context.restore();
+  }
+}
+
+function resetStack() {
+  window.clearTimeout(resultRevealTimer);
+  if (stackAnimationFrame !== null) {
+    cancelAnimationFrame(stackAnimationFrame);
+  }
+  stackAnimationFrame = null;
+  stackLastFrame = 0;
+  stackPhase = "idle";
+  stackScoreValue = 0;
+  stackComboValue = 0;
+  stackPeakCombo = 0;
+  stackCamera = 0;
+  stackFeedback = null;
+  stackFragments = [];
+  stackActive = null;
+  stackBlocks = [
+    {
+      x: 160,
+      y: STACK_BASE_Y,
+      width: 400,
+      height: STACK_BLOCK_HEIGHT,
+      color: "#5fc7bb",
+    },
+  ];
+  elements.stackArena.dataset.phase = "idle";
+  elements.stackStart.disabled = false;
+  elements.stackStart.textContent = "탑 쌓기 시작";
+  elements.stackStatus.textContent =
+    "움직이는 블록이 탑과 겹칠 때 화면을 눌러 놓으세요.";
+  setStackPrompt("READY", "화면을 눌러 블록 놓기");
+  renderStackHud();
+  drawStackScene();
+}
+
+function updateStackGame(delta) {
+  if (stackPhase === "running" && stackActive) {
+    stackActive.x += stackActive.direction * stackActive.speed * delta;
+    const maximumX = STACK_WIDTH - stackActive.width;
+    if (stackActive.x <= 0) {
+      stackActive.x = 0;
+      stackActive.direction = 1;
+    } else if (stackActive.x >= maximumX) {
+      stackActive.x = maximumX;
+      stackActive.direction = -1;
+    }
+  }
+
+  stackFragments.forEach((fragment) => {
+    fragment.velocityY += 1750 * delta;
+    fragment.x += fragment.velocityX * delta;
+    fragment.y += fragment.velocityY * delta;
+    fragment.rotation += fragment.rotationSpeed * delta;
+  });
+  stackFragments = stackFragments.filter(
+    (fragment) => fragment.y + stackCamera < STACK_HEIGHT + 180,
+  );
+
+  const focusY =
+    stackActive?.y ??
+    stackBlocks[stackBlocks.length - 1].y - STACK_BLOCK_HEIGHT;
+  const targetCamera = Math.max(0, 245 - focusY);
+  const cameraEase = 1 - Math.exp(-delta * 7);
+  stackCamera += (targetCamera - stackCamera) * cameraEase;
+
+  if (stackFeedback) {
+    stackFeedback.remaining -= delta * 1000;
+    if (stackFeedback.remaining <= 0) stackFeedback = null;
+  }
+}
+
+function finishStack() {
+  if (stackPhase !== "running") return;
+  stackPhase = "gameover";
+  elements.stackArena.dataset.phase = "gameover";
+  const newBest = stackScoreValue > state.stackBest;
+  if (newBest) {
+    state.stackBest = stackScoreValue;
+    saveState();
+  }
+  renderStackHud();
+  elements.stackStart.disabled = false;
+  elements.stackStart.textContent = "다시 쌓기";
+  elements.stackStatus.textContent = newBest
+    ? `${stackScoreValue}층 · 새로운 최고 기록이에요!`
+    : `${stackScoreValue}층 완성 · 최고 ${state.stackBest}층`;
+  setStackPrompt(
+    newBest ? "NEW BEST" : "FINISH",
+    `${stackScoreValue}층 · 퍼펙트 연속 ${stackPeakCombo}회`,
+  );
+  if (navigator.vibrate) navigator.vibrate([65, 35, 95]);
+
+  window.clearTimeout(resultRevealTimer);
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "stack",
+      lead: newBest ? "새로운 최고 기록" : "이번에 쌓은 높이",
+      displayText: `${stackScoreValue}층`,
+      stakeLabel: "퍼펙트 기록",
+      stake: `최대 ${stackPeakCombo}회 연속 · 최고 ${state.stackBest}층`,
+      copyText:
+        `딱! 정해 탑 쌓기: ${stackScoreValue}층 · ` +
+        `퍼펙트 최대 ${stackPeakCombo}회 · 최고 ${state.stackBest}층`,
+      list: false,
+      playMode: "solo",
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 600);
+}
+
+function dropStackBlock() {
+  if (stackPhase !== "running" || !stackActive) return;
+  const top = stackBlocks[stackBlocks.length - 1];
+  const source = { ...stackActive };
+  const placement = calculateStackPlacement(source, top);
+
+  if (!placement.hit) {
+    createStackFragment(placement.fragment, source);
+    stackActive = null;
+    finishStack();
+    return;
+  }
+
+  createStackFragment(placement.fragment, source);
+  const placed = {
+    x: placement.placed.x,
+    y: source.y,
+    width: placement.placed.width,
+    height: source.height,
+    color: source.color,
+  };
+  stackBlocks.push(placed);
+  stackScoreValue += 1;
+
+  if (placement.perfect) {
+    stackComboValue += 1;
+    stackPeakCombo = Math.max(stackPeakCombo, stackComboValue);
+    stackFeedback = {
+      type: "perfect",
+      text: stackComboValue > 1 ? `PERFECT ×${stackComboValue}` : "PERFECT!",
+      y: placed.y - 34,
+      remaining: 720,
+    };
+    if (navigator.vibrate) navigator.vibrate(12);
+  } else {
+    stackComboValue = 0;
+    stackFeedback = {
+      type: "placed",
+      text: `${stackScoreValue} FLOOR`,
+      y: placed.y - 34,
+      remaining: 430,
+    };
+    if (navigator.vibrate) navigator.vibrate(7);
+  }
+
+  renderStackHud();
+  elements.stackStatus.textContent =
+    placement.perfect
+      ? `퍼펙트! 블록 크기를 유지했어요. ${stackScoreValue}층`
+      : `${stackScoreValue}층 · 남은 폭 ${Math.round(placed.width)}`;
+  spawnStackBlock();
+}
+
+function runStackFrame(now) {
+  if (
+    stackPhase !== "running" &&
+    stackFragments.length === 0 &&
+    !stackFeedback
+  ) {
+    stackAnimationFrame = null;
+    return;
+  }
+  if (!stackLastFrame) stackLastFrame = now;
+  const delta = Math.min((now - stackLastFrame) / 1000, 0.034);
+  stackLastFrame = now;
+  updateStackGame(delta);
+  drawStackScene();
+
+  if (
+    stackPhase === "running" ||
+    stackFragments.length > 0 ||
+    stackFeedback
+  ) {
+    stackAnimationFrame = requestAnimationFrame(runStackFrame);
+  } else {
+    stackAnimationFrame = null;
+  }
+}
+
+function startStack() {
+  if (stackPhase === "running") return;
+  resetStack();
+  stackPhase = "running";
+  elements.stackArena.dataset.phase = "running";
+  elements.stackStart.disabled = true;
+  elements.stackStart.textContent = "쌓는 중";
+  elements.stackReset.disabled = true;
+  elements.stackStatus.textContent =
+    "블록이 탑 위에 겹치는 순간 화면을 누르세요.";
+  setStackPrompt("GO!", "정확한 순간에 터치");
+  spawnStackBlock();
+  elements.stackCanvas.focus({ preventScroll: true });
+  stackAnimationFrame = requestAnimationFrame(runStackFrame);
+}
+
+function clearStackBest() {
+  if (stackPhase === "running") return;
+  state.stackBest = 0;
+  saveState();
+  renderStackHud();
+  elements.stackStatus.textContent = "탑 쌓기 최고 기록을 초기화했어요.";
+  showToast("탑 쌓기 최고 기록을 초기화했어요.");
+}
+
 function updateGameAvailability() {
   const peopleReady = state.participants.length >= 2;
   const optionsReady = state.options.length >= 2;
@@ -4880,6 +5320,7 @@ function playAgain() {
     dodge: elements.dodgeStart,
     tap: elements.tapStart,
     runner: elements.runnerStart,
+    stack: elements.stackStart,
   };
 
   if (game === "wheel") {
@@ -4922,6 +5363,8 @@ function playAgain() {
     resetTap();
   } else if (game === "runner") {
     resetRunner();
+  } else if (game === "stack") {
+    resetStack();
   }
   focusByGame[game]?.focus();
 }
@@ -5196,6 +5639,20 @@ elements.runnerCanvas.addEventListener("keydown", (event) => {
 elements.runnerCanvas.addEventListener("contextmenu", (event) =>
   event.preventDefault(),
 );
+elements.stackStart.addEventListener("click", startStack);
+elements.stackReset.addEventListener("click", clearStackBest);
+elements.stackCanvas.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  dropStackBlock();
+});
+elements.stackCanvas.addEventListener("keydown", (event) => {
+  if (!["Enter", " "].includes(event.key) || event.repeat) return;
+  event.preventDefault();
+  dropStackBlock();
+});
+elements.stackCanvas.addEventListener("contextmenu", (event) =>
+  event.preventDefault(),
+);
 [
   [elements.reactionLeft, 0],
   [elements.reactionRight, 1],
@@ -5243,6 +5700,7 @@ window.addEventListener("beforeunload", () => {
   if (dodgeAnimationFrame !== null) cancelAnimationFrame(dodgeAnimationFrame);
   if (tapAnimationFrame !== null) cancelAnimationFrame(tapAnimationFrame);
   if (runnerAnimationFrame !== null) cancelAnimationFrame(runnerAnimationFrame);
+  if (stackAnimationFrame !== null) cancelAnimationFrame(stackAnimationFrame);
 });
 
 elements.noRepeatToggle.checked = state.noRepeat;
@@ -5256,6 +5714,7 @@ resetTimerSolo();
 resetDodge();
 resetTap();
 resetRunner();
+resetStack();
 renderParticipants();
 updateSeatControls();
 

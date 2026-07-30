@@ -1410,57 +1410,117 @@ textarea::placeholder {
 .dodge-art {
   overflow: hidden;
   border: 3px solid var(--ink);
-  border-radius: 5px;
-  background: #eef3ff;
+  border-radius: 7px;
+  background: #e8f7ff;
 }
 
 .dodge-art::before {
   content: "";
-  width: 7px;
-  height: 7px;
   position: absolute;
-  top: 17px;
-  left: 4px;
-  border: 2px solid var(--ink);
-  border-radius: 2px;
-  background: var(--yellow);
-  box-shadow: 27px 4px 0 -2px var(--coral), 27px 4px 0 0 var(--ink);
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 8px;
+  border-top: 2px solid #4f9d70;
+  background: #dff2d8;
+}
+
+.dodge-art::after {
+  content: "";
+  width: 17px;
+  height: 3px;
+  position: absolute;
+  right: 3px;
+  bottom: 5px;
+  border-radius: 50%;
+  background: rgba(23, 25, 29, 0.16);
 }
 
 .dodge-art i {
   width: 14px;
   height: 16px;
+  box-sizing: border-box;
   position: absolute;
-  z-index: 2;
-  bottom: 3px;
-  left: 50%;
+  z-index: 3;
+  bottom: 6px;
+  left: 5px;
   border: 2px solid var(--ink);
-  border-radius: 6px;
-  background: var(--blue);
-  transform: translateX(-50%);
+  border-radius: 7px 7px 5px 5px;
+  background: #6785eb;
+  transform: rotate(-7deg);
+}
+
+.dodge-art i::before {
+  content: "";
+  width: 6px;
+  height: 4px;
+  box-sizing: border-box;
+  position: absolute;
+  top: -5px;
+  left: 2px;
+  border: 2px solid var(--ink);
+  border-bottom: 0;
+  border-radius: 5px 5px 0 0;
+  background: var(--yellow);
 }
 
 .dodge-art i::after {
   content: "";
-  width: 3px;
-  height: 3px;
+  width: 8px;
+  height: 5px;
   position: absolute;
-  top: 4px;
-  left: 3px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 5px 0 0 #fff;
+  top: 3px;
+  left: 1px;
+  border-bottom: 1px solid #fff;
+  border-radius: 0 0 50% 50%;
+  background:
+    radial-gradient(circle at 2px 1px, #fff 0 1px, transparent 1.4px),
+    radial-gradient(circle at 6px 1px, #fff 0 1px, transparent 1.4px);
 }
 
 .dodge-art b {
+  width: 8px;
+  height: 8px;
+  box-sizing: border-box;
   position: absolute;
-  top: -1px;
-  right: 0;
-  left: 0;
-  color: var(--coral-dark);
-  font-size: 15px;
-  line-height: 1;
-  text-align: center;
+  z-index: 2;
+  top: 4px;
+  left: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  background: var(--coral);
+  box-shadow:
+    22px 5px 0 -2px var(--yellow),
+    22px 5px 0 0 var(--ink),
+    11px 13px 0 -2px var(--teal),
+    11px 13px 0 0 var(--ink);
+}
+
+.dodge-art b::after {
+  content: "";
+  width: 2px;
+  height: 5px;
+  position: absolute;
+  top: 8px;
+  left: 1px;
+  border-radius: 2px;
+  background: #8aa9c8;
+  box-shadow:
+    22px 5px 0 #8aa9c8,
+    11px 13px 0 #8aa9c8;
+}
+
+.dodge-art em {
+  width: 8px;
+  height: 2px;
+  position: absolute;
+  z-index: 2;
+  bottom: 14px;
+  left: 21px;
+  border-radius: 2px;
+  background: #7597c5;
+  box-shadow: 3px 5px 0 -0.5px #7597c5;
+  transform: rotate(-8deg);
 }
 
 .tap-art {
@@ -1503,90 +1563,239 @@ textarea::placeholder {
 .runner-art {
   overflow: hidden;
   border: 3px solid var(--ink);
-  border-radius: 5px;
-  background: #eaf8ff;
+  border-radius: 7px;
+  background: #e8f7ff;
 }
 
 .runner-art::before {
   content: "";
-  width: 8px;
-  height: 9px;
+  width: 17px;
+  height: 6px;
   position: absolute;
-  z-index: 3;
-  top: 5px;
-  right: 5px;
-  border: 2px solid var(--ink);
-  border-radius: 5px 5px 6px 6px;
-  background: var(--coral);
-  transform: rotate(15deg);
+  top: 3px;
+  left: 2px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 5px 4px, #fff 0 5px, transparent 5.5px),
+    radial-gradient(circle at 12px 2px, #fff 0 6px, transparent 6.5px);
 }
 
 .runner-art::after {
   content: "";
-  height: 8px;
+  height: 9px;
   position: absolute;
   z-index: 1;
   right: 0;
   bottom: 0;
   left: 0;
-  border-top: 2px solid var(--ink);
-  background: #89cc9b;
+  border-top: 2px solid #4f9d70;
+  background: #dff2d8;
 }
 
 .runner-art i {
-  width: 14px;
-  height: 17px;
+  width: 15px;
+  height: 18px;
+  box-sizing: border-box;
   position: absolute;
   z-index: 3;
-  top: 9px;
-  left: 5px;
+  top: 10px;
+  left: 6px;
   border: 2px solid var(--ink);
-  border-radius: 7px;
-  background: var(--blue);
-  transform: rotate(-8deg);
+  border-radius: 6px 6px 5px 5px;
+  background: var(--yellow);
+  transform: rotate(-10deg);
 }
 
 .runner-art i::before {
   content: "";
-  width: 10px;
-  height: 5px;
+  width: 13px;
+  height: 7px;
+  box-sizing: border-box;
   position: absolute;
-  top: -6px;
-  left: 0;
+  top: -5px;
+  left: -1px;
   border: 2px solid var(--ink);
-  border-radius: 6px 6px 2px 2px;
-  background: #fff;
+  border-radius: 7px 7px 3px 3px;
+  background: #f0a958;
 }
 
 .runner-art i::after {
   content: "";
-  width: 10px;
+  width: 9px;
+  height: 6px;
+  position: absolute;
+  top: 4px;
+  left: 1px;
+  border-bottom: 1px solid var(--ink);
+  border-radius: 0 0 50% 50%;
+  background:
+    radial-gradient(circle at 2px 1px, var(--ink) 0 1px, transparent 1.4px),
+    radial-gradient(circle at 7px 1px, var(--ink) 0 1px, transparent 1.4px);
+}
+
+.runner-art i span {
+  width: 7px;
   height: 3px;
   position: absolute;
-  right: -6px;
+  right: -3px;
   bottom: -5px;
-  border-radius: 2px;
-  background: var(--blue);
-  transform: rotate(22deg);
+  border-radius: 3px;
+  background: var(--ink);
+  transform: rotate(25deg);
+}
+
+.runner-art i span::before,
+.runner-art i span::after {
+  content: "";
+  height: 3px;
+  position: absolute;
+  border-radius: 3px;
+}
+
+.runner-art i span::before {
+  width: 8px;
+  top: -9px;
+  right: -3px;
+  border: 1px solid var(--ink);
+  background: var(--yellow);
+  transform: rotate(18deg);
+}
+
+.runner-art i span::after {
+  width: 7px;
+  top: 1px;
+  right: 7px;
+  background: var(--ink);
+  transform: rotate(-38deg);
 }
 
 .runner-art b {
-  width: 19px;
-  height: 15px;
+  width: 15px;
+  height: 13px;
+  box-sizing: border-box;
   position: absolute;
   z-index: 2;
   right: 3px;
-  bottom: 7px;
-  background: var(--ink);
-  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+  bottom: 6px;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  background: var(--coral);
 }
 
 .runner-art b::before {
   content: "";
   position: absolute;
-  inset: 3px 3px 2px;
+  inset: 3px -2px auto;
+  height: 2px;
+  background: var(--ink);
+  transform: rotate(-28deg);
+}
+
+.runner-art b::after {
+  content: "";
+  width: 3px;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  border-right: 1px solid rgba(255, 255, 255, 0.76);
+  border-left: 1px solid rgba(255, 255, 255, 0.76);
+}
+
+.runner-art em {
+  width: 9px;
+  height: 10px;
+  box-sizing: border-box;
+  position: absolute;
+  z-index: 3;
+  top: 4px;
+  right: 5px;
+  border: 2px solid var(--ink);
+  border-radius: 5px 5px 7px 7px;
+  background: #f05f60;
+  transform: rotate(15deg);
+}
+
+.runner-art em::before {
+  content: "";
+  width: 7px;
+  height: 4px;
+  position: absolute;
+  top: -5px;
+  left: -1px;
+  background: #4f9d70;
+  clip-path: polygon(0 100%, 18% 0, 50% 55%, 82% 0, 100% 100%);
+}
+
+.runner-art em::after {
+  content: "";
+  width: 8px;
+  height: 2px;
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  border-radius: 2px;
+  background: #75a8c8;
+  box-shadow: 3px 4px 0 -0.5px #75a8c8;
+}
+
+.stack-art {
+  overflow: hidden;
+}
+
+.stack-art::before,
+.stack-art i,
+.stack-art b,
+.stack-art em {
+  box-sizing: border-box;
+  position: absolute;
+  left: 50%;
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+  transform: translateX(-50%);
+}
+
+.stack-art::before {
+  content: "";
+  width: 34px;
+  height: 9px;
+  bottom: 1px;
   background: var(--coral);
-  clip-path: polygon(0 100%, 50% 0, 100% 100%);
+}
+
+.stack-art i {
+  width: 28px;
+  height: 9px;
+  bottom: 10px;
+  background: var(--blue);
+}
+
+.stack-art b {
+  width: 22px;
+  height: 9px;
+  bottom: 19px;
+  background: var(--yellow);
+}
+
+.stack-art em {
+  width: 17px;
+  height: 9px;
+  bottom: 28px;
+  margin-left: -5px;
+  background: var(--teal);
+}
+
+.stack-art::after {
+  content: "";
+  width: 7px;
+  height: 2px;
+  position: absolute;
+  top: 4px;
+  right: 0;
+  border-radius: 2px;
+  background: #8295ac;
+  box-shadow: 2px 5px 0 -0.5px #8295ac;
 }
 
 .game-stage {
@@ -1636,7 +1845,8 @@ textarea::placeholder {
 .timer-stage,
 .dodge-stage,
 .tap-stage,
-.runner-stage {
+.runner-stage,
+.stack-stage {
   min-height: 470px;
   display: flex;
   flex-direction: column;
@@ -3339,14 +3549,14 @@ textarea::placeholder {
   }
 }
 .runner-stage {
-  min-height: 760px;
+  min-height: 830px;
   gap: 14px;
   padding: 24px 0 10px;
 }
 
 .runner-arena {
   width: min(820px, 100%);
-  aspect-ratio: 4 / 3;
+  aspect-ratio: 6 / 5;
   position: relative;
   overflow: hidden;
   border: 2px solid var(--ink);
@@ -3614,6 +3824,150 @@ textarea::placeholder {
 }
 
 .runner-stage .game-note {
+  margin: 0;
+  text-align: center;
+}
+
+.stack-stage {
+  min-height: 790px;
+  gap: 14px;
+  padding: 24px 0 10px;
+}
+
+.stack-arena {
+  width: min(560px, 100%);
+  aspect-ratio: 4 / 5;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #edf9ff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.stack-arena[data-phase="running"] {
+  box-shadow: 0 0 0 3px rgba(70, 118, 232, 0.25), 4px 4px 0 var(--ink);
+}
+
+.stack-arena[data-phase="gameover"] {
+  box-shadow: 4px 4px 0 #d75d55;
+}
+
+#stackCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+#stackCanvas:focus-visible {
+  outline: 4px solid rgba(70, 118, 232, 0.42);
+  outline-offset: -7px;
+}
+
+.stack-hud {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(68px, 1fr));
+  gap: 5px;
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  left: 10px;
+  pointer-events: none;
+}
+
+.stack-hud span {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 0 rgba(23, 25, 29, 0.12);
+  text-align: center;
+}
+
+.stack-hud span:last-child {
+  background: rgba(255, 242, 185, 0.95);
+}
+
+.stack-hud small,
+.stack-hud strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.stack-hud small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.stack-hud strong {
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stack-prompt {
+  min-width: 174px;
+  min-height: 80px;
+  display: grid;
+  place-content: center;
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  padding: 12px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--ink);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.16s ease;
+}
+
+.stack-prompt strong,
+.stack-prompt span {
+  display: block;
+}
+
+.stack-prompt strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.stack-prompt span {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.stack-arena[data-phase="running"] .stack-prompt {
+  opacity: 0;
+}
+
+.stack-arena[data-phase="gameover"] .stack-prompt {
+  background: var(--coral);
+  color: #fff;
+}
+
+.stack-arena[data-phase="gameover"] .stack-prompt span {
+  color: #fff;
+}
+
+.stack-actions {
+  width: min(560px, 100%);
+}
+
+.stack-stage .game-note {
   margin: 0;
   text-align: center;
 }
@@ -4097,18 +4451,24 @@ footer strong {
     font-size: 5px;
   }
 
-  .dodge-art b {
-    font-size: 12px;
+  .dodge-art i {
+    bottom: 5px;
+    left: 4px;
   }
 
   .runner-art i {
-    top: 7px;
+    top: 9px;
     left: 4px;
   }
 
   .runner-art b {
-    width: 16px;
-    height: 13px;
+    right: 2px;
+    bottom: 5px;
+  }
+
+  .runner-art em {
+    top: 3px;
+    right: 3px;
   }
 
   .seats-art::before,
@@ -4286,7 +4646,8 @@ footer strong {
   .timer-stage,
   .dodge-stage,
   .tap-stage,
-  .runner-stage {
+  .runner-stage,
+  .stack-stage {
     min-height: 520px;
   }
 
@@ -4473,6 +4834,55 @@ footer strong {
   }
 
   .runner-prompt strong {
+    font-size: 19px;
+  }
+
+  .stack-stage {
+    min-height: 620px;
+    padding-top: 18px;
+  }
+
+  .stack-arena {
+    width: calc(100% + 32px);
+    max-width: none;
+    margin-inline: -16px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .stack-arena[data-phase="running"],
+  .stack-arena[data-phase="gameover"] {
+    box-shadow: none;
+  }
+
+  .stack-hud {
+    top: 6px;
+    right: 6px;
+    left: 6px;
+    gap: 3px;
+  }
+
+  .stack-hud span {
+    padding: 5px 6px;
+  }
+
+  .stack-hud small {
+    font-size: 7px;
+  }
+
+  .stack-hud strong {
+    font-size: 13px;
+  }
+
+  .stack-prompt {
+    min-width: 150px;
+    min-height: 70px;
+    padding: 10px 14px;
+  }
+
+  .stack-prompt strong {
     font-size: 19px;
   }
 
