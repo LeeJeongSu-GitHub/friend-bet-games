@@ -451,6 +451,7 @@ let fruitCanDropAt = 0;
 let fruitDropSequence = 0;
 let fruitDangerValue = 0;
 let fruitCompletionTimer = null;
+let fruitPointerId = null;
 let resultRevealTimer = null;
 let toastTimer = null;
 
@@ -5464,14 +5465,14 @@ function createFruitEngine() {
   fruitEngine = Matter.Engine.create({ enableSleeping: true });
   fruitEngine.gravity.y = 1.05;
   fruitEngine.gravity.scale = 0.001;
-  fruitEngine.positionIterations = 9;
+  fruitEngine.positionIterations = 7;
   fruitEngine.velocityIterations = 7;
   fruitEngine.constraintIterations = 3;
 
   const staticOptions = {
     isStatic: true,
-    restitution: 0.03,
-    friction: 0.45,
+    restitution: 0.005,
+    friction: 0.58,
     label: "fruit-wall",
   };
   const walls = [
@@ -5503,12 +5504,12 @@ function createFruitBody(tier, x, y) {
   );
   const body = Matter.Bodies.circle(safeX, y, fruit.radius, {
     label: `fruit-${tier}`,
-    restitution: 0.06,
-    friction: 0.16,
-    frictionStatic: 0.52,
-    frictionAir: 0.003,
-    density: 0.0012,
-    slop: 0.025,
+    restitution: 0.015,
+    friction: 0.24,
+    frictionStatic: 0.68,
+    frictionAir: 0.008,
+    density: 0.00125,
+    slop: 0.05,
   });
   body.plugin.gameType = "fruit";
   body.plugin.fruitTier = tier;
@@ -5567,10 +5568,12 @@ function processFruitMerges() {
 
     const x = (merge.first.position.x + merge.second.position.x) / 2;
     const y = (merge.first.position.y + merge.second.position.y) / 2;
-    const velocity = {
-      x: (merge.first.velocity.x + merge.second.velocity.x) / 2,
-      y: (merge.first.velocity.y + merge.second.velocity.y) / 2 - 1.2,
-    };
+    const motion = FruitGameLogic.getMergedMotion(
+      merge.first.velocity,
+      merge.second.velocity,
+      merge.first.angularVelocity,
+      merge.second.angularVelocity,
+    );
     Matter.Composite.remove(fruitEngine.world, merge.first);
     Matter.Composite.remove(fruitEngine.world, merge.second);
     fruitBodies = fruitBodies.filter(
@@ -5578,11 +5581,8 @@ function processFruitMerges() {
     );
 
     const merged = createFruitBody(merge.result.nextTier, x, y);
-    Matter.Body.setVelocity(merged, velocity);
-    Matter.Body.setAngularVelocity(
-      merged,
-      (merge.first.angularVelocity + merge.second.angularVelocity) / 2,
-    );
+    Matter.Body.setVelocity(merged, motion.velocity);
+    Matter.Body.setAngularVelocity(merged, motion.angularVelocity);
     fruitScoreValue += merge.result.points;
     fruitHighestTier = Math.max(fruitHighestTier, merge.result.nextTier);
     state.fruitBestTier = Math.max(state.fruitBestTier, fruitHighestTier);
@@ -5751,6 +5751,7 @@ function resetFruit() {
   window.clearTimeout(resultRevealTimer);
   window.clearTimeout(fruitCompletionTimer);
   fruitCompletionTimer = null;
+  clearFruitAimPointer();
   if (fruitAnimationFrame !== null) {
     cancelAnimationFrame(fruitAnimationFrame);
   }
@@ -5780,8 +5781,8 @@ function resetFruit() {
   elements.fruitStart.disabled = false;
   elements.fruitStart.textContent = "합치기 시작";
   elements.fruitStatus.textContent =
-    "떨어뜨릴 위치를 누르고 같은 과일끼리 합쳐 보세요.";
-  setFruitPrompt("READY", "누른 위치로 과일이 떨어져요");
+    "톡 누르거나 좌우로 끌고 놓아 과일을 합쳐 보세요.";
+  setFruitPrompt("READY", "톡 누르거나 좌우로 끌어 놓으세요");
   renderFruitHud();
   drawFruitScene();
 }
@@ -5790,6 +5791,7 @@ function finishFruit(completed) {
   if (!["running", "celebrating"].includes(fruitPhase)) return;
   window.clearTimeout(fruitCompletionTimer);
   fruitCompletionTimer = null;
+  clearFruitAimPointer();
   fruitPhase = completed ? "complete" : "gameover";
   elements.fruitArena.dataset.phase = fruitPhase;
   const newBest = fruitScoreValue > state.fruitBest;
@@ -5907,12 +5909,59 @@ function dropFruit() {
 
 function setFruitAimFromPointer(event) {
   const rect = elements.fruitCanvas.getBoundingClientRect();
+  if (rect.width <= 0) return;
   const tier = FRUIT_TIERS[fruitCurrentTier];
   const canvasX = ((event.clientX - rect.left) / rect.width) * FRUIT_WIDTH;
   fruitAimX = Math.min(
     FRUIT_WIDTH - tier.radius - 24,
     Math.max(tier.radius + 24, canvasX),
   );
+}
+
+function clearFruitAimPointer() {
+  const pointerId = fruitPointerId;
+  fruitPointerId = null;
+  elements.fruitCanvas.classList.remove("is-aiming");
+  if (
+    pointerId !== null &&
+    elements.fruitCanvas.hasPointerCapture?.(pointerId)
+  ) {
+    elements.fruitCanvas.releasePointerCapture(pointerId);
+  }
+}
+
+function beginFruitAim(event) {
+  if (
+    fruitPhase !== "running" ||
+    fruitPointerId !== null ||
+    (event.pointerType === "mouse" && event.button !== 0)
+  ) {
+    return;
+  }
+  event.preventDefault();
+  fruitPointerId = event.pointerId;
+  setFruitAimFromPointer(event);
+  elements.fruitCanvas.setPointerCapture?.(event.pointerId);
+  elements.fruitCanvas.classList.add("is-aiming");
+  elements.fruitStatus.textContent =
+    "누른 채 좌우로 움직이고 손을 놓으면 떨어져요.";
+}
+
+function updateFruitAimFromPointer(event) {
+  if (fruitPhase !== "running") return;
+  const hoveringWithMouse =
+    event.pointerType === "mouse" && fruitPointerId === null;
+  if (!hoveringWithMouse && event.pointerId !== fruitPointerId) return;
+  if (fruitPointerId !== null) event.preventDefault();
+  setFruitAimFromPointer(event);
+}
+
+function finishFruitAim(event, shouldDrop) {
+  if (event.pointerId !== fruitPointerId) return;
+  event.preventDefault();
+  if (shouldDrop) setFruitAimFromPointer(event);
+  clearFruitAimPointer();
+  if (shouldDrop) dropFruit();
 }
 
 function moveFruitAim(amount) {
@@ -5935,8 +5984,8 @@ function startFruit() {
   elements.fruitStart.textContent = "합치는 중";
   elements.fruitReset.disabled = true;
   elements.fruitStatus.textContent =
-    "원하는 가로 위치를 누르면 과일이 떨어져요.";
-  setFruitPrompt("GO!", "같은 과일끼리 합쳐 보세요");
+    "톡 누르거나 좌우로 끌고 놓으면 과일이 떨어져요.";
+  setFruitPrompt("GO!", "톡 누르거나 좌우로 끌어 놓으세요");
   elements.fruitCanvas.focus({ preventScroll: true });
   fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
 }
@@ -6458,14 +6507,17 @@ elements.stackCanvas.addEventListener("contextmenu", (event) =>
 );
 elements.fruitStart.addEventListener("click", startFruit);
 elements.fruitReset.addEventListener("click", clearFruitBest);
-elements.fruitCanvas.addEventListener("pointermove", (event) => {
-  if (fruitPhase !== "running") return;
-  setFruitAimFromPointer(event);
-});
-elements.fruitCanvas.addEventListener("pointerdown", (event) => {
-  event.preventDefault();
-  setFruitAimFromPointer(event);
-  dropFruit();
+elements.fruitCanvas.addEventListener("pointermove", updateFruitAimFromPointer);
+elements.fruitCanvas.addEventListener("pointerdown", beginFruitAim);
+elements.fruitCanvas.addEventListener("pointerup", (event) =>
+  finishFruitAim(event, true),
+);
+elements.fruitCanvas.addEventListener("pointercancel", (event) =>
+  finishFruitAim(event, false),
+);
+elements.fruitCanvas.addEventListener("lostpointercapture", (event) => {
+  if (event.pointerId !== fruitPointerId) return;
+  clearFruitAimPointer();
 });
 elements.fruitCanvas.addEventListener("keydown", (event) => {
   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {

@@ -42,9 +42,32 @@
     };
   }
 
+  function getMergedMotion(
+    firstVelocity,
+    secondVelocity,
+    firstAngularVelocity = 0,
+    secondAngularVelocity = 0,
+  ) {
+    const averageX = (firstVelocity.x + secondVelocity.x) / 2;
+    const averageY = (firstVelocity.y + secondVelocity.y) / 2;
+    const averageAngular =
+      (firstAngularVelocity + secondAngularVelocity) / 2;
+    return {
+      velocity: {
+        x: Math.min(0.65, Math.max(-0.65, averageX * 0.28)),
+        y: Math.min(0.65, Math.max(0.08, averageY * 0.18)),
+      },
+      angularVelocity: Math.min(
+        0.01,
+        Math.max(-0.01, averageAngular * 0.18),
+      ),
+    };
+  }
+
   return Object.freeze({
     tiers: Object.freeze(tiers),
     pickDropTier,
     getMergeResult,
+    getMergedMotion,
   });
 });
