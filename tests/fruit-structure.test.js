@@ -42,7 +42,7 @@ const scripts = Array.from(
   (match) => match[1],
 );
 assert.deepEqual(
-  scripts.slice(-4),
+  scripts.slice(-4).map((script) => script.split("?")[0]),
   [
     "vendor/matter-js/matter.min.js",
     "fruit-logic.js",
@@ -51,15 +51,24 @@ assert.deepEqual(
   ],
   "Physics and game logic must load before app.js",
 );
+assert.ok(
+  scripts.slice(-4).every((script) => script.endsWith("?v=27")),
+  "All runtime scripts must share the current cache-busting build number",
+);
 for (const script of scripts) {
   assert.ok(
     serviceWorker.includes(`"./${script}"`),
     `${script} must be available offline`,
   );
 }
+assert.doesNotMatch(
+  app,
+  /elements\.fruitStart\.hidden/,
+  "The running game must keep its disabled start button visible",
+);
 assert.match(
   app,
-  /register\("\.\/sw\.js",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
+  /register\("\.\/sw\.js\?v=27",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
   "Service worker updates must bypass the browser cache",
 );
 assert.match(

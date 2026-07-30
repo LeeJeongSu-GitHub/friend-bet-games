@@ -5236,14 +5236,7 @@ function renderFruitHud() {
   elements.fruitReset.disabled =
     (state.fruitBest <= 0 && state.fruitBestTier <= 0) ||
     ["running", "celebrating"].includes(fruitPhase);
-  renderFruitControls();
   drawFruitNextPreview();
-}
-
-function renderFruitControls() {
-  const running = fruitPhase === "running";
-  elements.fruitStart.hidden =
-    running || fruitPhase === "celebrating";
 }
 
 function drawFruitLeaf(context, radius, color = "#4f9d70") {
@@ -5614,7 +5607,6 @@ function processFruitMerges() {
         "과일 왕관 완성! 마지막 합체에 성공했어요.";
       setFruitPrompt("COMPLETE!", "과일 왕관을 완성했어요");
       elements.fruitStart.disabled = true;
-      renderFruitControls();
       window.clearTimeout(fruitCompletionTimer);
       fruitCompletionTimer = window.setTimeout(() => finishFruit(true), 900);
       fruitMergeQueue.length = 0;
@@ -5880,12 +5872,11 @@ function finishFruit(completed) {
 function updateFruitGame(delta, now) {
   if (!fruitEngine) return;
   stabilizeMergedFruits(now);
-  Matter.Engine.update(fruitEngine, delta * 1000);
+  Matter.Engine.update(fruitEngine, Math.min(delta * 1000, 1000 / 60));
   processFruitMerges();
   if (fruitPhase === "running") updateFruitDanger(delta, now);
   updateFruitEffects(delta);
   renderFruitDanger();
-  renderFruitControls();
 }
 
 function runFruitFrame(now) {
@@ -5991,7 +5982,6 @@ function beginFruitAim(event) {
   elements.fruitCanvas.classList.add("is-aiming");
   elements.fruitStatus.textContent =
     "누른 채 위치를 옮기고 손을 놓으면 바로 떨어져요.";
-  renderFruitControls();
 }
 
 function updateFruitAimFromPointer(event) {
@@ -6022,7 +6012,6 @@ function finishFruitAim(event, shouldDrop) {
   event.preventDefault();
   if (shouldDrop) setFruitAimFromPointer(event);
   clearFruitAimPointer();
-  renderFruitControls();
   if (shouldDrop) dropFruit();
 }
 
@@ -6048,7 +6037,6 @@ function startFruit() {
   elements.fruitStatus.textContent =
     "탭하거나 좌우로 끌고 손을 놓으면 투하돼요.";
   setFruitPrompt("GO!", "위치를 정하고 손을 놓으세요");
-  renderFruitControls();
   elements.fruitCanvas.focus({ preventScroll: true });
   fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
 }
@@ -6693,7 +6681,7 @@ if (
 ) {
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js", { updateViaCache: "none" })
+      .register("./sw.js?v=27", { updateViaCache: "none" })
       .then((registration) => registration.update())
       .catch(() => {
         // Offline support is optional and does not block the games.
