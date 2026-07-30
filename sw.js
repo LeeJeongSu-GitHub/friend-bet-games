@@ -1,4 +1,5 @@
-const CACHE_NAME = "friend-bet-games-v25";
+const CACHE_NAME = "friend-bet-games-v26";
+const CACHE_PREFIX = "friend-bet-games-";
 const APP_FILES = [
   "./",
   "./index.html",
@@ -13,41 +14,67 @@ const APP_FILES = [
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_FILES)),
+    (async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const requests = APP_FILES.map(
+        (path) =>
+          new Request(new URL(path, self.registration.scope), {
+            cache: "reload",
+          }),
+      );
+      await cache.addAll(requests);
+      await self.skipWaiting();
+    })(),
   );
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key !== CACHE_NAME)
-            .map((key) => caches.delete(key)),
-        ),
-      ),
+    (async () => {
+      const keys = await caches.keys();
+      const outdatedKeys = keys.filter(
+        (key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME,
+      );
+      await Promise.all(outdatedKeys.map((key) => caches.delete(key)));
+      await self.clients.claim();
+
+      if (outdatedKeys.length > 0) {
+        const windows = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        await Promise.all(
+          windows
+            .filter((client) => client.url.startsWith(self.registration.scope))
+            .map((client) => client.navigate(client.url)),
+        );
+      }
+    })(),
   );
-  self.clients.claim();
 });
 
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const network = fetch(event.request)
-        .then((response) => {
-          if (response.ok && new URL(event.request.url).origin === self.location.origin) {
-            const copy = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-          }
-          return response;
-        })
-        .catch(() => cached || caches.match("./index.html"));
-      return cached || network;
-    }),
+    (async () => {
+      try {
+        const response = await fetch(event.request, { cache: "no-store" });
+        if (response.ok) {
+          const cache = await caches.open(CACHE_NAME);
+          await cache.put(event.request, response.clone());
+        }
+        return response;
+      } catch {
+        const cached = await caches.match(event.request);
+        if (cached) return cached;
+        if (event.request.mode === "navigate") {
+          return caches.match("./index.html");
+        }
+        return Response.error();
+      }
+    })(),
   );
 });

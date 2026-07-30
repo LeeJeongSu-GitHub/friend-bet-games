@@ -294,7 +294,6 @@ const elements = {
   fruitNextName: document.querySelector("#fruitNextName"),
   fruitReset: document.querySelector("#fruitReset"),
   fruitStart: document.querySelector("#fruitStart"),
-  fruitDrop: document.querySelector("#fruitDrop"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
@@ -5241,13 +5240,10 @@ function renderFruitHud() {
   drawFruitNextPreview();
 }
 
-function renderFruitControls(now = performance.now()) {
+function renderFruitControls() {
   const running = fruitPhase === "running";
   elements.fruitStart.hidden =
     running || fruitPhase === "celebrating";
-  elements.fruitDrop.hidden = !running;
-  elements.fruitDrop.disabled =
-    !running || now < fruitCanDropAt || fruitPointerId !== null;
 }
 
 function drawFruitLeaf(context, radius, color = "#4f9d70") {
@@ -5817,8 +5813,8 @@ function resetFruit() {
   elements.fruitStart.disabled = false;
   elements.fruitStart.textContent = "합치기 시작";
   elements.fruitStatus.textContent =
-    "짧게 탭하면 투하되고, 끌면 위치만 이동해요.";
-  setFruitPrompt("READY", "탭 투하 · 드래그 위치 이동");
+    "탭하거나 좌우로 끌고 손을 놓으면 투하돼요.";
+  setFruitPrompt("READY", "위치를 정하고 손을 놓으세요");
   renderFruitHud();
   drawFruitScene();
 }
@@ -5889,7 +5885,7 @@ function updateFruitGame(delta, now) {
   if (fruitPhase === "running") updateFruitDanger(delta, now);
   updateFruitEffects(delta);
   renderFruitDanger();
-  renderFruitControls(now);
+  renderFruitControls();
 }
 
 function runFruitFrame(now) {
@@ -5994,7 +5990,7 @@ function beginFruitAim(event) {
   elements.fruitCanvas.setPointerCapture?.(event.pointerId);
   elements.fruitCanvas.classList.add("is-aiming");
   elements.fruitStatus.textContent =
-    "짧게 탭하면 투하되고, 좌우로 끌면 위치만 이동해요.";
+    "누른 채 위치를 옮기고 손을 놓으면 바로 떨어져요.";
   renderFruitControls();
 }
 
@@ -6016,7 +6012,7 @@ function updateFruitAimFromPointer(event) {
   ) {
     fruitPointerDragged = true;
     elements.fruitStatus.textContent =
-      "위치를 정한 뒤 아래 떨어뜨리기 버튼을 누르세요.";
+      "원하는 위치에서 손을 놓으면 바로 떨어져요.";
   }
   setFruitAimFromPointer(event);
 }
@@ -6025,22 +6021,9 @@ function finishFruitAim(event, shouldDrop) {
   if (event.pointerId !== fruitPointerId) return;
   event.preventDefault();
   if (shouldDrop) setFruitAimFromPointer(event);
-  const dragged =
-    fruitPointerDragged ||
-    FruitGameLogic.isDragGesture(
-      fruitPointerStartX,
-      fruitPointerStartY,
-      event.clientX,
-      event.clientY,
-    );
   clearFruitAimPointer();
   renderFruitControls();
-  if (shouldDrop && !dragged) {
-    dropFruit();
-  } else if (shouldDrop) {
-    elements.fruitStatus.textContent =
-      "위치를 정했어요. 떨어뜨리기 버튼을 누르세요.";
-  }
+  if (shouldDrop) dropFruit();
 }
 
 function moveFruitAim(amount) {
@@ -6063,8 +6046,8 @@ function startFruit() {
   elements.fruitStart.textContent = "합치는 중";
   elements.fruitReset.disabled = true;
   elements.fruitStatus.textContent =
-    "짧게 탭하면 투하되고, 끌면 위치만 이동해요.";
-  setFruitPrompt("GO!", "탭 투하 · 드래그 위치 이동");
+    "탭하거나 좌우로 끌고 손을 놓으면 투하돼요.";
+  setFruitPrompt("GO!", "위치를 정하고 손을 놓으세요");
   renderFruitControls();
   elements.fruitCanvas.focus({ preventScroll: true });
   fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
@@ -6587,7 +6570,6 @@ elements.stackCanvas.addEventListener("contextmenu", (event) =>
 );
 elements.fruitStart.addEventListener("click", startFruit);
 elements.fruitReset.addEventListener("click", clearFruitBest);
-elements.fruitDrop.addEventListener("click", dropFruit);
 elements.fruitCanvas.addEventListener("pointermove", updateFruitAimFromPointer);
 elements.fruitCanvas.addEventListener("pointerdown", beginFruitAim);
 elements.fruitCanvas.addEventListener("pointerup", (event) =>
@@ -6710,8 +6692,11 @@ if (
   /^https?:$/.test(window.location.protocol)
 ) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {
-      // Offline support is optional and does not block the games.
-    });
+    navigator.serviceWorker
+      .register("./sw.js", { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {
+        // Offline support is optional and does not block the games.
+      });
   });
 }

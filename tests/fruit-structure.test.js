@@ -57,6 +57,21 @@ for (const script of scripts) {
     `${script} must be available offline`,
   );
 }
+assert.match(
+  app,
+  /register\("\.\/sw\.js",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
+  "Service worker updates must bypass the browser cache",
+);
+assert.match(
+  serviceWorker,
+  /fetch\(event\.request,\s*\{\s*cache:\s*"no-store"\s*\}\)/,
+  "App files must use a network-first no-store request",
+);
+assert.doesNotMatch(
+  serviceWorker,
+  /return cached \|\| network/,
+  "The service worker must not prefer stale cache entries",
+);
 
 assert.deepEqual(
   tiers.map((tier) => tier.name),
