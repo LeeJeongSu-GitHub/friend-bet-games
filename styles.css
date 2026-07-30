@@ -1798,6 +1798,90 @@ textarea::placeholder {
   box-shadow: 2px 5px 0 -0.5px #8295ac;
 }
 
+.fruit-art {
+  overflow: hidden;
+}
+
+.fruit-art::before,
+.fruit-art i,
+.fruit-art b {
+  box-sizing: border-box;
+  position: absolute;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+}
+
+.fruit-art::before {
+  content: "";
+  width: 23px;
+  height: 23px;
+  right: 0;
+  bottom: 1px;
+  background: #f49a3d;
+}
+
+.fruit-art::after {
+  content: "";
+  width: 3px;
+  height: 3px;
+  position: absolute;
+  z-index: 2;
+  right: 13px;
+  bottom: 12px;
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 7px 0 0 var(--ink);
+}
+
+.fruit-art i,
+.fruit-art b {
+  width: 12px;
+  height: 12px;
+  left: 1px;
+  background: var(--coral);
+}
+
+.fruit-art i {
+  top: 3px;
+}
+
+.fruit-art b {
+  bottom: 3px;
+}
+
+.fruit-art i::before,
+.fruit-art b::before {
+  content: "";
+  width: 5px;
+  height: 3px;
+  position: absolute;
+  top: -4px;
+  right: -1px;
+  border-radius: 50%;
+  background: #4f9d70;
+  transform: rotate(-22deg);
+}
+
+.fruit-art em {
+  width: 10px;
+  height: 3px;
+  position: absolute;
+  top: 21px;
+  left: 13px;
+  border-radius: 2px;
+  background: var(--ink);
+}
+
+.fruit-art em::after {
+  content: "";
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  border-left: 5px solid var(--ink);
+}
+
 .game-stage {
   min-height: 650px;
   margin-top: 26px;
@@ -1846,7 +1930,8 @@ textarea::placeholder {
 .dodge-stage,
 .tap-stage,
 .runner-stage,
-.stack-stage {
+.stack-stage,
+.fruit-stage {
   min-height: 470px;
   display: flex;
   flex-direction: column;
@@ -3972,6 +4057,239 @@ textarea::placeholder {
   text-align: center;
 }
 
+.fruit-stage {
+  min-height: 790px;
+  gap: 14px;
+  padding: 24px 0 10px;
+}
+
+.fruit-arena {
+  width: min(560px, 100%);
+  aspect-ratio: 4 / 5;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+  background: #f5fbff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+.fruit-arena[data-phase="running"] {
+  box-shadow: 0 0 0 3px rgba(240, 95, 91, 0.2), 4px 4px 0 var(--ink);
+}
+
+.fruit-arena.is-danger {
+  box-shadow: 0 0 0 4px rgba(228, 93, 93, 0.32), 4px 4px 0 var(--ink);
+}
+
+.fruit-arena[data-phase="gameover"] {
+  box-shadow: 4px 4px 0 #d75d55;
+}
+
+.fruit-arena[data-phase="complete"] {
+  box-shadow: 0 0 0 4px #ffd45b, 5px 5px 0 var(--ink);
+}
+
+#fruitCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  cursor: pointer;
+  touch-action: none;
+}
+
+#fruitCanvas:focus-visible {
+  outline: 4px solid rgba(240, 95, 91, 0.36);
+  outline-offset: -7px;
+}
+
+.fruit-hud {
+  width: calc(100% - 20px);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(68px, 1fr));
+  gap: 5px;
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  left: 10px;
+  pointer-events: none;
+}
+
+.fruit-hud span {
+  min-width: 0;
+  padding: 7px 9px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 2px 0 rgba(23, 25, 29, 0.12);
+  text-align: center;
+}
+
+.fruit-hud span:last-child {
+  background: rgba(225, 246, 232, 0.96);
+}
+
+.fruit-hud small,
+.fruit-hud strong {
+  display: block;
+  font-variant-numeric: tabular-nums;
+}
+
+.fruit-hud small {
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.fruit-hud strong {
+  min-height: 17px;
+  margin-top: 2px;
+  overflow: hidden;
+  font-size: 15px;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fruit-next {
+  width: 102px;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  grid-template-rows: auto 1fr;
+  align-items: center;
+  position: absolute;
+  z-index: 2;
+  top: 66px;
+  right: 10px;
+  padding: 6px 7px;
+  border: 1px solid #cfd8e3;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 0 rgba(23, 25, 29, 0.12);
+  pointer-events: none;
+}
+
+.fruit-next small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.fruit-next canvas {
+  width: 58px;
+  height: 58px;
+  grid-row: 2;
+}
+
+.fruit-next strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.fruit-danger {
+  width: 190px;
+  display: grid;
+  gap: 5px;
+  position: absolute;
+  z-index: 2;
+  top: 72px;
+  left: 10px;
+  padding: 7px 9px;
+  border: 1px solid #e3b5b1;
+  border-radius: 6px;
+  background: rgba(255, 247, 246, 0.95);
+  pointer-events: none;
+}
+
+.fruit-danger span {
+  color: #b65353;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.fruit-danger i {
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: #edf0f4;
+}
+
+.fruit-danger b {
+  width: 0;
+  height: 100%;
+  display: block;
+  background: var(--coral);
+  transition: width 0.12s linear;
+}
+
+.fruit-prompt {
+  min-width: 184px;
+  min-height: 82px;
+  display: grid;
+  place-content: center;
+  position: absolute;
+  z-index: 3;
+  inset: 50% auto auto 50%;
+  padding: 12px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--ink);
+  text-align: center;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  transition: opacity 0.16s ease;
+}
+
+.fruit-prompt strong,
+.fruit-prompt span {
+  display: block;
+}
+
+.fruit-prompt strong {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.fruit-prompt span {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.fruit-arena[data-phase="running"] .fruit-prompt {
+  opacity: 0;
+}
+
+.fruit-arena[data-phase="complete"] .fruit-prompt {
+  background: var(--yellow);
+}
+
+.fruit-arena[data-phase="gameover"] .fruit-prompt {
+  background: var(--coral);
+  color: #fff;
+}
+
+.fruit-arena[data-phase="gameover"] .fruit-prompt span {
+  color: #fff;
+}
+
+.fruit-actions {
+  width: min(560px, 100%);
+}
+
+.fruit-stage .game-note {
+  margin: 0;
+  text-align: center;
+}
+
 .result-dialog {
   width: min(430px, calc(100% - 32px));
   max-height: calc(100dvh - 32px);
@@ -4647,7 +4965,8 @@ footer strong {
   .dodge-stage,
   .tap-stage,
   .runner-stage,
-  .stack-stage {
+  .stack-stage,
+  .fruit-stage {
     min-height: 520px;
   }
 
@@ -4883,6 +5202,87 @@ footer strong {
   }
 
   .stack-prompt strong {
+    font-size: 19px;
+  }
+
+  .fruit-stage {
+    min-height: 620px;
+    padding-top: 18px;
+  }
+
+  .fruit-arena {
+    width: calc(100% + 32px);
+    max-width: none;
+    margin-inline: -16px;
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .fruit-arena[data-phase="running"],
+  .fruit-arena.is-danger,
+  .fruit-arena[data-phase="gameover"],
+  .fruit-arena[data-phase="complete"] {
+    box-shadow: none;
+  }
+
+  .fruit-hud {
+    width: calc(100% - 12px);
+    top: 6px;
+    left: 6px;
+    gap: 3px;
+  }
+
+  .fruit-hud span {
+    padding: 5px 6px;
+  }
+
+  .fruit-hud small {
+    font-size: 7px;
+  }
+
+  .fruit-hud strong {
+    min-height: 14px;
+    font-size: 12px;
+  }
+
+  .fruit-next {
+    width: 88px;
+    min-height: 74px;
+    grid-template-columns: 44px minmax(0, 1fr);
+    top: 52px;
+    right: 6px;
+    padding: 4px 5px;
+  }
+
+  .fruit-next canvas {
+    width: 44px;
+    height: 44px;
+  }
+
+  .fruit-next strong {
+    font-size: 8px;
+  }
+
+  .fruit-danger {
+    width: 146px;
+    top: 56px;
+    left: 6px;
+    padding: 5px 6px;
+  }
+
+  .fruit-danger i {
+    height: 7px;
+  }
+
+  .fruit-prompt {
+    min-width: 156px;
+    min-height: 70px;
+    padding: 10px 14px;
+  }
+
+  .fruit-prompt strong {
     font-size: 19px;
   }
 

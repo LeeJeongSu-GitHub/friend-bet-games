@@ -1,8 +1,10 @@
-const CACHE_NAME = "friend-bet-games-v22";
+const CACHE_NAME = "friend-bet-games-v23";
 const APP_FILES = [
   "./",
   "./index.html",
   "./styles.css",
+  "./vendor/matter-js/matter.min.js",
+  "./fruit-logic.js",
   "./stack-logic.js",
   "./app.js",
   "./manifest.webmanifest",

@@ -20,6 +20,13 @@ const STACK_BLOCK_HEIGHT = 58;
 const STACK_BASE_Y = 760;
 const STACK_PERFECT_TOLERANCE = 7;
 const STACK_COLORS = ["#ff786e", "#ffd45b", "#5fc7bb", "#6f8ee8", "#ef9f53"];
+const FRUIT_WIDTH = 720;
+const FRUIT_HEIGHT = 900;
+const FRUIT_DROP_Y = 275;
+const FRUIT_DANGER_Y = 370;
+const FRUIT_DROP_COOLDOWN = 460;
+const FRUIT_DANGER_DURATION = 1800;
+const FRUIT_TIERS = FruitGameLogic.tiers;
 const DEFAULT_PARTICIPANTS = ["민지", "준호", "서연", "태윤"];
 const DEFAULT_OPTIONS = ["한식", "분식", "중식", "일식", "치킨", "피자"];
 const DEFAULT_MISSIONS = [
@@ -70,6 +77,7 @@ const GAME_LABELS = {
   tap: "10초 연타",
   runner: "간식 재료 러너",
   stack: "아슬아슬 탑 쌓기",
+  fruit: "몽글 과일 합치기",
 };
 
 const elements = {
@@ -136,6 +144,7 @@ const elements = {
     tap: document.querySelector("#tapGame"),
     runner: document.querySelector("#runnerGame"),
     stack: document.querySelector("#stackGame"),
+    fruit: document.querySelector("#fruitGame"),
   },
   wheelCanvas: document.querySelector("#wheelCanvas"),
   wheelStatus: document.querySelector("#wheelStatus"),
@@ -272,6 +281,18 @@ const elements = {
   stackPrompt: document.querySelector("#stackPrompt"),
   stackReset: document.querySelector("#stackReset"),
   stackStart: document.querySelector("#stackStart"),
+  fruitStatus: document.querySelector("#fruitStatus"),
+  fruitArena: document.querySelector("#fruitArena"),
+  fruitCanvas: document.querySelector("#fruitCanvas"),
+  fruitScore: document.querySelector("#fruitScore"),
+  fruitBest: document.querySelector("#fruitBest"),
+  fruitTop: document.querySelector("#fruitTop"),
+  fruitDanger: document.querySelector("#fruitDanger"),
+  fruitPrompt: document.querySelector("#fruitPrompt"),
+  fruitNextCanvas: document.querySelector("#fruitNextCanvas"),
+  fruitNextName: document.querySelector("#fruitNextName"),
+  fruitReset: document.querySelector("#fruitReset"),
+  fruitStart: document.querySelector("#fruitStart"),
   resultDialog: document.querySelector("#resultDialog"),
   closeResult: document.querySelector("#closeResult"),
   resultGameLabel: document.querySelector("#resultGameLabel"),
@@ -309,6 +330,8 @@ const state = {
   runnerBest: savedState.runnerBest,
   runnerBestDistance: savedState.runnerBestDistance,
   stackBest: savedState.stackBest,
+  fruitBest: savedState.fruitBest,
+  fruitBestTier: savedState.fruitBestTier,
   currentGame: "wheel",
   currentMode: "together",
   currentCategory: "quick",
@@ -412,6 +435,22 @@ let stackComboValue = 0;
 let stackPeakCombo = 0;
 let stackCamera = 0;
 let stackFeedback = null;
+let fruitPhase = "idle";
+let fruitEngine = null;
+let fruitAnimationFrame = null;
+let fruitLastFrame = 0;
+let fruitBodies = [];
+let fruitMergeQueue = [];
+let fruitEffects = [];
+let fruitScoreValue = 0;
+let fruitHighestTier = 0;
+let fruitCurrentTier = 0;
+let fruitNextTier = 0;
+let fruitAimX = FRUIT_WIDTH / 2;
+let fruitCanDropAt = 0;
+let fruitDropSequence = 0;
+let fruitDangerValue = 0;
+let fruitCompletionTimer = null;
 let resultRevealTimer = null;
 let toastTimer = null;
 
@@ -530,6 +569,12 @@ function loadState() {
     const stackBest = Math.round(
       readOptionalRecord(parsed?.stackBest, 10000) || 0,
     );
+    const fruitBest = Math.round(
+      readOptionalRecord(parsed?.fruitBest, 999999999) || 0,
+    );
+    const fruitBestTier = Math.round(
+      readOptionalRecord(parsed?.fruitBestTier, FRUIT_TIERS.length - 1) || 0,
+    );
 
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
@@ -549,6 +594,8 @@ function loadState() {
       runnerBest,
       runnerBestDistance,
       stackBest,
+      fruitBest,
+      fruitBestTier,
       hasStoredState,
     };
   } catch {
@@ -570,6 +617,8 @@ function loadState() {
       runnerBest: 0,
       runnerBestDistance: 0,
       stackBest: 0,
+      fruitBest: 0,
+      fruitBestTier: 0,
       hasStoredState: false,
     };
   }
@@ -597,6 +646,8 @@ function saveState() {
         runnerBest: state.runnerBest,
         runnerBestDistance: state.runnerBestDistance,
         stackBest: state.stackBest,
+        fruitBest: state.fruitBest,
+        fruitBestTier: state.fruitBestTier,
       }),
     );
   } catch {
@@ -1245,6 +1296,7 @@ function selectGame(game) {
   const enteringTap = changingGame && game === "tap";
   const enteringRunner = changingGame && game === "runner";
   const enteringStack = changingGame && game === "stack";
+  const enteringFruit = changingGame && game === "fruit";
   window.clearTimeout(resultRevealTimer);
   if (state.currentGame === "bomb" && game !== "bomb") resetBomb();
   if (state.currentGame === "finger" && game !== "finger") resetFinger();
@@ -1260,6 +1312,7 @@ function selectGame(game) {
   if (state.currentGame === "tap" && game !== "tap") resetTap();
   if (state.currentGame === "runner" && game !== "runner") resetRunner();
   if (state.currentGame === "stack" && game !== "stack") resetStack();
+  if (state.currentGame === "fruit" && game !== "fruit") resetFruit();
   state.currentGame = game;
 
   elements.gameTabs.forEach((tab) => {
@@ -1285,6 +1338,7 @@ function selectGame(game) {
   if (enteringTap) resetTap();
   if (enteringRunner) resetRunner();
   if (enteringStack) resetStack();
+  if (enteringFruit) resetFruit();
 
   const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
   activeTab?.scrollIntoView({
@@ -5151,6 +5205,752 @@ function clearStackBest() {
   showToast("탑 쌓기 최고 기록을 초기화했어요.");
 }
 
+function setFruitPrompt(title, detail) {
+  elements.fruitPrompt.querySelector("strong").textContent = title;
+  elements.fruitPrompt.querySelector("span").textContent = detail;
+}
+
+function getFruitDropTier() {
+  return FruitGameLogic.pickDropTier(Math.random());
+}
+
+function renderFruitDanger() {
+  elements.fruitDanger.style.width =
+    Math.min(100, Math.max(0, fruitDangerValue * 100)) + "%";
+  elements.fruitArena.classList.toggle(
+    "is-danger",
+    fruitDangerValue > 0.05,
+  );
+}
+
+function renderFruitHud() {
+  elements.fruitScore.textContent = fruitScoreValue.toLocaleString();
+  elements.fruitBest.textContent = state.fruitBest.toLocaleString();
+  elements.fruitTop.textContent = FRUIT_TIERS[fruitHighestTier].name;
+  renderFruitDanger();
+  elements.fruitReset.disabled =
+    (state.fruitBest <= 0 && state.fruitBestTier <= 0) ||
+    ["running", "celebrating"].includes(fruitPhase);
+  drawFruitNextPreview();
+}
+
+function drawFruitLeaf(context, radius, color = "#4f9d70") {
+  context.fillStyle = color;
+  context.beginPath();
+  context.ellipse(
+    radius * 0.18,
+    -radius * 0.82,
+    radius * 0.3,
+    radius * 0.14,
+    -0.5,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = Math.max(2, radius * 0.045);
+  context.stroke();
+}
+
+function drawFruitFace(context, radius, tier) {
+  const eyeY = radius * 0.08;
+  const eyeGap = radius * 0.24;
+  const eyeRadius = Math.max(2.4, radius * 0.045);
+  context.fillStyle = "#17191d";
+  context.beginPath();
+  context.arc(-eyeGap, eyeY, eyeRadius, 0, Math.PI * 2);
+  context.arc(eyeGap, eyeY, eyeRadius, 0, Math.PI * 2);
+  context.fill();
+
+  context.strokeStyle = "#17191d";
+  context.lineWidth = Math.max(2, radius * 0.042);
+  context.beginPath();
+  if (tier === FRUIT_TIERS.length - 1) {
+    context.arc(0, radius * 0.11, radius * 0.18, 0, Math.PI);
+  } else {
+    context.arc(0, radius * 0.13, radius * 0.16, 0.12 * Math.PI, 0.88 * Math.PI);
+  }
+  context.stroke();
+
+  if (radius >= 34) {
+    context.fillStyle = "rgba(255, 255, 255, 0.48)";
+    context.beginPath();
+    context.ellipse(
+      -radius * 0.42,
+      radius * 0.2,
+      radius * 0.1,
+      radius * 0.055,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    context.ellipse(
+      radius * 0.42,
+      radius * 0.2,
+      radius * 0.1,
+      radius * 0.055,
+      0,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+}
+
+function drawFruitIllustration(
+  context,
+  x,
+  y,
+  radius,
+  tier,
+  angle = 0,
+  alpha = 1,
+) {
+  const fruit = FRUIT_TIERS[tier];
+  context.save();
+  context.globalAlpha = alpha;
+  context.translate(x, y);
+  context.rotate(angle);
+
+  context.fillStyle = "rgba(23, 25, 29, 0.1)";
+  context.beginPath();
+  context.ellipse(0, radius * 0.74, radius * 0.7, radius * 0.2, 0, 0, Math.PI * 2);
+  context.fill();
+
+  context.fillStyle = fruit.color;
+  context.strokeStyle = "#17191d";
+  context.lineWidth = Math.max(3, radius * 0.065);
+  context.beginPath();
+  context.arc(0, 0, radius * 0.96, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  context.fillStyle = "rgba(255, 255, 255, 0.28)";
+  context.beginPath();
+  context.ellipse(
+    -radius * 0.3,
+    -radius * 0.3,
+    radius * 0.18,
+    radius * 0.29,
+    0.6,
+    0,
+    Math.PI * 2,
+  );
+  context.fill();
+
+  context.save();
+  context.beginPath();
+  context.arc(0, 0, radius * 0.91, 0, Math.PI * 2);
+  context.clip();
+
+  if (tier === 2) {
+    context.fillStyle = "#ffe49a";
+    [
+      [-0.42, -0.12],
+      [0.36, -0.2],
+      [-0.22, 0.34],
+      [0.34, 0.28],
+      [0, -0.42],
+    ].forEach(([seedX, seedY]) => {
+      context.beginPath();
+      context.ellipse(
+        radius * seedX,
+        radius * seedY,
+        radius * 0.055,
+        radius * 0.1,
+        seedX,
+        0,
+        Math.PI * 2,
+      );
+      context.fill();
+    });
+  } else if (tier === 5) {
+    context.strokeStyle = "rgba(174, 71, 86, 0.48)";
+    context.lineWidth = Math.max(2, radius * 0.035);
+    context.beginPath();
+    context.arc(-radius * 0.1, 0, radius * 0.44, -0.85, 0.85);
+    context.stroke();
+  } else if (tier === 6) {
+    context.strokeStyle = "rgba(72, 120, 62, 0.46)";
+    context.lineWidth = Math.max(2, radius * 0.035);
+    [-0.42, 0, 0.42].forEach((offset) => {
+      context.beginPath();
+      context.moveTo(-radius, radius * offset);
+      context.lineTo(radius, -radius * offset);
+      context.stroke();
+      context.beginPath();
+      context.moveTo(-radius, -radius * offset);
+      context.lineTo(radius, radius * offset);
+      context.stroke();
+    });
+  } else if (tier === 7) {
+    context.strokeStyle = "rgba(34, 105, 65, 0.62)";
+    context.lineWidth = Math.max(4, radius * 0.065);
+    [-0.55, -0.18, 0.18, 0.55].forEach((offset) => {
+      context.beginPath();
+      context.arc(radius * offset, 0, radius * 0.58, -1.2, 1.2);
+      context.stroke();
+    });
+  } else if (tier === 8) {
+    context.fillStyle = "rgba(255, 255, 255, 0.34)";
+    for (let ray = 0; ray < 8; ray += 1) {
+      context.save();
+      context.rotate((ray * Math.PI) / 4);
+      context.fillRect(-radius * 0.035, -radius * 0.82, radius * 0.07, radius * 0.28);
+      context.restore();
+    }
+  }
+  context.restore();
+
+  if ([1, 3, 4, 5, 6, 7].includes(tier)) {
+    context.strokeStyle = "#654a35";
+    context.lineWidth = Math.max(2, radius * 0.05);
+    context.beginPath();
+    context.moveTo(0, -radius * 0.74);
+    context.quadraticCurveTo(
+      radius * 0.02,
+      -radius * 1.05,
+      radius * 0.25,
+      -radius * 1.02,
+    );
+    context.stroke();
+    drawFruitLeaf(context, radius);
+  } else if (tier === 0) {
+    context.fillStyle = "#8da3e8";
+    context.beginPath();
+    for (let point = 0; point < 10; point += 1) {
+      const pointRadius = point % 2 === 0 ? radius * 0.32 : radius * 0.14;
+      const pointAngle = -Math.PI / 2 + (point * Math.PI) / 5;
+      const pointX = Math.cos(pointAngle) * pointRadius;
+      const pointY = -radius * 0.72 + Math.sin(pointAngle) * pointRadius;
+      if (point === 0) context.moveTo(pointX, pointY);
+      else context.lineTo(pointX, pointY);
+    }
+    context.closePath();
+    context.fill();
+  } else if (tier === 2) {
+    drawFruitLeaf(context, radius);
+  } else if (tier === 8) {
+    context.fillStyle = "#ffd45b";
+    context.strokeStyle = "#17191d";
+    context.lineWidth = Math.max(3, radius * 0.05);
+    context.beginPath();
+    context.moveTo(-radius * 0.55, -radius * 0.62);
+    context.lineTo(-radius * 0.46, -radius * 1.02);
+    context.lineTo(-radius * 0.12, -radius * 0.78);
+    context.lineTo(0, -radius * 1.12);
+    context.lineTo(radius * 0.18, -radius * 0.78);
+    context.lineTo(radius * 0.52, -radius * 1.02);
+    context.lineTo(radius * 0.55, -radius * 0.62);
+    context.closePath();
+    context.fill();
+    context.stroke();
+  }
+
+  drawFruitFace(context, radius, tier);
+  context.restore();
+}
+
+function drawFruitNextPreview() {
+  const context = elements.fruitNextCanvas.getContext("2d");
+  context.clearRect(0, 0, 100, 100);
+  const tier = FRUIT_TIERS[fruitNextTier];
+  const radius = Math.min(33, 18 + tier.radius * 0.38);
+  drawFruitIllustration(context, 50, 54, radius, fruitNextTier);
+  elements.fruitNextName.textContent = tier.name;
+}
+
+function createFruitEngine() {
+  fruitEngine = Matter.Engine.create({ enableSleeping: true });
+  fruitEngine.gravity.y = 1.05;
+  fruitEngine.gravity.scale = 0.001;
+  fruitEngine.positionIterations = 9;
+  fruitEngine.velocityIterations = 7;
+  fruitEngine.constraintIterations = 3;
+
+  const staticOptions = {
+    isStatic: true,
+    restitution: 0.03,
+    friction: 0.45,
+    label: "fruit-wall",
+  };
+  const walls = [
+    Matter.Bodies.rectangle(-12, FRUIT_HEIGHT / 2, 64, FRUIT_HEIGHT * 2, staticOptions),
+    Matter.Bodies.rectangle(
+      FRUIT_WIDTH + 12,
+      FRUIT_HEIGHT / 2,
+      64,
+      FRUIT_HEIGHT * 2,
+      staticOptions,
+    ),
+    Matter.Bodies.rectangle(
+      FRUIT_WIDTH / 2,
+      FRUIT_HEIGHT + 8,
+      FRUIT_WIDTH * 2,
+      70,
+      staticOptions,
+    ),
+  ];
+  Matter.Composite.add(fruitEngine.world, walls);
+  Matter.Events.on(fruitEngine, "collisionStart", queueFruitMerges);
+}
+
+function createFruitBody(tier, x, y) {
+  const fruit = FRUIT_TIERS[tier];
+  const safeX = Math.min(
+    FRUIT_WIDTH - fruit.radius - 22,
+    Math.max(fruit.radius + 22, x),
+  );
+  const body = Matter.Bodies.circle(safeX, y, fruit.radius, {
+    label: `fruit-${tier}`,
+    restitution: 0.06,
+    friction: 0.16,
+    frictionStatic: 0.52,
+    frictionAir: 0.003,
+    density: 0.0012,
+    slop: 0.025,
+  });
+  body.plugin.gameType = "fruit";
+  body.plugin.fruitTier = tier;
+  body.plugin.createdAt = performance.now();
+  body.plugin.dangerMs = 0;
+  body.plugin.merging = false;
+  fruitBodies.push(body);
+  Matter.Composite.add(fruitEngine.world, body);
+  return body;
+}
+
+function queueFruitMerges(event) {
+  if (fruitPhase !== "running") return;
+  event.pairs.forEach((pair) => {
+    const first = pair.bodyA;
+    const second = pair.bodyB;
+    if (
+      first.plugin?.gameType !== "fruit" ||
+      second.plugin?.gameType !== "fruit" ||
+      first.plugin.merging ||
+      second.plugin.merging
+    ) {
+      return;
+    }
+    const result = FruitGameLogic.getMergeResult(
+      first.plugin.fruitTier,
+      second.plugin.fruitTier,
+    );
+    if (!result) return;
+    first.plugin.merging = true;
+    second.plugin.merging = true;
+    fruitMergeQueue.push({ first, second, result });
+  });
+}
+
+function addFruitMergeEffect(x, y, tier) {
+  fruitEffects.push({
+    x,
+    y,
+    tier,
+    color: FRUIT_TIERS[tier].color,
+    remaining: 760,
+    duration: 760,
+  });
+}
+
+function processFruitMerges() {
+  while (fruitMergeQueue.length) {
+    const merge = fruitMergeQueue.shift();
+    if (
+      !fruitBodies.includes(merge.first) ||
+      !fruitBodies.includes(merge.second)
+    ) {
+      continue;
+    }
+
+    const x = (merge.first.position.x + merge.second.position.x) / 2;
+    const y = (merge.first.position.y + merge.second.position.y) / 2;
+    const velocity = {
+      x: (merge.first.velocity.x + merge.second.velocity.x) / 2,
+      y: (merge.first.velocity.y + merge.second.velocity.y) / 2 - 1.2,
+    };
+    Matter.Composite.remove(fruitEngine.world, merge.first);
+    Matter.Composite.remove(fruitEngine.world, merge.second);
+    fruitBodies = fruitBodies.filter(
+      (body) => body !== merge.first && body !== merge.second,
+    );
+
+    const merged = createFruitBody(merge.result.nextTier, x, y);
+    Matter.Body.setVelocity(merged, velocity);
+    Matter.Body.setAngularVelocity(
+      merged,
+      (merge.first.angularVelocity + merge.second.angularVelocity) / 2,
+    );
+    fruitScoreValue += merge.result.points;
+    fruitHighestTier = Math.max(fruitHighestTier, merge.result.nextTier);
+    state.fruitBestTier = Math.max(state.fruitBestTier, fruitHighestTier);
+    addFruitMergeEffect(x, y, merge.result.nextTier);
+    elements.fruitStatus.textContent =
+      `${FRUIT_TIERS[merge.result.nextTier].name} 완성! ` +
+      `현재 ${fruitScoreValue.toLocaleString()}점`;
+    renderFruitHud();
+    if (navigator.vibrate) navigator.vibrate(merge.result.complete ? [35, 25, 80] : 10);
+
+    if (merge.result.complete && fruitPhase === "running") {
+      fruitPhase = "celebrating";
+      elements.fruitArena.dataset.phase = "complete";
+      elements.fruitStatus.textContent =
+        "과일 왕관 완성! 마지막 합체에 성공했어요.";
+      setFruitPrompt("COMPLETE!", "과일 왕관을 완성했어요");
+      elements.fruitStart.disabled = true;
+      window.clearTimeout(fruitCompletionTimer);
+      fruitCompletionTimer = window.setTimeout(() => finishFruit(true), 900);
+      fruitMergeQueue.length = 0;
+      break;
+    }
+  }
+}
+
+function updateFruitDanger(delta, now) {
+  let maximumDanger = 0;
+  fruitBodies.forEach((body) => {
+    const age = now - body.plugin.createdAt;
+    const overLine =
+      age > 1100 &&
+      !body.plugin.merging &&
+      body.bounds.min.y < FRUIT_DANGER_Y;
+    if (overLine) {
+      body.plugin.dangerMs += delta * 1000;
+    } else {
+      body.plugin.dangerMs = Math.max(
+        0,
+        body.plugin.dangerMs - delta * 1450,
+      );
+    }
+    maximumDanger = Math.max(maximumDanger, body.plugin.dangerMs);
+  });
+  fruitDangerValue = maximumDanger / FRUIT_DANGER_DURATION;
+  if (
+    fruitPhase === "running" &&
+    maximumDanger >= FRUIT_DANGER_DURATION
+  ) {
+    finishFruit(false);
+  }
+}
+
+function updateFruitEffects(delta) {
+  fruitEffects.forEach((effect) => {
+    effect.remaining -= delta * 1000;
+  });
+  fruitEffects = fruitEffects.filter((effect) => effect.remaining > 0);
+}
+
+function drawFruitMergeEffect(context, effect) {
+  const progress = 1 - effect.remaining / effect.duration;
+  const alpha = Math.min(1, effect.remaining / 240);
+  const radius = FRUIT_TIERS[effect.tier].radius * (0.9 + progress * 0.65);
+  context.save();
+  context.globalAlpha = alpha;
+  context.strokeStyle = effect.color;
+  context.lineWidth = 7 - progress * 4;
+  context.beginPath();
+  context.arc(effect.x, effect.y, radius, 0, Math.PI * 2);
+  context.stroke();
+  context.fillStyle = "#fff";
+  for (let spark = 0; spark < 8; spark += 1) {
+    const angle = (spark * Math.PI) / 4;
+    const distance = radius + 16 + progress * 22;
+    context.beginPath();
+    context.arc(
+      effect.x + Math.cos(angle) * distance,
+      effect.y + Math.sin(angle) * distance,
+      4,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+  context.restore();
+}
+
+function drawFruitScene(now = performance.now()) {
+  const context = elements.fruitCanvas.getContext("2d");
+  context.clearRect(0, 0, FRUIT_WIDTH, FRUIT_HEIGHT);
+  context.fillStyle = "#f5fbff";
+  context.fillRect(0, 0, FRUIT_WIDTH, FRUIT_HEIGHT);
+
+  context.fillStyle = "#fff2c9";
+  context.beginPath();
+  context.arc(628, 128, 50, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = "#e4f2f4";
+  context.fillRect(0, 660, FRUIT_WIDTH, 240);
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(22, 0, FRUIT_WIDTH - 44, FRUIT_HEIGHT - 24);
+  context.fillStyle = "#d8e4e8";
+  context.fillRect(0, 0, 22, FRUIT_HEIGHT);
+  context.fillRect(FRUIT_WIDTH - 22, 0, 22, FRUIT_HEIGHT);
+  context.fillStyle = "#83c79a";
+  context.fillRect(0, FRUIT_HEIGHT - 24, FRUIT_WIDTH, 24);
+  context.fillStyle = "#4f9d70";
+  context.fillRect(0, FRUIT_HEIGHT - 28, FRUIT_WIDTH, 7);
+
+  context.save();
+  context.setLineDash([14, 10]);
+  context.strokeStyle =
+    fruitDangerValue > 0.05 ? "#e45d5d" : "rgba(215, 93, 85, 0.55)";
+  context.lineWidth = fruitDangerValue > 0.05 ? 5 : 3;
+  context.beginPath();
+  context.moveTo(26, FRUIT_DANGER_Y);
+  context.lineTo(FRUIT_WIDTH - 26, FRUIT_DANGER_Y);
+  context.stroke();
+  context.restore();
+
+  context.fillStyle = "#b65353";
+  context.font = "900 17px Arial, sans-serif";
+  context.textAlign = "left";
+  context.fillText("DANGER", 36, FRUIT_DANGER_Y - 12);
+
+  if (fruitPhase === "running") {
+    const current = FRUIT_TIERS[fruitCurrentTier];
+    const ready = now >= fruitCanDropAt;
+    context.save();
+    context.setLineDash([7, 9]);
+    context.strokeStyle = ready
+      ? "rgba(70, 118, 232, 0.48)"
+      : "rgba(135, 142, 153, 0.35)";
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(fruitAimX, FRUIT_DROP_Y + current.radius);
+    context.lineTo(fruitAimX, FRUIT_DANGER_Y - 8);
+    context.stroke();
+    context.restore();
+    drawFruitIllustration(
+      context,
+      fruitAimX,
+      FRUIT_DROP_Y,
+      current.radius,
+      fruitCurrentTier,
+      0,
+      ready ? 0.82 : 0.42,
+    );
+  }
+
+  fruitBodies.forEach((body) => {
+    drawFruitIllustration(
+      context,
+      body.position.x,
+      body.position.y,
+      FRUIT_TIERS[body.plugin.fruitTier].radius,
+      body.plugin.fruitTier,
+      body.angle,
+    );
+  });
+  fruitEffects.forEach((effect) => drawFruitMergeEffect(context, effect));
+}
+
+function resetFruit() {
+  window.clearTimeout(resultRevealTimer);
+  window.clearTimeout(fruitCompletionTimer);
+  fruitCompletionTimer = null;
+  if (fruitAnimationFrame !== null) {
+    cancelAnimationFrame(fruitAnimationFrame);
+  }
+  fruitAnimationFrame = null;
+  fruitLastFrame = 0;
+  if (fruitEngine) {
+    Matter.Events.off(fruitEngine);
+    Matter.Composite.clear(fruitEngine.world, false, true);
+    Matter.Engine.clear(fruitEngine);
+  }
+  fruitEngine = null;
+  fruitPhase = "idle";
+  fruitBodies = [];
+  fruitMergeQueue = [];
+  fruitEffects = [];
+  fruitScoreValue = 0;
+  fruitHighestTier = 0;
+  fruitCurrentTier = getFruitDropTier();
+  fruitNextTier = getFruitDropTier();
+  fruitAimX = FRUIT_WIDTH / 2;
+  fruitCanDropAt = 0;
+  fruitDropSequence = 0;
+  fruitDangerValue = 0;
+  createFruitEngine();
+  elements.fruitArena.dataset.phase = "idle";
+  elements.fruitArena.classList.remove("is-danger");
+  elements.fruitStart.disabled = false;
+  elements.fruitStart.textContent = "합치기 시작";
+  elements.fruitStatus.textContent =
+    "떨어뜨릴 위치를 누르고 같은 과일끼리 합쳐 보세요.";
+  setFruitPrompt("READY", "누른 위치로 과일이 떨어져요");
+  renderFruitHud();
+  drawFruitScene();
+}
+
+function finishFruit(completed) {
+  if (!["running", "celebrating"].includes(fruitPhase)) return;
+  window.clearTimeout(fruitCompletionTimer);
+  fruitCompletionTimer = null;
+  fruitPhase = completed ? "complete" : "gameover";
+  elements.fruitArena.dataset.phase = fruitPhase;
+  const newBest = fruitScoreValue > state.fruitBest;
+  if (newBest) state.fruitBest = fruitScoreValue;
+  state.fruitBestTier = Math.max(state.fruitBestTier, fruitHighestTier);
+  saveState();
+  renderFruitHud();
+  elements.fruitStart.disabled = false;
+  elements.fruitStart.textContent = "다시 합치기";
+  elements.fruitStatus.textContent = completed
+    ? `과일 왕관 완성 · ${fruitScoreValue.toLocaleString()}점`
+    : newBest
+      ? `${fruitScoreValue.toLocaleString()}점 · 새로운 최고 기록이에요!`
+      : `${fruitScoreValue.toLocaleString()}점 · 최고 ${state.fruitBest.toLocaleString()}점`;
+  setFruitPrompt(
+    completed ? "COMPLETE!" : newBest ? "NEW BEST" : "GAME OVER",
+    completed
+      ? "마지막 과일까지 합쳤어요"
+      : `${FRUIT_TIERS[fruitHighestTier].name} · ${fruitScoreValue.toLocaleString()}점`,
+  );
+  drawFruitScene();
+  if (navigator.vibrate) {
+    navigator.vibrate(completed ? [70, 35, 70, 35, 130] : [80, 45, 110]);
+  }
+
+  window.clearTimeout(resultRevealTimer);
+  resultRevealTimer = window.setTimeout(() => {
+    showResult({
+      game: "fruit",
+      lead: completed
+        ? "과일 왕관을 완성했어요!"
+        : newBest
+          ? "새로운 최고 기록"
+          : "이번 합치기 점수",
+      displayText: completed
+        ? "과일 왕관 완성!"
+        : `${fruitScoreValue.toLocaleString()}점`,
+      stakeLabel: "최고 과일",
+      stake:
+        `${FRUIT_TIERS[fruitHighestTier].name} · ` +
+        `최고 ${state.fruitBest.toLocaleString()}점`,
+      copyText:
+        `딱! 정해 과일 합치기: ${completed ? "과일 왕관 완성 · " : ""}` +
+        `${fruitScoreValue.toLocaleString()}점 · ` +
+        `최고 과일 ${FRUIT_TIERS[fruitHighestTier].name}`,
+      list: false,
+      playMode: "solo",
+      skipParty: true,
+      allowMission: false,
+    });
+  }, 650);
+}
+
+function updateFruitGame(delta, now) {
+  if (!fruitEngine) return;
+  Matter.Engine.update(fruitEngine, delta * 1000);
+  processFruitMerges();
+  if (fruitPhase === "running") updateFruitDanger(delta, now);
+  updateFruitEffects(delta);
+  renderFruitDanger();
+}
+
+function runFruitFrame(now) {
+  if (
+    !["running", "celebrating"].includes(fruitPhase) &&
+    fruitEffects.length === 0
+  ) {
+    fruitAnimationFrame = null;
+    return;
+  }
+  if (!fruitLastFrame) fruitLastFrame = now;
+  const delta = Math.min((now - fruitLastFrame) / 1000, 0.034);
+  fruitLastFrame = now;
+  updateFruitGame(delta, now);
+  drawFruitScene(now);
+
+  if (
+    ["running", "celebrating"].includes(fruitPhase) ||
+    fruitEffects.length > 0
+  ) {
+    fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
+  } else {
+    fruitAnimationFrame = null;
+  }
+}
+
+function dropFruit() {
+  if (fruitPhase !== "running" || !fruitEngine) return;
+  const now = performance.now();
+  if (now < fruitCanDropAt) return;
+  const body = createFruitBody(
+    fruitCurrentTier,
+    fruitAimX,
+    FRUIT_DROP_Y,
+  );
+  Matter.Body.setVelocity(body, { x: 0, y: 0.6 });
+  Matter.Body.setAngularVelocity(
+    body,
+    (fruitDropSequence % 2 === 0 ? 1 : -1) * 0.012,
+  );
+  fruitDropSequence += 1;
+  fruitCurrentTier = fruitNextTier;
+  fruitNextTier = getFruitDropTier();
+  const currentRadius = FRUIT_TIERS[fruitCurrentTier].radius;
+  fruitAimX = Math.min(
+    FRUIT_WIDTH - currentRadius - 24,
+    Math.max(currentRadius + 24, fruitAimX),
+  );
+  fruitCanDropAt = now + FRUIT_DROP_COOLDOWN;
+  elements.fruitStatus.textContent =
+    `${FRUIT_TIERS[body.plugin.fruitTier].name}을 떨어뜨렸어요. ` +
+    `다음은 ${FRUIT_TIERS[fruitCurrentTier].name}!`;
+  renderFruitHud();
+}
+
+function setFruitAimFromPointer(event) {
+  const rect = elements.fruitCanvas.getBoundingClientRect();
+  const tier = FRUIT_TIERS[fruitCurrentTier];
+  const canvasX = ((event.clientX - rect.left) / rect.width) * FRUIT_WIDTH;
+  fruitAimX = Math.min(
+    FRUIT_WIDTH - tier.radius - 24,
+    Math.max(tier.radius + 24, canvasX),
+  );
+}
+
+function moveFruitAim(amount) {
+  if (fruitPhase !== "running") return;
+  const tier = FRUIT_TIERS[fruitCurrentTier];
+  fruitAimX = Math.min(
+    FRUIT_WIDTH - tier.radius - 24,
+    Math.max(tier.radius + 24, fruitAimX + amount),
+  );
+}
+
+function startFruit() {
+  if (["running", "celebrating"].includes(fruitPhase)) return;
+  resetFruit();
+  fruitPhase = "running";
+  fruitLastFrame = 0;
+  fruitCanDropAt = performance.now();
+  elements.fruitArena.dataset.phase = "running";
+  elements.fruitStart.disabled = true;
+  elements.fruitStart.textContent = "합치는 중";
+  elements.fruitReset.disabled = true;
+  elements.fruitStatus.textContent =
+    "원하는 가로 위치를 누르면 과일이 떨어져요.";
+  setFruitPrompt("GO!", "같은 과일끼리 합쳐 보세요");
+  elements.fruitCanvas.focus({ preventScroll: true });
+  fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
+}
+
+function clearFruitBest() {
+  if (["running", "celebrating"].includes(fruitPhase)) return;
+  state.fruitBest = 0;
+  state.fruitBestTier = 0;
+  saveState();
+  renderFruitHud();
+  elements.fruitStatus.textContent = "과일 합치기 최고 기록을 초기화했어요.";
+  showToast("과일 합치기 최고 기록을 초기화했어요.");
+}
+
 function updateGameAvailability() {
   const peopleReady = state.participants.length >= 2;
   const optionsReady = state.options.length >= 2;
@@ -5321,6 +6121,7 @@ function playAgain() {
     tap: elements.tapStart,
     runner: elements.runnerStart,
     stack: elements.stackStart,
+    fruit: elements.fruitStart,
   };
 
   if (game === "wheel") {
@@ -5365,6 +6166,8 @@ function playAgain() {
     resetRunner();
   } else if (game === "stack") {
     resetStack();
+  } else if (game === "fruit") {
+    resetFruit();
   }
   focusByGame[game]?.focus();
 }
@@ -5653,6 +6456,30 @@ elements.stackCanvas.addEventListener("keydown", (event) => {
 elements.stackCanvas.addEventListener("contextmenu", (event) =>
   event.preventDefault(),
 );
+elements.fruitStart.addEventListener("click", startFruit);
+elements.fruitReset.addEventListener("click", clearFruitBest);
+elements.fruitCanvas.addEventListener("pointermove", (event) => {
+  if (fruitPhase !== "running") return;
+  setFruitAimFromPointer(event);
+});
+elements.fruitCanvas.addEventListener("pointerdown", (event) => {
+  event.preventDefault();
+  setFruitAimFromPointer(event);
+  dropFruit();
+});
+elements.fruitCanvas.addEventListener("keydown", (event) => {
+  if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+    event.preventDefault();
+    moveFruitAim(event.key === "ArrowLeft" ? -34 : 34);
+    return;
+  }
+  if (!["Enter", " "].includes(event.key) || event.repeat) return;
+  event.preventDefault();
+  dropFruit();
+});
+elements.fruitCanvas.addEventListener("contextmenu", (event) =>
+  event.preventDefault(),
+);
 [
   [elements.reactionLeft, 0],
   [elements.reactionRight, 1],
@@ -5701,6 +6528,8 @@ window.addEventListener("beforeunload", () => {
   if (tapAnimationFrame !== null) cancelAnimationFrame(tapAnimationFrame);
   if (runnerAnimationFrame !== null) cancelAnimationFrame(runnerAnimationFrame);
   if (stackAnimationFrame !== null) cancelAnimationFrame(stackAnimationFrame);
+  if (fruitAnimationFrame !== null) cancelAnimationFrame(fruitAnimationFrame);
+  window.clearTimeout(fruitCompletionTimer);
 });
 
 elements.noRepeatToggle.checked = state.noRepeat;
@@ -5715,6 +6544,7 @@ resetDodge();
 resetTap();
 resetRunner();
 resetStack();
+resetFruit();
 renderParticipants();
 updateSeatControls();
 

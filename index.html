@@ -551,6 +551,25 @@
               <small>정확히 맞춰 높이 쌓아요</small>
             </span>
           </button>
+          <button
+            id="fruitTab"
+            class="game-tab"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="fruitGame"
+            data-game="fruit"
+            data-category="mini"
+            data-mode="solo"
+          >
+            <span class="tab-art fruit-art" aria-hidden="true">
+              <i></i><b></b><em></em>
+            </span>
+            <span>
+              <strong>과일 합치기</strong>
+              <small>같은 과일을 크게 합쳐요</small>
+            </span>
+          </button>
         </nav>
 
         <div class="game-stage">
@@ -1257,6 +1276,66 @@
               </p>
             </div>
           </section>
+
+          <section
+            id="fruitGame"
+            class="game-view"
+            role="tabpanel"
+            aria-labelledby="fruitTab"
+            hidden
+          >
+            <div class="game-view-header">
+              <div>
+                <span class="game-kicker">18 · FRUIT MERGE</span>
+                <h3>몽글 과일 합치기</h3>
+              </div>
+              <p id="fruitStatus" class="status-text" aria-live="polite">
+                떨어뜨릴 위치를 누르고 같은 과일끼리 합쳐 보세요.
+              </p>
+            </div>
+            <div class="fruit-stage">
+              <div id="fruitArena" class="fruit-arena" data-phase="idle">
+                <canvas
+                  id="fruitCanvas"
+                  width="720"
+                  height="900"
+                  tabindex="0"
+                  aria-label="위치를 정해 과일을 떨어뜨리고 같은 과일을 합치는 게임 영역"
+                >
+                  같은 과일을 합쳐 과일 왕관을 완성하는 물리 퍼즐입니다.
+                </canvas>
+                <div class="fruit-hud" aria-hidden="true">
+                  <span><small>SCORE</small><strong id="fruitScore">0</strong></span>
+                  <span><small>BEST</small><strong id="fruitBest">0</strong></span>
+                  <span><small>TOP</small><strong id="fruitTop">블루베리</strong></span>
+                </div>
+                <div class="fruit-next" aria-hidden="true">
+                  <small>NEXT</small>
+                  <canvas id="fruitNextCanvas" width="100" height="100"></canvas>
+                  <strong id="fruitNextName">블루베리</strong>
+                </div>
+                <div class="fruit-danger" aria-hidden="true">
+                  <span>위험선</span>
+                  <i><b id="fruitDanger"></b></i>
+                </div>
+                <div id="fruitPrompt" class="fruit-prompt" aria-live="assertive">
+                  <strong>READY</strong>
+                  <span>누른 위치로 과일이 떨어져요</span>
+                </div>
+              </div>
+              <div class="mini-game-actions fruit-actions">
+                <button id="fruitReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="fruitStart" class="primary-action coral" type="button">
+                  합치기 시작
+                </button>
+              </div>
+              <p class="game-note">
+                위험선을 오래 넘으면 실패하고, 수박 두 개를 합치면 과일 왕관 완성!
+              </p>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -1301,6 +1380,8 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+    <script src="./vendor/matter-js/matter.min.js"></script>
+    <script src="./fruit-logic.js"></script>
     <script src="./stack-logic.js"></script>
     <script src="./app.js"></script>
   </body>
