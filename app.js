@@ -6679,9 +6679,15 @@ if (
   "serviceWorker" in navigator &&
   /^https?:$/.test(window.location.protocol)
 ) {
+  let serviceWorkerReloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (serviceWorkerReloading) return;
+    serviceWorkerReloading = true;
+    window.location.reload();
+  });
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=27", { updateViaCache: "none" })
+      .register("./sw.js?v=28", { updateViaCache: "none" })
       .then((registration) => registration.update())
       .catch(() => {
         // Offline support is optional and does not block the games.

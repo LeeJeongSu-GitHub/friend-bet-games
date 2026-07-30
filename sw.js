@@ -1,15 +1,15 @@
-const CACHE_NAME = "friend-bet-games-v27";
+const CACHE_NAME = "friend-bet-games-v28";
 const CACHE_PREFIX = "friend-bet-games-";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=27",
-  "./vendor/matter-js/matter.min.js?v=27",
-  "./fruit-logic.js?v=27",
-  "./stack-logic.js?v=27",
-  "./app.js?v=27",
-  "./manifest.webmanifest?v=27",
-  "./favicon.svg?v=27",
+  "./styles.css?v=28",
+  "./vendor/matter-js/matter.min.js?v=28",
+  "./fruit-logic.js?v=28",
+  "./stack-logic.js?v=28",
+  "./app.js?v=28",
+  "./manifest.webmanifest?v=28",
+  "./favicon.svg?v=28",
 ];
 
 self.addEventListener("install", (event) => {
@@ -37,18 +37,6 @@ self.addEventListener("activate", (event) => {
       );
       await Promise.all(outdatedKeys.map((key) => caches.delete(key)));
       await self.clients.claim();
-
-      if (outdatedKeys.length > 0) {
-        const windows = await self.clients.matchAll({
-          type: "window",
-          includeUncontrolled: true,
-        });
-        await Promise.all(
-          windows
-            .filter((client) => client.url.startsWith(self.registration.scope))
-            .map((client) => client.navigate(client.url)),
-        );
-      }
     })(),
   );
 });
