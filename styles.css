@@ -4290,6 +4290,22 @@ textarea::placeholder {
   width: min(560px, 100%);
 }
 
+.fruit-actions > [hidden] {
+  display: none;
+}
+
+.fruit-drop-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.fruit-drop-action span {
+  font-size: 20px;
+  line-height: 1;
+}
+
 .fruit-stage .game-note {
   margin: 0;
   text-align: center;

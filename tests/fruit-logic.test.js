@@ -4,6 +4,7 @@ const {
   pickDropTier,
   getMergeResult,
   getMergedMotion,
+  isDragGesture,
 } = require("../fruit-logic.js");
 
 assert.equal(tiers.length, 9);
@@ -33,8 +34,8 @@ assert.deepEqual(
     0.05,
   ),
   {
-    velocity: { x: 0.65, y: 0.08 },
-    angularVelocity: 0.01,
+    velocity: { x: 0.22, y: 0.03 },
+    angularVelocity: 0.0025,
   },
 );
 assert.deepEqual(
@@ -45,9 +46,12 @@ assert.deepEqual(
     -0.1,
   ),
   {
-    velocity: { x: -0.65, y: 0.65 },
-    angularVelocity: -0.01,
+    velocity: { x: -0.22, y: 0.22 },
+    angularVelocity: -0.0025,
   },
 );
+assert.equal(isDragGesture(100, 100, 109, 107), false);
+assert.equal(isDragGesture(100, 100, 112, 100), true);
+assert.equal(isDragGesture(100, 100, 108, 109), true);
 
 console.log("fruit merge rule tests passed");

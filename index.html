@@ -1290,7 +1290,7 @@
                 <h3>몽글 과일 합치기</h3>
               </div>
               <p id="fruitStatus" class="status-text" aria-live="polite">
-                톡 누르거나 좌우로 끌고 놓아 과일을 합쳐 보세요.
+                짧게 탭하면 투하되고, 끌면 위치만 이동해요.
               </p>
             </div>
             <div class="fruit-stage">
@@ -1300,7 +1300,7 @@
                   width="720"
                   height="900"
                   tabindex="0"
-                  aria-label="톡 누르거나 좌우로 끌고 놓아 과일을 떨어뜨리는 게임 영역"
+                  aria-label="짧게 탭해 과일을 투하하거나 좌우로 끌어 위치를 정하는 게임 영역"
                 >
                   같은 과일을 합쳐 과일 왕관을 완성하는 물리 퍼즐입니다.
                 </canvas>
@@ -1320,7 +1320,7 @@
                 </div>
                 <div id="fruitPrompt" class="fruit-prompt" aria-live="assertive">
                   <strong>READY</strong>
-                  <span>톡 누르거나 좌우로 끌어 놓으세요</span>
+                  <span>탭 투하 · 드래그 위치 이동</span>
                 </div>
               </div>
               <div class="mini-game-actions fruit-actions">
@@ -1329,6 +1329,16 @@
                 </button>
                 <button id="fruitStart" class="primary-action coral" type="button">
                   합치기 시작
+                </button>
+                <button
+                  id="fruitDrop"
+                  class="primary-action coral fruit-drop-action"
+                  type="button"
+                  aria-label="현재 위치에 과일 떨어뜨리기"
+                  hidden
+                >
+                  <span aria-hidden="true">↓</span>
+                  떨어뜨리기
                 </button>
               </div>
               <p class="game-note">

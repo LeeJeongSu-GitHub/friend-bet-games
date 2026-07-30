@@ -54,14 +54,18 @@
       (firstAngularVelocity + secondAngularVelocity) / 2;
     return {
       velocity: {
-        x: Math.min(0.65, Math.max(-0.65, averageX * 0.28)),
-        y: Math.min(0.65, Math.max(0.08, averageY * 0.18)),
+        x: Math.min(0.22, Math.max(-0.22, averageX * 0.12)),
+        y: Math.min(0.22, Math.max(0.03, averageY * 0.08)),
       },
       angularVelocity: Math.min(
-        0.01,
-        Math.max(-0.01, averageAngular * 0.18),
+        0.0025,
+        Math.max(-0.0025, averageAngular * 0.06),
       ),
     };
+  }
+
+  function isDragGesture(startX, startY, currentX, currentY, threshold = 12) {
+    return Math.hypot(currentX - startX, currentY - startY) >= threshold;
   }
 
   return Object.freeze({
@@ -69,5 +73,6 @@
     pickDropTier,
     getMergeResult,
     getMergedMotion,
+    isDragGesture,
   });
 });
