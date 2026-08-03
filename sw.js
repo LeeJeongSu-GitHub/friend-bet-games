@@ -1,15 +1,15 @@
-const CACHE_NAME = "friend-bet-games-v28";
+const CACHE_NAME = "friend-bet-games-v32";
 const CACHE_PREFIX = "friend-bet-games-";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=28",
-  "./vendor/matter-js/matter.min.js?v=28",
-  "./fruit-logic.js?v=28",
-  "./stack-logic.js?v=28",
-  "./app.js?v=28",
-  "./manifest.webmanifest?v=28",
-  "./favicon.svg?v=28",
+  "./styles.css?v=32",
+  "./vendor/matter-js/matter.min.js?v=32",
+  "./fruit-logic.js?v=32",
+  "./stack-logic.js?v=32",
+  "./app.js?v=32",
+  "./manifest.webmanifest?v=32",
+  "./favicon.svg?v=32",
 ];
 
 self.addEventListener("install", (event) => {

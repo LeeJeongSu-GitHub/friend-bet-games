@@ -15,9 +15,9 @@
       content="같이 하기와 혼자 도전을 골라 빠른 결정, 대결, 장애물 피하기와 간식 재료 러너를 즐겨 보세요."
     />
     <title>딱! 정해 - 룰렛·파티 세션·기록 도전 미니게임</title>
-    <link rel="icon" href="./favicon.svg?v=28" type="image/svg+xml" />
-    <link rel="manifest" href="./manifest.webmanifest?v=28" />
-    <link rel="stylesheet" href="./styles.css?v=28" />
+    <link rel="icon" href="./favicon.svg?v=32" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest?v=32" />
+    <link rel="stylesheet" href="./styles.css?v=32" />
   </head>
   <body>
     <header class="topbar">
@@ -206,14 +206,14 @@
             <span class="mode-symbol" aria-hidden="true">2P</span>
             <span>
               <strong>같이 하기</strong>
-              <small>내기와 대결 13개</small>
+              <small>내기와 대결 <span data-mode-count="together">13</span>개</small>
             </span>
           </button>
           <button type="button" data-play-mode="solo" aria-pressed="false">
             <span class="mode-symbol solo" aria-hidden="true">1P</span>
             <span>
               <strong>혼자 도전</strong>
-              <small>개인 기록 5개</small>
+              <small>개인 기록 <span data-mode-count="solo">7</span>개</small>
             </span>
           </button>
         </div>
@@ -223,13 +223,42 @@
           <span>기록은 현재 기기에 자동 저장돼요.</span>
         </div>
 
+        <section class="quick-launch" aria-labelledby="quick-launch-title">
+          <div class="quick-launch-title">
+            <strong id="quick-launch-title">빠른 시작</strong>
+            <span id="quickLaunchMeta">최근 게임</span>
+          </div>
+          <div id="quickGameList" class="quick-game-list" aria-label="즐겨찾기와 최근 게임"></div>
+          <div class="quick-launch-actions">
+            <button
+              id="favoriteGame"
+              class="quick-icon-command"
+              type="button"
+              aria-label="현재 게임 즐겨찾기 추가"
+              title="즐겨찾기"
+            >
+              <span aria-hidden="true">☆</span>
+            </button>
+            <button id="randomGame" class="quick-random" type="button">랜덤</button>
+            <button
+              id="openGameSettings"
+              class="quick-icon-command"
+              type="button"
+              aria-label="게임 설정 열기"
+              title="게임 설정"
+            >
+              <span aria-hidden="true">⚙</span>
+            </button>
+          </div>
+        </section>
+
         <div id="gameCategoryControl" class="game-category-control" role="group" aria-label="게임 종류">
           <button
             type="button"
             data-game-category="all"
             aria-pressed="false"
           >
-            전체 <span>13</span>
+            전체 <span data-category-count="all">13</span>
           </button>
           <button
             class="is-active"
@@ -237,30 +266,33 @@
             data-game-category="quick"
             aria-pressed="true"
           >
-            빠른 결정 <span>8</span>
+            빠른 결정 <span data-category-count="quick">8</span>
           </button>
           <button type="button" data-game-category="mini" aria-pressed="false">
-            미니 대결 <span>3</span>
+            미니 대결 <span data-category-count="mini">3</span>
           </button>
           <button type="button" data-game-category="party" aria-pressed="false">
-            파티 게임 <span>2</span>
+            파티 게임 <span data-category-count="party">2</span>
           </button>
         </div>
 
-        <section id="partySession" class="party-session" aria-labelledby="party-session-title">
-          <div class="party-session-head">
+        <details id="partySession" class="party-session">
+          <summary class="party-session-summary">
             <div>
               <span class="eyebrow">PARTY SESSION</span>
               <strong id="party-session-title">파티 세션 준비</strong>
             </div>
+            <span class="party-session-hint">3판·5판 연속 게임</span>
+          </summary>
+          <div class="party-session-body">
             <div class="party-session-actions">
               <button class="compact-action" type="button" data-party-rounds="3">3판 시작</button>
               <button class="compact-action" type="button" data-party-rounds="5">5판 시작</button>
               <button id="endPartySession" class="compact-action danger" type="button" hidden>종료</button>
             </div>
+            <div id="partyScoreboard" class="party-scoreboard" aria-label="파티 세션 점수" hidden></div>
           </div>
-          <div id="partyScoreboard" class="party-scoreboard" aria-label="파티 세션 점수" hidden></div>
-        </section>
+        </details>
 
         <nav class="game-tabs" role="tablist" aria-label="게임 선택">
           <button
@@ -589,15 +621,15 @@
               </p>
             </div>
             <div class="wheel-area">
+              <button id="spinButton" class="primary-action coral" type="button">
+                룰렛 돌리기
+              </button>
               <div class="wheel-wrap">
                 <div class="wheel-pointer" aria-hidden="true"></div>
                 <canvas id="wheelCanvas" width="720" height="720">
                   참가자 중 한 명을 무작위로 선택하는 룰렛입니다.
                 </canvas>
               </div>
-              <button id="spinButton" class="primary-action coral" type="button">
-                룰렛 돌리기
-              </button>
             </div>
           </section>
 
@@ -618,15 +650,15 @@
               </p>
             </div>
             <div class="bomb-stage">
+              <button id="bombButton" class="primary-action teal" type="button">
+                폭탄 시작
+              </button>
               <div id="bombVisual" class="bomb-visual" aria-hidden="true">
                 <span class="bomb-fuse"></span>
                 <span class="bomb-spark">✦</span>
                 <span class="bomb-body"><span>?</span></span>
               </div>
               <div id="bombHolder" class="bomb-holder">누구에게서 멈출까요?</div>
-              <button id="bombButton" class="primary-action teal" type="button">
-                폭탄 시작
-              </button>
               <p class="game-note">남은 시간은 아무도 알 수 없어요.</p>
             </div>
           </section>
@@ -648,10 +680,10 @@
               </p>
             </div>
             <div class="card-stage">
-              <div id="cardGrid" class="card-grid" aria-label="복불복 카드"></div>
               <button id="shuffleButton" class="secondary-action" type="button">
                 카드 다시 섞기
               </button>
+              <div id="cardGrid" class="card-grid" aria-label="복불복 카드"></div>
             </div>
           </section>
 
@@ -672,10 +704,10 @@
               </p>
             </div>
             <div class="order-stage">
-              <ol id="orderList" class="order-list" aria-label="정해진 순서"></ol>
               <button id="orderButton" class="primary-action blue" type="button">
                 순서 정하기
               </button>
+              <ol id="orderList" class="order-list" aria-label="정해진 순서"></ol>
             </div>
           </section>
 
@@ -703,10 +735,10 @@
                 <button type="button" data-team-count="3" aria-pressed="false">3팀</button>
                 <button type="button" data-team-count="4" aria-pressed="false">4팀</button>
               </div>
-              <div id="teamBoard" class="team-board" aria-label="팀 배정 결과"></div>
               <button id="teamButton" class="primary-action yellow" type="button">
                 팀 나누기
               </button>
+              <div id="teamBoard" class="team-board" aria-label="팀 배정 결과"></div>
             </div>
           </section>
 
@@ -735,10 +767,10 @@
                   <button id="drawPlus" type="button" aria-label="뽑을 인원 늘리기">＋</button>
                 </div>
               </div>
-              <div id="drawTicketBoard" class="draw-ticket-board" aria-label="제비뽑기 명단"></div>
               <button id="drawButton" class="primary-action coral" type="button">
                 제비 뽑기
               </button>
+              <div id="drawTicketBoard" class="draw-ticket-board" aria-label="제비뽑기 명단"></div>
             </div>
           </section>
 
@@ -760,15 +792,15 @@
             </div>
             <div class="ladder-stage">
               <div id="ladderPlayers" class="ladder-player-tabs" aria-label="사다리 참가자"></div>
+              <button id="ladderButton" class="primary-action teal" type="button">
+                사다리 만들기
+              </button>
               <div class="ladder-canvas-wrap">
                 <canvas id="ladderCanvas" width="1080" height="560">
                   참가자와 결과를 연결하는 무작위 사다리입니다.
                 </canvas>
               </div>
               <div id="ladderResult" class="ladder-result" aria-live="polite"></div>
-              <button id="ladderButton" class="primary-action teal" type="button">
-                사다리 만들기
-              </button>
             </div>
           </section>
 
@@ -806,15 +838,15 @@
                   <button class="text-action" type="button" data-option-reset>기본 후보</button>
                 </div>
               </div>
+              <button id="menuButton" class="primary-action yellow" type="button">
+                메뉴 정하기
+              </button>
               <div class="menu-wheel-wrap">
                 <div class="wheel-pointer" aria-hidden="true"></div>
                 <canvas id="menuWheelCanvas" width="720" height="720">
                   메뉴 후보 중 하나를 무작위로 선택하는 룰렛입니다.
                 </canvas>
               </div>
-              <button id="menuButton" class="primary-action yellow" type="button">
-                메뉴 정하기
-              </button>
             </div>
           </section>
 
@@ -842,10 +874,10 @@
                 </button>
                 <button type="button" data-seat-columns="4" aria-pressed="false">4열</button>
               </div>
-              <div id="seatBoard" class="seat-board" aria-label="좌석 배치 결과"></div>
               <button id="seatButton" class="primary-action blue" type="button">
                 자리 섞기
               </button>
+              <div id="seatBoard" class="seat-board" aria-label="좌석 배치 결과"></div>
             </div>
           </section>
 
@@ -883,15 +915,15 @@
                   <button class="text-action" type="button" data-option-reset>기본 후보</button>
                 </div>
               </div>
+              <button id="tournamentButton" class="primary-action coral" type="button">
+                토너먼트 시작
+              </button>
               <div id="tournamentProgress" class="tournament-progress"></div>
               <div id="tournamentMatch" class="tournament-match" aria-live="polite">
                 <button class="choice-button" type="button" disabled>?</button>
                 <span class="versus" aria-hidden="true">VS</span>
                 <button class="choice-button" type="button" disabled>?</button>
               </div>
-              <button id="tournamentButton" class="primary-action coral" type="button">
-                토너먼트 시작
-              </button>
             </div>
           </section>
 
@@ -912,6 +944,14 @@
               </p>
             </div>
             <div class="finger-stage">
+              <div class="mini-game-actions">
+                <button id="fingerReset" class="secondary-action" type="button">
+                  초기화
+                </button>
+                <button id="fingerFallback" class="primary-action yellow" type="button">
+                  명단에서 뽑기
+                </button>
+              </div>
               <div
                 id="fingerArena"
                 class="finger-arena"
@@ -922,14 +962,6 @@
                   <span>FINGERS</span>
                 </div>
                 <output id="fingerCount" class="finger-count">0 / 5</output>
-              </div>
-              <div class="mini-game-actions">
-                <button id="fingerReset" class="secondary-action" type="button">
-                  초기화
-                </button>
-                <button id="fingerFallback" class="primary-action yellow" type="button">
-                  명단에서 뽑기
-                </button>
               </div>
             </div>
           </section>
@@ -951,6 +983,14 @@
               </p>
             </div>
             <div id="reactionDuelStage" class="reaction-stage">
+              <div class="mini-game-actions">
+                <button id="reactionReset" class="secondary-action" type="button">
+                  점수 초기화
+                </button>
+                <button id="reactionStart" class="primary-action coral" type="button">
+                  대결 시작
+                </button>
+              </div>
               <div id="reactionArena" class="reaction-arena" data-phase="idle">
                 <button
                   id="reactionLeft"
@@ -977,16 +1017,16 @@
                   <small>RIGHT</small>
                 </button>
               </div>
-              <div class="mini-game-actions">
-                <button id="reactionReset" class="secondary-action" type="button">
-                  점수 초기화
-                </button>
-                <button id="reactionStart" class="primary-action coral" type="button">
-                  대결 시작
-                </button>
-              </div>
             </div>
             <div id="reactionSoloStage" class="reaction-stage reaction-solo-stage" hidden>
+              <div class="mini-game-actions">
+                <button id="reactionSoloReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="reactionSoloStart" class="primary-action coral" type="button">
+                  기록 도전
+                </button>
+              </div>
               <button
                 id="reactionSoloPad"
                 class="reaction-solo-pad"
@@ -1001,14 +1041,6 @@
               <div class="solo-record-row" aria-label="개인 반응속도 기록">
                 <span><small>BEST</small><strong id="reactionSoloBest">--</strong></span>
                 <span><small>LAST</small><strong id="reactionSoloLast">--</strong></span>
-              </div>
-              <div class="mini-game-actions">
-                <button id="reactionSoloReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="reactionSoloStart" class="primary-action coral" type="button">
-                  기록 도전
-                </button>
               </div>
             </div>
           </section>
@@ -1030,6 +1062,10 @@
               </p>
             </div>
             <div id="timerGroupStage" class="timer-stage">
+              <div class="mini-game-actions">
+                <button id="timerReset" class="secondary-action" type="button">기록 초기화</button>
+                <button id="timerStart" class="primary-action blue" type="button">도전 시작</button>
+              </div>
               <div id="timerBoard" class="timer-board" data-phase="idle">
                 <span class="timer-target">TARGET 5.00</span>
                 <strong id="timerPlayer" class="timer-player">도전자 대기</strong>
@@ -1037,12 +1073,16 @@
                 <small>SECONDS</small>
               </div>
               <ol id="timerResults" class="timer-results" aria-label="5초 타이머 기록"></ol>
-              <div class="mini-game-actions">
-                <button id="timerReset" class="secondary-action" type="button">기록 초기화</button>
-                <button id="timerStart" class="primary-action blue" type="button">도전 시작</button>
-              </div>
             </div>
             <div id="timerSoloStage" class="timer-stage" hidden>
+              <div class="mini-game-actions">
+                <button id="timerSoloReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="timerSoloStart" class="primary-action blue" type="button">
+                  기록 도전
+                </button>
+              </div>
               <div id="timerSoloBoard" class="timer-board timer-solo-board" data-phase="idle">
                 <span class="timer-target">3 CHANCES · TARGET 5.00</span>
                 <strong class="timer-player">나의 감각 도전</strong>
@@ -1053,14 +1093,6 @@
               <div class="solo-record-row timer-best-row" aria-label="개인 5초 최고 기록">
                 <span><small>BEST ERROR</small><strong id="timerSoloBest">--</strong></span>
                 <span><small>ATTEMPTS</small><strong id="timerSoloProgress">0 / 3</strong></span>
-              </div>
-              <div class="mini-game-actions">
-                <button id="timerSoloReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="timerSoloStart" class="primary-action blue" type="button">
-                  기록 도전
-                </button>
               </div>
             </div>
           </section>
@@ -1082,6 +1114,14 @@
               </p>
             </div>
             <div class="dodge-stage">
+              <div class="mini-game-actions dodge-actions">
+                <button id="dodgeReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="dodgeStart" class="primary-action teal" type="button">
+                  도전 시작
+                </button>
+              </div>
               <div id="dodgeArena" class="dodge-arena" data-phase="idle">
                 <canvas
                   id="dodgeCanvas"
@@ -1107,14 +1147,6 @@
                   <span>드래그 또는 방향키로 이동</span>
                 </div>
               </div>
-              <div class="mini-game-actions dodge-actions">
-                <button id="dodgeReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="dodgeStart" class="primary-action teal" type="button">
-                  도전 시작
-                </button>
-              </div>
               <p class="game-note">
                 첫 2개 동시 공격은 10초, 안전 통로형 3개 위험 파도는 25초에 반드시 등장해요.
               </p>
@@ -1138,6 +1170,14 @@
               </p>
             </div>
             <div class="tap-stage">
+              <div class="mini-game-actions tap-actions">
+                <button id="tapReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="tapStart" class="primary-action yellow" type="button">
+                  도전 시작
+                </button>
+              </div>
               <button id="tapPad" class="tap-pad" type="button" data-phase="idle" disabled>
                 <span class="tap-badge">TAP! TAP!</span>
                 <strong id="tapCount">0</strong>
@@ -1147,14 +1187,6 @@
                 <span><small>TIME</small><strong id="tapTime">10.0</strong></span>
                 <span><small>BEST</small><strong id="tapBest">0</strong></span>
                 <span><small>SPEED</small><strong id="tapSpeed">0.0/s</strong></span>
-              </div>
-              <div class="mini-game-actions tap-actions">
-                <button id="tapReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="tapStart" class="primary-action yellow" type="button">
-                  도전 시작
-                </button>
               </div>
             </div>
           </section>
@@ -1176,6 +1208,14 @@
               </p>
             </div>
             <div class="runner-stage">
+              <div class="mini-game-actions runner-actions">
+                <button id="runnerReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="runnerStart" class="primary-action coral" type="button">
+                  달리기 시작
+                </button>
+              </div>
               <div id="runnerArena" class="runner-arena" data-phase="idle">
                 <canvas
                   id="runnerCanvas"
@@ -1212,14 +1252,6 @@
                   <span>화면을 눌러 2단 점프</span>
                 </div>
               </div>
-              <div class="mini-game-actions runner-actions">
-                <button id="runnerReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="runnerStart" class="primary-action coral" type="button">
-                  달리기 시작
-                </button>
-              </div>
               <p class="game-note">
                 재료로 피버를 채우고 보호막·자석을 챙기며 지상과 공중 장애물을 피하세요.
               </p>
@@ -1243,6 +1275,14 @@
               </p>
             </div>
             <div class="stack-stage">
+              <div class="mini-game-actions stack-actions">
+                <button id="stackReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="stackStart" class="primary-action blue" type="button">
+                  탑 쌓기 시작
+                </button>
+              </div>
               <div id="stackArena" class="stack-arena" data-phase="idle">
                 <canvas
                   id="stackCanvas"
@@ -1262,14 +1302,6 @@
                   <strong>READY</strong>
                   <span>화면을 눌러 블록 놓기</span>
                 </div>
-              </div>
-              <div class="mini-game-actions stack-actions">
-                <button id="stackReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="stackStart" class="primary-action blue" type="button">
-                  탑 쌓기 시작
-                </button>
               </div>
               <p class="game-note">
                 정확히 맞추면 블록 크기가 유지되고, 어긋난 부분은 잘려 나가요.
@@ -1294,6 +1326,14 @@
               </p>
             </div>
             <div class="fruit-stage">
+              <div class="mini-game-actions fruit-actions">
+                <button id="fruitReset" class="secondary-action" type="button">
+                  최고 기록 초기화
+                </button>
+                <button id="fruitStart" class="primary-action coral" type="button">
+                  합치기 시작
+                </button>
+              </div>
               <div id="fruitArena" class="fruit-arena" data-phase="idle">
                 <canvas
                   id="fruitCanvas"
@@ -1322,14 +1362,6 @@
                   <strong>READY</strong>
                   <span>위치를 정하고 손을 놓으세요</span>
                 </div>
-              </div>
-              <div class="mini-game-actions fruit-actions">
-                <button id="fruitReset" class="secondary-action" type="button">
-                  최고 기록 초기화
-                </button>
-                <button id="fruitStart" class="primary-action coral" type="button">
-                  합치기 시작
-                </button>
               </div>
               <p class="game-note">
                 위험선을 오래 넘으면 실패하고, 수박 두 개를 합치면 과일 왕관 완성!
@@ -1370,6 +1402,7 @@
       <div class="result-actions">
         <button id="drawMission" class="secondary-action mission-action" type="button">미션 카드 뽑기</button>
         <button id="playAgain" class="primary-action coral" type="button">한 판 더</button>
+        <button id="tryAnotherGame" class="secondary-action" type="button">추천 게임 시작</button>
         <div class="result-share-row">
           <button id="shareResult" class="secondary-action" type="button">결과 공유</button>
           <button id="copyResult" class="secondary-action" type="button">복사</button>
@@ -1378,11 +1411,55 @@
       </div>
     </dialog>
 
+    <dialog id="gameSettingsDialog" class="game-settings-dialog">
+      <button
+        id="closeGameSettings"
+        class="dialog-close"
+        type="button"
+        aria-label="게임 설정 닫기"
+        title="닫기"
+      >
+        ×
+      </button>
+      <span class="eyebrow">GAME FEEL</span>
+      <h2>게임 설정</h2>
+      <section class="difficulty-setting" aria-labelledby="difficulty-title">
+        <div class="setting-heading">
+          <strong id="difficulty-title">미니게임 난이도</strong>
+          <span id="difficultySummary">보통</span>
+        </div>
+        <div class="difficulty-control" role="group" aria-label="미니게임 난이도">
+          <button type="button" data-difficulty="easy" aria-pressed="false">쉬움</button>
+          <button class="is-active" type="button" data-difficulty="normal" aria-pressed="true">보통</button>
+          <button type="button" data-difficulty="hard" aria-pressed="false">어려움</button>
+        </div>
+        <p>장애물 피하기, 간식 러너, 탑 쌓기, 과일 합치기에 적용돼요.</p>
+      </section>
+      <div class="feedback-settings">
+        <label class="toggle-row">
+          <input id="soundToggle" type="checkbox" checked />
+          <span class="toggle-track" aria-hidden="true"></span>
+          <span>
+            <strong>효과음</strong>
+            <small>시작과 결과를 소리로 알려줘요</small>
+          </span>
+        </label>
+        <label class="toggle-row">
+          <input id="vibrationToggle" type="checkbox" checked />
+          <span class="toggle-track" aria-hidden="true"></span>
+          <span>
+            <strong>진동</strong>
+            <small>모바일에서 신호와 충돌을 알려줘요</small>
+          </span>
+        </label>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./vendor/matter-js/matter.min.js?v=28"></script>
-    <script src="./fruit-logic.js?v=28"></script>
-    <script src="./stack-logic.js?v=28"></script>
-    <script src="./app.js?v=28"></script>
+    <script src="./vendor/matter-js/matter.min.js?v=32"></script>
+    <script src="./fruit-logic.js?v=32"></script>
+    <script src="./stack-logic.js?v=32"></script>
+    <script src="./app.js?v=32"></script>
   </body>
 </html>

@@ -52,7 +52,7 @@ assert.deepEqual(
   "Physics and game logic must load before app.js",
 );
 assert.ok(
-  scripts.slice(-4).every((script) => script.endsWith("?v=28")),
+  scripts.slice(-4).every((script) => script.endsWith("?v=32")),
   "All runtime scripts must share the current cache-busting build number",
 );
 for (const script of scripts) {
@@ -68,7 +68,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /register\("\.\/sw\.js\?v=28",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
+  /register\("\.\/sw\.js\?v=32",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
   "Service worker updates must bypass the browser cache",
 );
 assert.match(

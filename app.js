@@ -5,6 +5,7 @@ const MAX_OPTIONS = 12;
 const MAX_MISSIONS = 16;
 const MAX_SAVED_GROUPS = 5;
 const HISTORY_LIMIT = 5;
+const RECENT_GAME_LIMIT = 4;
 const DODGE_WIDTH = 800;
 const DODGE_HEIGHT = 1000;
 const DODGE_SIDE_START = 5000;
@@ -80,6 +81,32 @@ const GAME_LABELS = {
   stack: "아슬아슬 탑 쌓기",
   fruit: "몽글 과일 합치기",
 };
+const DIFFICULTY_PROFILES = {
+  easy: {
+    label: "쉬움",
+    speed: 0.84,
+    interval: 1.2,
+    warning: 1.18,
+    stackTolerance: 11,
+    fruitDangerDuration: 2500,
+  },
+  normal: {
+    label: "보통",
+    speed: 1,
+    interval: 1,
+    warning: 1,
+    stackTolerance: STACK_PERFECT_TOLERANCE,
+    fruitDangerDuration: FRUIT_DANGER_DURATION,
+  },
+  hard: {
+    label: "어려움",
+    speed: 1.18,
+    interval: 0.82,
+    warning: 0.82,
+    stackTolerance: 4,
+    fruitDangerDuration: 1250,
+  },
+};
 
 const elements = {
   setupPanel: document.querySelector("#setupPanel"),
@@ -118,6 +145,17 @@ const elements = {
   playModeButtons: [...document.querySelectorAll("[data-play-mode]")],
   gameCategoryControl: document.querySelector("#gameCategoryControl"),
   soloModeNote: document.querySelector("#soloModeNote"),
+  quickGameList: document.querySelector("#quickGameList"),
+  quickLaunchMeta: document.querySelector("#quickLaunchMeta"),
+  favoriteGame: document.querySelector("#favoriteGame"),
+  randomGame: document.querySelector("#randomGame"),
+  openGameSettings: document.querySelector("#openGameSettings"),
+  gameSettingsDialog: document.querySelector("#gameSettingsDialog"),
+  closeGameSettings: document.querySelector("#closeGameSettings"),
+  difficultyButtons: [...document.querySelectorAll("[data-difficulty]")],
+  difficultySummary: document.querySelector("#difficultySummary"),
+  soundToggle: document.querySelector("#soundToggle"),
+  vibrationToggle: document.querySelector("#vibrationToggle"),
   partySession: document.querySelector("#partySession"),
   partySessionStatus: document.querySelector("#party-session-title"),
   partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
@@ -125,6 +163,10 @@ const elements = {
   partyScoreboard: document.querySelector("#partyScoreboard"),
   gameCategoryButtons: [
     ...document.querySelectorAll("[data-game-category]"),
+  ],
+  modeCountLabels: [...document.querySelectorAll("[data-mode-count]")],
+  categoryCountLabels: [
+    ...document.querySelectorAll("[data-category-count]"),
   ],
   gameTabs: [...document.querySelectorAll(".game-tab")],
   gameViews: {
@@ -306,6 +348,7 @@ const elements = {
   resultMissionText: document.querySelector("#resultMissionText"),
   drawMission: document.querySelector("#drawMission"),
   playAgain: document.querySelector("#playAgain"),
+  tryAnotherGame: document.querySelector("#tryAnotherGame"),
   shareResult: document.querySelector("#shareResult"),
   copyResult: document.querySelector("#copyResult"),
   changeGame: document.querySelector("#changeGame"),
@@ -333,9 +376,14 @@ const state = {
   stackBest: savedState.stackBest,
   fruitBest: savedState.fruitBest,
   fruitBestTier: savedState.fruitBestTier,
-  currentGame: "wheel",
-  currentMode: "together",
-  currentCategory: "quick",
+  currentGame: savedState.currentGame,
+  currentMode: savedState.currentMode,
+  currentCategory: savedState.currentCategory,
+  recentGames: savedState.recentGames,
+  favoriteGames: savedState.favoriteGames,
+  difficulty: savedState.difficulty,
+  soundEnabled: savedState.soundEnabled,
+  vibrationEnabled: savedState.vibrationEnabled,
   lastResult: null,
   lastMission: null,
   partySession: null,
@@ -458,6 +506,7 @@ let fruitPointerStartY = 0;
 let fruitPointerDragged = false;
 let resultRevealTimer = null;
 let toastTimer = null;
+let feedbackAudioContext = null;
 
 function sanitizeTextList(values, maxItems, maxLength) {
   if (!Array.isArray(values)) return [];
@@ -580,6 +629,39 @@ function loadState() {
     const fruitBestTier = Math.round(
       readOptionalRecord(parsed?.fruitBestTier, FRUIT_TIERS.length - 1) || 0,
     );
+    const currentMode = ["together", "solo"].includes(parsed?.currentMode)
+      ? parsed.currentMode
+      : "together";
+    const currentCategory = ["all", "quick", "mini", "party"].includes(
+      parsed?.currentCategory,
+    )
+      ? parsed.currentCategory
+      : "quick";
+    const currentGame = Object.prototype.hasOwnProperty.call(
+      GAME_LABELS,
+      parsed?.currentGame,
+    )
+      ? parsed.currentGame
+      : "wheel";
+    const readGameList = (values, maximum) =>
+      Array.isArray(values)
+        ? [...new Set(values)]
+            .filter((game) =>
+              Object.prototype.hasOwnProperty.call(GAME_LABELS, game),
+            )
+            .slice(0, maximum)
+        : [];
+    const recentGames = readGameList(parsed?.recentGames, RECENT_GAME_LIMIT);
+    const favoriteGames = readGameList(
+      parsed?.favoriteGames,
+      Object.keys(GAME_LABELS).length,
+    );
+    const difficulty = Object.prototype.hasOwnProperty.call(
+      DIFFICULTY_PROFILES,
+      parsed?.difficulty,
+    )
+      ? parsed.difficulty
+      : "normal";
 
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
@@ -601,6 +683,14 @@ function loadState() {
       stackBest,
       fruitBest,
       fruitBestTier,
+      currentMode,
+      currentCategory,
+      currentGame,
+      recentGames,
+      favoriteGames,
+      difficulty,
+      soundEnabled: parsed?.soundEnabled !== false,
+      vibrationEnabled: parsed?.vibrationEnabled !== false,
       hasStoredState,
     };
   } catch {
@@ -624,6 +714,14 @@ function loadState() {
       stackBest: 0,
       fruitBest: 0,
       fruitBestTier: 0,
+      currentMode: "together",
+      currentCategory: "quick",
+      currentGame: "wheel",
+      recentGames: [],
+      favoriteGames: [],
+      difficulty: "normal",
+      soundEnabled: true,
+      vibrationEnabled: true,
       hasStoredState: false,
     };
   }
@@ -653,10 +751,196 @@ function saveState() {
         stackBest: state.stackBest,
         fruitBest: state.fruitBest,
         fruitBestTier: state.fruitBestTier,
+        currentMode: state.currentMode,
+        currentCategory: state.currentCategory,
+        currentGame: state.currentGame,
+        recentGames: state.recentGames,
+        favoriteGames: state.favoriteGames,
+        difficulty: state.difficulty,
+        soundEnabled: state.soundEnabled,
+        vibrationEnabled: state.vibrationEnabled,
       }),
     );
   } catch {
     // The games remain usable when browser storage is unavailable.
+  }
+}
+
+function getDifficultyProfile() {
+  return DIFFICULTY_PROFILES[state.difficulty] || DIFFICULTY_PROFILES.normal;
+}
+
+function triggerHaptic(pattern) {
+  if (!state.vibrationEnabled || typeof navigator.vibrate !== "function") {
+    return;
+  }
+  navigator.vibrate(pattern);
+}
+
+function playFeedbackTone(type = "select") {
+  if (!state.soundEnabled) return;
+  const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextClass) return;
+
+  try {
+    feedbackAudioContext ||= new AudioContextClass();
+    if (feedbackAudioContext.state === "suspended") {
+      feedbackAudioContext.resume().catch(() => {});
+    }
+    const frequencies =
+      type === "result"
+        ? [523, 659, 784]
+        : type === "start"
+          ? [392, 523]
+          : [440];
+    const startedAt = feedbackAudioContext.currentTime;
+    frequencies.forEach((frequency, index) => {
+      const oscillator = feedbackAudioContext.createOscillator();
+      const gain = feedbackAudioContext.createGain();
+      const noteAt = startedAt + index * 0.075;
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(frequency, noteAt);
+      gain.gain.setValueAtTime(0.0001, noteAt);
+      gain.gain.exponentialRampToValueAtTime(0.055, noteAt + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, noteAt + 0.11);
+      oscillator.connect(gain);
+      gain.connect(feedbackAudioContext.destination);
+      oscillator.start(noteAt);
+      oscillator.stop(noteAt + 0.12);
+    });
+  } catch {
+    // Audio feedback is optional and must never block a game.
+  }
+}
+
+function getGameShortLabel(game) {
+  const tab = elements.gameTabs.find((item) => item.dataset.game === game);
+  return tab?.querySelector("strong")?.textContent || GAME_LABELS[game] || game;
+}
+
+function renderQuickLaunch() {
+  const defaults =
+    state.currentMode === "solo"
+      ? ["reaction", "tap", "runner"]
+      : ["wheel", "order", "finger"];
+  const games = [
+    ...new Set([...state.favoriteGames, ...state.recentGames, ...defaults]),
+  ].slice(0, RECENT_GAME_LIMIT);
+
+  elements.quickGameList.replaceChildren();
+  games.forEach((game) => {
+    if (!GAME_LABELS[game]) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "quick-game-button";
+    button.textContent = getGameShortLabel(game);
+    button.classList.toggle("is-favorite", state.favoriteGames.includes(game));
+    button.classList.toggle("is-current", game === state.currentGame);
+    button.setAttribute("aria-label", `${getGameShortLabel(game)} 바로 열기`);
+    button.addEventListener("click", () => launchGame(game));
+    elements.quickGameList.append(button);
+  });
+
+  const favorite = state.favoriteGames.includes(state.currentGame);
+  const favoriteIcon = elements.favoriteGame.querySelector("span");
+  favoriteIcon.textContent = favorite ? "★" : "☆";
+  elements.favoriteGame.classList.toggle("is-active", favorite);
+  elements.favoriteGame.setAttribute(
+    "aria-label",
+    `현재 게임 즐겨찾기 ${favorite ? "해제" : "추가"}`,
+  );
+  elements.quickLaunchMeta.textContent = `${getDifficultyProfile().label} · ${
+    state.favoriteGames.length ? `즐겨찾기 ${state.favoriteGames.length}` : "최근 게임"
+  }`;
+}
+
+function rememberRecentGame(game) {
+  if (!GAME_LABELS[game]) return;
+  state.recentGames = [
+    game,
+    ...state.recentGames.filter((item) => item !== game),
+  ].slice(0, RECENT_GAME_LIMIT);
+  saveState();
+  renderQuickLaunch();
+}
+
+function toggleCurrentFavorite() {
+  const game = state.currentGame;
+  if (state.favoriteGames.includes(game)) {
+    state.favoriteGames = state.favoriteGames.filter((item) => item !== game);
+    showToast(`${getGameShortLabel(game)} 즐겨찾기를 해제했어요.`);
+  } else {
+    state.favoriteGames = [game, ...state.favoriteGames];
+    showToast(`${getGameShortLabel(game)} 즐겨찾기에 추가했어요.`);
+  }
+  saveState();
+  renderQuickLaunch();
+  playFeedbackTone("select");
+}
+
+function launchGame(game) {
+  const tab = elements.gameTabs.find((item) => item.dataset.game === game);
+  if (!tab) return;
+  const modes = (tab.dataset.mode || "together").split(/\s+/);
+  const mode = modes.includes(state.currentMode)
+    ? state.currentMode
+    : modes.includes("solo")
+      ? "solo"
+      : "together";
+
+  setPlayMode(mode);
+  if (mode === "together") {
+    setGameCategory(tab.dataset.category || "all");
+  }
+  selectGame(game);
+  rememberRecentGame(game);
+  scrollGameIntoView(game);
+  playFeedbackTone("select");
+}
+
+function pickRandomGame(tabs = getVisibleGameTabs()) {
+  const choices = tabs.filter((tab) => tab.dataset.game !== state.currentGame);
+  const pool = choices.length ? choices : tabs;
+  if (!pool.length) return null;
+  return pool[randomInt(pool.length)]?.dataset.game || null;
+}
+
+function launchRandomGame() {
+  const game = pickRandomGame();
+  if (game) launchGame(game);
+}
+
+function setDifficulty(difficulty, notify = true) {
+  if (!DIFFICULTY_PROFILES[difficulty]) return;
+  state.difficulty = difficulty;
+  elements.difficultyButtons.forEach((button) => {
+    const active = button.dataset.difficulty === difficulty;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  elements.difficultySummary.textContent = getDifficultyProfile().label;
+  saveState();
+  renderQuickLaunch();
+  if (notify) {
+    showToast(`미니게임 난이도를 ${getDifficultyProfile().label}으로 바꿨어요.`);
+    playFeedbackTone("select");
+  }
+}
+
+function openGameSettings() {
+  if (typeof elements.gameSettingsDialog.showModal === "function") {
+    elements.gameSettingsDialog.showModal();
+  } else {
+    elements.gameSettingsDialog.setAttribute("open", "");
+  }
+  window.requestAnimationFrame(() => elements.closeGameSettings.focus());
+}
+
+function closeGameSettings() {
+  if (typeof elements.gameSettingsDialog.close === "function") {
+    elements.gameSettingsDialog.close();
+  } else {
+    elements.gameSettingsDialog.removeAttribute("open");
   }
 }
 
@@ -1160,6 +1444,7 @@ function renderPartySession() {
 
 function startPartySession(totalRounds) {
   if (![3, 5].includes(totalRounds) || !hasEnoughParticipants()) return;
+  elements.partySession.open = true;
   state.partySession = {
     totalRounds,
     round: 0,
@@ -1167,6 +1452,7 @@ function startPartySession(totalRounds) {
     scores: Object.fromEntries(state.participants.map((name) => [name, 0])),
     finished: false,
   };
+  updatePartySessionVisibility();
   renderPartySession();
   showToast(`${totalRounds}판 파티 세션을 시작했어요.`);
 }
@@ -1174,6 +1460,7 @@ function startPartySession(totalRounds) {
 function stopPartySession(notify = true) {
   if (!state.partySession) return;
   state.partySession = null;
+  updatePartySessionVisibility();
   renderPartySession();
   if (notify) showToast("파티 세션을 종료했어요.");
 }
@@ -1209,6 +1496,12 @@ function applyPartyResult(result) {
     : `파티 ${session.round}/${session.totalRounds} · 점수 없음`;
 }
 
+function updatePartySessionVisibility() {
+  elements.partySession.hidden =
+    state.currentMode === "solo" ||
+    (!state.partySession && state.currentCategory !== "party");
+}
+
 function tabSupportsMode(tab, mode) {
   const modes = (tab.dataset.mode || "together").split(/\s+/);
   return modes.includes(mode);
@@ -1216,6 +1509,26 @@ function tabSupportsMode(tab, mode) {
 
 function getVisibleGameTabs() {
   return elements.gameTabs.filter((tab) => !tab.hidden);
+}
+
+function updateGameCounts() {
+  elements.modeCountLabels.forEach((label) => {
+    const mode = label.dataset.modeCount;
+    label.textContent = String(
+      elements.gameTabs.filter((tab) => tabSupportsMode(tab, mode)).length,
+    );
+  });
+
+  elements.categoryCountLabels.forEach((label) => {
+    const category = label.dataset.categoryCount;
+    label.textContent = String(
+      elements.gameTabs.filter(
+        (tab) =>
+          tabSupportsMode(tab, "together") &&
+          (category === "all" || tab.dataset.category === category),
+      ).length,
+    );
+  });
 }
 
 function updateModeLabels() {
@@ -1278,8 +1591,8 @@ function setPlayMode(mode) {
   });
   elements.gameCategoryControl.hidden = solo;
   elements.soloModeNote.hidden = !solo;
-  elements.partySession.hidden = solo;
   elements.currentStakeBadge.hidden = solo;
+  updatePartySessionVisibility();
   updateModeLabels();
   applyGameFilters();
 
@@ -1291,6 +1604,8 @@ function setPlayMode(mode) {
   } else if (state.currentGame === "timer") {
     configureTimerMode();
   }
+  saveState();
+  renderQuickLaunch();
 }
 
 function selectGame(game) {
@@ -1345,12 +1660,16 @@ function selectGame(game) {
   if (enteringStack) resetStack();
   if (enteringFruit) resetFruit();
 
-  const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
-  activeTab?.scrollIntoView({
-    behavior: "smooth",
-    block: "nearest",
-    inline: "center",
-  });
+  if (changingGame) {
+    const activeTab = elements.gameTabs.find((tab) => tab.dataset.game === game);
+    activeTab?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }
+  saveState();
+  renderQuickLaunch();
 }
 
 function setGameCategory(category) {
@@ -1358,6 +1677,7 @@ function setGameCategory(category) {
   if (!valid.includes(category)) return;
 
   state.currentCategory = category;
+  updatePartySessionVisibility();
   elements.gameCategoryButtons.forEach((button) => {
     const active = button.dataset.gameCategory === category;
     button.classList.toggle("is-active", active);
@@ -1369,6 +1689,17 @@ function setGameCategory(category) {
   if (!visibleTabs.some((tab) => tab.dataset.game === state.currentGame)) {
     selectGame(visibleTabs[0]?.dataset.game);
   }
+  saveState();
+}
+
+function scrollGameIntoView(game) {
+  if (!window.matchMedia("(max-width: 680px)").matches) return;
+  window.requestAnimationFrame(() => {
+    elements.gameViews[game]?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  });
 }
 function drawWheelCanvas(canvas, items, rotation, centerText) {
   const context = canvas.getContext("2d");
@@ -1558,7 +1889,7 @@ function startBomb() {
 function passBomb() {
   if (!state.participants.length) return;
   bombHolderIndex = (bombHolderIndex + 1) % state.participants.length;
-  if (navigator.vibrate) navigator.vibrate(30);
+  triggerHaptic(30);
   updateBombHolder();
 }
 
@@ -1583,7 +1914,7 @@ function explodeBomb() {
   elements.bombStatus.textContent =
     "펑! 폭탄이 멈춘 사람이 오늘의 주인공이에요.";
   elements.bombButton.textContent = "폭탄 다시 시작";
-  if (navigator.vibrate) navigator.vibrate([120, 60, 180]);
+  triggerHaptic([120, 60, 180]);
   bombRevealTimer = window.setTimeout(
     () => showResult(loser, "bomb"),
     650,
@@ -2670,7 +3001,7 @@ function chooseFinger() {
   });
   elements.fingerArena.classList.add("is-complete");
   elements.fingerStatus.textContent = `${fingerWinner.order}번 손가락이 선택됐어요.`;
-  if (navigator.vibrate) navigator.vibrate([80, 45, 140]);
+  triggerHaptic([80, 45, 140]);
 
   const displayText = `${fingerWinner.order}번 손가락`;
   resultRevealTimer = window.setTimeout(() => {
@@ -2782,7 +3113,7 @@ function startReactionRound() {
       elements.reactionArena.dataset.phase = "go";
       setReactionSignal("지금!", "먼저 터치");
       elements.reactionStatus.textContent = "지금 누르세요!";
-      if (navigator.vibrate) navigator.vibrate(45);
+      triggerHaptic(45);
     },
     1600 + randomInt(2600),
   );
@@ -2812,7 +3143,7 @@ function finishReactionRound(winnerIndex, reactionTime = null) {
     elements.reactionStatus.textContent = `${names[winnerIndex]} · ${reactionTime}ms로 먼저 터치했어요.`;
   }
 
-  if (navigator.vibrate) navigator.vibrate([45, 30, 80]);
+  triggerHaptic([45, 30, 80]);
   if (reactionScores[winnerIndex] >= 3) {
     elements.reactionStart.disabled = true;
     elements.reactionStart.textContent = "대결 완료";
@@ -2913,7 +3244,7 @@ function startReactionSolo() {
       elements.reactionSoloSignal.textContent = "지금!";
       elements.reactionSoloHint.textContent = "바로 터치하세요";
       elements.reactionStatus.textContent = "지금 누르세요!";
-      if (navigator.vibrate) navigator.vibrate(35);
+      triggerHaptic(35);
     },
     1400 + randomInt(2800),
   );
@@ -2959,7 +3290,7 @@ function handleReactionSoloTap() {
   elements.reactionStatus.textContent = newBest
     ? `${record}ms · 새로운 최고 기록이에요!`
     : `${record}ms · 최고 ${state.reactionSoloBest}ms`;
-  if (navigator.vibrate) navigator.vibrate([35, 25, 60]);
+  triggerHaptic([35, 25, 60]);
 
   resultRevealTimer = window.setTimeout(() => {
     showResult({
@@ -3078,7 +3409,7 @@ function finishTimerTurn(forcedElapsed = null) {
   elements.timerBoard.dataset.phase = "stopped";
   elements.timerDisplay.textContent = (elapsed / 1000).toFixed(2);
   elements.timerReset.disabled = false;
-  if (navigator.vibrate) navigator.vibrate(45);
+  triggerHaptic(45);
   renderTimerResults();
 
   if (timerRound.results.length < timerRound.players.length) {
@@ -3244,7 +3575,7 @@ function finishTimerSoloTurn(forcedElapsed = null) {
   elements.timerSoloDisplay.textContent = (elapsed / 1000).toFixed(2);
   elements.timerSoloReset.disabled = false;
   renderTimerSoloResults();
-  if (navigator.vibrate) navigator.vibrate(35);
+  triggerHaptic(35);
 
   const count = timerSoloRound.attempts.length;
   if (count < 3) {
@@ -3360,10 +3691,11 @@ function resetDodge() {
   dodgeLastFrame = 0;
   dodgeCountdown = 0;
   dodgeElapsed = 0;
+  const difficulty = getDifficultyProfile();
   dodgeNextDrop = 80;
-  dodgeNextSide = DODGE_SIDE_START;
-  dodgeNextDoubleWave = 10000;
-  dodgeNextDangerWave = 25000;
+  dodgeNextSide = DODGE_SIDE_START * difficulty.interval;
+  dodgeNextDoubleWave = 10000 * difficulty.interval;
+  dodgeNextDangerWave = 25000 * difficulty.interval;
   dodgePendingSideWave = null;
   dodgeDifficultyTier = -1;
   dodgeObstacles = [];
@@ -3503,6 +3835,7 @@ function drawDodgeScene() {
 
 function spawnDodgeDrop() {
   const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const difficulty = getDifficultyProfile();
   const width = 54 + randomInt(76);
   const height = 38 + randomInt(42);
   let x = 24 + randomInt(DODGE_WIDTH - width - 48);
@@ -3530,13 +3863,14 @@ function spawnDodgeDrop() {
       dodgeElapsed >= 8000 && randomInt(100) < 58
         ? (randomInt(2) === 0 ? -1 : 1) * (70 + tier * 12)
         : 0,
-    velocityY: 380 + tier * 46 + randomInt(120),
+    velocityY: (380 + tier * 46 + randomInt(120)) * difficulty.speed,
     color: colors[randomInt(colors.length)],
   });
 }
 
 function spawnDodgeSideWave(count = 1, wave = "single") {
   const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const difficulty = getDifficultyProfile();
   const waveCount = Math.min(Math.max(count, 1), 3);
   const laneCenters = [220, 410, 600, 790];
 
@@ -3566,7 +3900,7 @@ function spawnDodgeSideWave(count = 1, wave = "single") {
       ),
       height,
       elapsed: 0,
-      duration,
+      duration: duration * difficulty.warning,
       wave,
     });
   });
@@ -3574,8 +3908,9 @@ function spawnDodgeSideWave(count = 1, wave = "single") {
 
 function releaseDodgeSideObstacle(warning) {
   const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const difficulty = getDifficultyProfile();
   const width = 132;
-  const speed = 560 + tier * 48;
+  const speed = (560 + tier * 48) * difficulty.speed;
   const fromLeft = warning.side === "left";
   dodgeObstacles.push({
     kind: "side",
@@ -3661,7 +3996,7 @@ function finishDodge() {
     newBest ? "NEW BEST" : `${formatDodgeTime(record)}초 생존`,
   );
   drawDodgeScene();
-  if (navigator.vibrate) navigator.vibrate([70, 40, 110]);
+  triggerHaptic([70, 40, 110]);
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -3685,20 +4020,24 @@ function updateDodgeGame(delta) {
   moveDodgePlayer(delta);
 
   const tier = Math.min(12, Math.floor(dodgeElapsed / 5000));
+  const difficulty = getDifficultyProfile();
+  const sideStart = DODGE_SIDE_START * difficulty.interval;
   if (tier !== dodgeDifficultyTier) {
     dodgeDifficultyTier = tier;
     elements.dodgeStatus.textContent =
-      dodgeElapsed < DODGE_SIDE_START
+      dodgeElapsed < sideStart
         ? `${tier + 1}단계 · 위에서 떨어지는 장애물을 피하세요.`
         : `${tier + 1}단계 · 좌우 장애물까지 조심하세요.`;
   }
 
   if (dodgeElapsed >= dodgeNextDrop) {
     spawnDodgeDrop();
-    if (randomInt(100) < Math.min(82, 16 + tier * 8)) {
+    const extraDropChance =
+      state.difficulty === "hard" ? 10 : state.difficulty === "easy" ? -10 : 0;
+    if (randomInt(100) < Math.min(90, 16 + tier * 8 + extraDropChance)) {
       spawnDodgeDrop();
     }
-    const interval = Math.max(120, 460 - tier * 28);
+    const interval = Math.max(110, (460 - tier * 28) * difficulty.interval);
     dodgeNextDrop = dodgeElapsed + interval + randomInt(50);
   }
 
@@ -3706,17 +4045,23 @@ function updateDodgeGame(delta) {
     const sidePressure =
       dodgeWarnings.length +
       dodgeObstacles.filter((obstacle) => obstacle.kind === "side").length;
-    const sideLimit = tier >= 5 ? 3 : 2;
+    const sideLimit = Math.max(
+      1,
+      (tier >= 5 ? 3 : 2) +
+        (state.difficulty === "hard" ? 1 : state.difficulty === "easy" ? -1 : 0),
+    );
     if (!dodgePendingSideWave && dodgeElapsed >= dodgeNextDangerWave) {
       dodgePendingSideWave = { count: 3, wave: "danger" };
-      dodgeNextDangerWave = dodgeElapsed + 20000 + randomInt(6000);
+      dodgeNextDangerWave =
+        dodgeElapsed + (20000 + randomInt(6000)) * difficulty.interval;
       dodgeNextDoubleWave = Math.max(
         dodgeNextDoubleWave,
-        dodgeElapsed + 5000,
+        dodgeElapsed + 5000 * difficulty.interval,
       );
     } else if (!dodgePendingSideWave && dodgeElapsed >= dodgeNextDoubleWave) {
       dodgePendingSideWave = { count: 2, wave: "double" };
-      dodgeNextDoubleWave = dodgeElapsed + 7000 + randomInt(4000);
+      dodgeNextDoubleWave =
+        dodgeElapsed + (7000 + randomInt(4000)) * difficulty.interval;
     }
 
     if (dodgePendingSideWave) {
@@ -3728,7 +4073,7 @@ function updateDodgeGame(delta) {
           pendingWave.wave === "danger"
             ? "위험 파도 · 비어 있는 높이로 이동하세요!"
             : tier + 1 + "단계 · 좌우 2개 동시 공격!";
-        dodgeNextSide = dodgeElapsed + 900;
+        dodgeNextSide = dodgeElapsed + 900 * difficulty.interval;
       } else {
         dodgeNextSide = dodgeElapsed + 120;
       }
@@ -3736,7 +4081,10 @@ function updateDodgeGame(delta) {
       spawnDodgeSideWave();
       elements.dodgeStatus.textContent =
         tier + 1 + "단계 · 좌우 경고를 확인하세요.";
-      const interval = Math.max(700, 1600 - tier * 80);
+      const interval = Math.max(
+        560,
+        (1600 - tier * 80) * difficulty.interval,
+      );
       dodgeNextSide = dodgeElapsed + interval + randomInt(180);
     } else {
       dodgeNextSide = dodgeElapsed + 180;
@@ -3889,7 +4237,7 @@ function finishTap() {
   elements.tapStatus.textContent = newBest
     ? `${tapCount}회 · 새로운 최고 기록이에요!`
     : `${tapCount}회 · 최고 ${state.tapBest}회`;
-  if (navigator.vibrate) navigator.vibrate([45, 30, 80]);
+  triggerHaptic([45, 30, 80]);
 
   resultRevealTimer = window.setTimeout(() => {
     showResult({
@@ -3920,7 +4268,7 @@ function runTapFrame(now) {
       elements.tapPad.disabled = false;
       elements.tapPrompt.textContent = "빠르게 눌러요!";
       elements.tapStatus.textContent = "지금부터 10초! 최대한 빠르게 누르세요.";
-      if (navigator.vibrate) navigator.vibrate(35);
+      triggerHaptic(35);
     }
   } else if (tapPhase === "running") {
     const elapsed = now - tapPhaseStartedAt;
@@ -3964,7 +4312,7 @@ function handleTapPress() {
   window.requestAnimationFrame(() => {
     elements.tapPad.classList.add("is-hit");
   });
-  if (navigator.vibrate && tapCount % 10 === 0) navigator.vibrate(8);
+  if (tapCount % 10 === 0) triggerHaptic(8);
 }
 
 function clearTapBest() {
@@ -4048,8 +4396,9 @@ function resetRunner() {
   runnerDistanceValue = 0;
   runnerScoreValue = 0;
   runnerIngredientScore = 0;
-  runnerSpeed = 430;
-  runnerNextObstacle = 850;
+  const difficulty = getDifficultyProfile();
+  runnerSpeed = 430 * difficulty.speed;
+  runnerNextObstacle = 850 * difficulty.interval;
   runnerNextIngredient = 560;
   runnerNextItem = 4500;
   runnerObstacles = [];
@@ -4088,7 +4437,7 @@ function jumpRunner() {
   if (runnerPlayer.jumps >= 2) return;
   runnerPlayer.velocityY = runnerPlayer.jumps === 0 ? -900 : -760;
   runnerPlayer.jumps += 1;
-  if (navigator.vibrate) navigator.vibrate(8);
+  triggerHaptic(8);
 }
 
 function createRunnerObstacle(type, tier, x) {
@@ -4212,7 +4561,7 @@ function activateRunnerFever() {
   runnerIngredientScore += 600 + runnerFeverCount * 150;
   elements.runnerStatus.textContent =
     "FEVER! 6초 동안 무적·자석·점수 2배가 적용돼요.";
-  if (navigator.vibrate) navigator.vibrate([35, 20, 35, 20, 70]);
+  triggerHaptic([35, 20, 35, 20, 70]);
 }
 
 function completeRunnerSnack() {
@@ -4230,7 +4579,7 @@ function completeRunnerSnack() {
   if (!isRunnerFeverActive()) runnerFever = Math.min(100, runnerFever + 13);
   elements.runnerStatus.textContent =
     runnerCombo + "콤보 · 간식 " + runnerSnackCount + "개 완성!";
-  if (navigator.vibrate) navigator.vibrate([18, 18, 35]);
+  triggerHaptic([18, 18, 35]);
 }
 
 function collectRunnerIngredient(ingredient) {
@@ -4255,7 +4604,7 @@ function collectRunnerItem(item) {
     elements.runnerStatus.textContent =
       "재료 자석 획득! 7초 동안 재료를 끌어당겨요.";
   }
-  if (navigator.vibrate) navigator.vibrate([20, 15, 25]);
+  triggerHaptic([20, 15, 25]);
 }
 
 function drawRunnerIngredient(context, ingredient) {
@@ -4618,7 +4967,7 @@ function finishRunner() {
     distance + "m · " + runnerSnackCount + " SNACKS",
   );
   drawRunnerScene();
-  if (navigator.vibrate) navigator.vibrate([65, 35, 95]);
+  triggerHaptic([65, 35, 95]);
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -4653,8 +5002,10 @@ function finishRunner() {
 
 function updateRunnerGame(delta) {
   runnerElapsed += delta * 1000;
+  const difficulty = getDifficultyProfile();
   const baseSpeed = Math.min(1120, 430 + (runnerElapsed / 1000) * 18);
-  runnerSpeed = baseSpeed + (isRunnerFeverActive() ? 140 : 0);
+  runnerSpeed =
+    baseSpeed * difficulty.speed + (isRunnerFeverActive() ? 140 : 0);
   runnerDistanceValue += (runnerSpeed * delta) / 10;
 
   runnerPlayer.velocityY += 2300 * delta;
@@ -4669,7 +5020,10 @@ function updateRunnerGame(delta) {
   const tier = Math.min(12, Math.floor(runnerElapsed / 5000));
   if (runnerElapsed >= runnerNextObstacle) {
     const trailingOffset = spawnRunnerObstacle();
-    const interval = Math.max(820, 1320 - tier * 55);
+    const interval = Math.max(
+      650,
+      (1320 - tier * 55) * difficulty.interval,
+    );
     const patternDelay =
       trailingOffset > 0
         ? (trailingOffset / Math.max(1, runnerSpeed)) * 1000
@@ -4733,7 +5087,7 @@ function updateRunnerGame(delta) {
     if (isRunnerFeverActive()) {
       runnerObstacles.splice(collisionIndex, 1);
       runnerIngredientScore += 360;
-      if (navigator.vibrate) navigator.vibrate(10);
+      triggerHaptic(10);
     } else if (runnerShield > 0) {
       runnerShield = 0;
       runnerInvulnerableUntil = runnerElapsed + 900;
@@ -4741,7 +5095,7 @@ function updateRunnerGame(delta) {
       runnerObstacles.splice(collisionIndex, 1);
       elements.runnerStatus.textContent =
         "보호막이 충돌을 막았어요. 다음 장애물을 조심하세요!";
-      if (navigator.vibrate) navigator.vibrate([45, 20, 45]);
+      triggerHaptic([45, 20, 45]);
     } else {
       finishRunner();
       return;
@@ -4825,7 +5179,7 @@ function calculateStackPlacement(active, top) {
   return StackGameLogic.calculatePlacement(
     active,
     top,
-    STACK_PERFECT_TOLERANCE,
+    getDifficultyProfile().stackTolerance,
   );
 }
 
@@ -4848,6 +5202,7 @@ function createStackFragment(fragment, source) {
 
 function spawnStackBlock() {
   const top = stackBlocks[stackBlocks.length - 1];
+  const difficulty = getDifficultyProfile();
   const fromLeft = stackBlocks.length % 2 === 1;
   const width = top.width;
   stackActive = {
@@ -4857,7 +5212,7 @@ function spawnStackBlock() {
     height: STACK_BLOCK_HEIGHT,
     color: STACK_COLORS[stackScoreValue % STACK_COLORS.length],
     direction: fromLeft ? 1 : -1,
-    speed: Math.min(620, 225 + stackScoreValue * 19),
+    speed: Math.min(760, (225 + stackScoreValue * 19) * difficulty.speed),
   };
 }
 
@@ -5085,7 +5440,7 @@ function finishStack() {
     newBest ? "NEW BEST" : "FINISH",
     `${stackScoreValue}층 · 퍼펙트 연속 ${stackPeakCombo}회`,
   );
-  if (navigator.vibrate) navigator.vibrate([65, 35, 95]);
+  triggerHaptic([65, 35, 95]);
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -5139,7 +5494,7 @@ function dropStackBlock() {
       y: placed.y - 34,
       remaining: 720,
     };
-    if (navigator.vibrate) navigator.vibrate(12);
+    triggerHaptic(12);
   } else {
     stackComboValue = 0;
     stackFeedback = {
@@ -5148,7 +5503,7 @@ function dropStackBlock() {
       y: placed.y - 34,
       remaining: 430,
     };
-    if (navigator.vibrate) navigator.vibrate(7);
+    triggerHaptic(7);
   }
 
   renderStackHud();
@@ -5598,7 +5953,7 @@ function processFruitMerges() {
       `${FRUIT_TIERS[merge.result.nextTier].name} 완성! ` +
       `현재 ${fruitScoreValue.toLocaleString()}점`;
     renderFruitHud();
-    if (navigator.vibrate) navigator.vibrate(merge.result.complete ? [35, 25, 80] : 10);
+    triggerHaptic(merge.result.complete ? [35, 25, 80] : 10);
 
     if (merge.result.complete && fruitPhase === "running") {
       fruitPhase = "celebrating";
@@ -5616,6 +5971,7 @@ function processFruitMerges() {
 }
 
 function updateFruitDanger(delta, now) {
+  const dangerDuration = getDifficultyProfile().fruitDangerDuration;
   let maximumDanger = 0;
   fruitBodies.forEach((body) => {
     const age = now - body.plugin.createdAt;
@@ -5633,10 +5989,10 @@ function updateFruitDanger(delta, now) {
     }
     maximumDanger = Math.max(maximumDanger, body.plugin.dangerMs);
   });
-  fruitDangerValue = maximumDanger / FRUIT_DANGER_DURATION;
+  fruitDangerValue = maximumDanger / dangerDuration;
   if (
     fruitPhase === "running" &&
-    maximumDanger >= FRUIT_DANGER_DURATION
+    maximumDanger >= dangerDuration
   ) {
     finishFruit(false);
   }
@@ -5837,9 +6193,7 @@ function finishFruit(completed) {
       : `${FRUIT_TIERS[fruitHighestTier].name} · ${fruitScoreValue.toLocaleString()}점`,
   );
   drawFruitScene();
-  if (navigator.vibrate) {
-    navigator.vibrate(completed ? [70, 35, 70, 35, 130] : [80, 45, 110]);
-  }
+  triggerHaptic(completed ? [70, 35, 70, 35, 130] : [80, 45, 110]);
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -6176,6 +6530,7 @@ function showResult(resultOrName, game) {
   resetResultMission();
   elements.drawMission.hidden = result.allowMission === false;
   result.historyId = recordResult(result);
+  playFeedbackTone("result");
 
   if (typeof elements.resultDialog.showModal === "function") {
     elements.resultDialog.showModal();
@@ -6208,7 +6563,7 @@ function playAgain() {
     menu: elements.menuButton,
     seats: elements.seatButton,
     tournament: elements.tournamentButton,
-    finger: elements.fingerReset,
+    finger: elements.fingerArena,
     reaction:
       state.lastResult?.playMode === "solo"
         ? elements.reactionSoloStart
@@ -6269,7 +6624,20 @@ function playAgain() {
   } else if (game === "fruit") {
     resetFruit();
   }
-  focusByGame[game]?.focus();
+  const restartControl = focusByGame[game];
+  restartControl?.focus({ preventScroll: true });
+  if (game !== "finger") {
+    window.requestAnimationFrame(() => restartControl?.click());
+  }
+}
+
+function tryAnotherGame() {
+  const tabs = elements.gameTabs.filter((tab) =>
+    tabSupportsMode(tab, state.currentMode),
+  );
+  const game = pickRandomGame(tabs);
+  closeResult();
+  if (game) launchGame(game);
 }
 
 async function writeClipboard(text) {
@@ -6403,7 +6771,11 @@ elements.gameCategoryButtons.forEach((button) => {
 });
 
 elements.gameTabs.forEach((tab) => {
-  tab.addEventListener("click", () => selectGame(tab.dataset.game));
+  tab.addEventListener("click", () => {
+    selectGame(tab.dataset.game);
+    rememberRecentGame(tab.dataset.game);
+    scrollGameIntoView(tab.dataset.game);
+  });
   tab.addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
       return;
@@ -6422,8 +6794,29 @@ elements.gameTabs.forEach((tab) => {
       next = visibleTabs.length - 1;
     }
     selectGame(visibleTabs[next].dataset.game);
+    rememberRecentGame(visibleTabs[next].dataset.game);
     visibleTabs[next].focus();
   });
+});
+
+elements.favoriteGame.addEventListener("click", toggleCurrentFavorite);
+elements.randomGame.addEventListener("click", launchRandomGame);
+elements.openGameSettings.addEventListener("click", openGameSettings);
+elements.closeGameSettings.addEventListener("click", closeGameSettings);
+elements.difficultyButtons.forEach((button) => {
+  button.addEventListener("click", () => setDifficulty(button.dataset.difficulty));
+});
+elements.soundToggle.addEventListener("change", () => {
+  state.soundEnabled = elements.soundToggle.checked;
+  saveState();
+  if (state.soundEnabled) playFeedbackTone("start");
+  showToast(`효과음을 ${state.soundEnabled ? "켰어요" : "껐어요"}.`);
+});
+elements.vibrationToggle.addEventListener("change", () => {
+  state.vibrationEnabled = elements.vibrationToggle.checked;
+  saveState();
+  if (state.vibrationEnabled) triggerHaptic(35);
+  showToast(`진동을 ${state.vibrationEnabled ? "켰어요" : "껐어요"}.`);
 });
 
 elements.spinButton.addEventListener("click", spinWheel);
@@ -6584,6 +6977,33 @@ elements.fruitCanvas.addEventListener("contextmenu", (event) =>
   event.preventDefault(),
 );
 [
+  elements.spinButton,
+  elements.bombButton,
+  elements.shuffleButton,
+  elements.orderButton,
+  elements.teamButton,
+  elements.drawButton,
+  elements.ladderButton,
+  elements.menuButton,
+  elements.seatButton,
+  elements.tournamentButton,
+  elements.fingerFallback,
+  elements.reactionStart,
+  elements.reactionSoloStart,
+  elements.timerStart,
+  elements.timerSoloStart,
+  elements.dodgeStart,
+  elements.tapStart,
+  elements.runnerStart,
+  elements.stackStart,
+  elements.fruitStart,
+].forEach((button) => {
+  button.addEventListener("click", () => {
+    playFeedbackTone("start");
+    triggerHaptic(10);
+  });
+});
+[
   [elements.reactionLeft, 0],
   [elements.reactionRight, 1],
 ].forEach(([button, side]) => {
@@ -6605,6 +7025,7 @@ elements.closeResult.addEventListener("click", (event) => {
 });
 elements.drawMission.addEventListener("click", drawMissionCard);
 elements.playAgain.addEventListener("click", playAgain);
+elements.tryAnotherGame.addEventListener("click", tryAnotherGame);
 elements.shareResult.addEventListener("click", shareResult);
 elements.copyResult.addEventListener("click", copyResult);
 elements.changeGame.addEventListener("click", () => {
@@ -6664,12 +7085,14 @@ if (savedStakeIsPreset) {
 elements.gameTabs.forEach((tab, index) => {
   tab.tabIndex = index === 0 ? 0 : -1;
 });
-setPlayMode("together");
-setGameCategory("quick");
-if (
-  savedState.hasStoredState &&
-  window.matchMedia("(max-width: 1240px)").matches
-) {
+updateGameCounts();
+setPlayMode(state.currentMode);
+setGameCategory(state.currentCategory);
+selectGame(state.currentGame);
+elements.soundToggle.checked = state.soundEnabled;
+elements.vibrationToggle.checked = state.vibrationEnabled;
+setDifficulty(state.difficulty, false);
+if (window.matchMedia("(max-width: 1240px)").matches) {
   setSetupCollapsed(true);
 } else {
   setSetupCollapsed(false);
@@ -6687,7 +7110,7 @@ if (
   });
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=28", { updateViaCache: "none" })
+      .register("./sw.js?v=32", { updateViaCache: "none" })
       .then((registration) => registration.update())
       .catch(() => {
         // Offline support is optional and does not block the games.
