@@ -3,6 +3,7 @@ const fs = require("node:fs");
 
 const html = fs.readFileSync("index.html", "utf8");
 const app = fs.readFileSync("app.js", "utf8");
+const styles = fs.readFileSync("styles.css", "utf8");
 
 const gameTabs = Array.from(
   html.matchAll(/<button(?=[^>]*class="game-tab)[\s\S]*?<\/button>/g),
@@ -95,9 +96,20 @@ assert.doesNotMatch(
 [
   "quickGameList",
   "favoriteGame",
+  "openRecords",
   "randomGame",
   "openGameSettings",
   "gameSettingsDialog",
+  "recordsDialog",
+  "recordsGrid",
+  "gameGuideDialog",
+  "startFromGuide",
+  "engagementHub",
+  "startDailyChallenge",
+  "openFriendChallenge",
+  "friendChallengeDialog",
+  "friendChallengeBar",
+  "saveResultImage",
   "soundToggle",
   "vibrationToggle",
   "tryAnotherGame",
@@ -115,11 +127,56 @@ assert.match(app, /function tryAnotherGame\(\)/);
 assert.match(app, /recentGames: state\.recentGames/);
 assert.match(app, /favoriteGames: state\.favoriteGames/);
 assert.match(app, /difficulty: state\.difficulty/);
+assert.match(app, /difficultyRecords: state\.difficultyRecords/);
+assert.match(app, /seenGuides: state\.seenGuides/);
+assert.match(app, /dailyProgress: state\.dailyProgress/);
+assert.match(app, /achievementStats: state\.achievementStats/);
+assert.match(app, /unlockedAchievements: state\.unlockedAchievements/);
 assert.match(app, /soundEnabled: state\.soundEnabled/);
 assert.match(app, /vibrationEnabled: state\.vibrationEnabled/);
 assert.match(app, /restartControl\?\.click\(\)/);
 assert.match(app, /getDifficultyProfile\(\)\.stackTolerance/);
 assert.match(app, /getDifficultyProfile\(\)\.fruitDangerDuration/);
+assert.match(app, /function storeActiveDifficultyRecords\(/);
+assert.match(app, /function loadActiveDifficultyRecords\(/);
+assert.match(app, /function renderRecords\(\)/);
+assert.match(app, /function requestGuidedStart\(game, starter\)/);
+assert.match(app, /function pauseDodge\(\)/);
+assert.match(app, /function pauseRunner\(\)/);
+assert.match(app, /function pauseStack\(\)/);
+assert.match(app, /function pauseFruit\(\)/);
+assert.match(app, /function startDailyChallenge\(\)/);
+assert.match(app, /function startFriendChallenge\(\)/);
+assert.match(app, /function applyEngagementResult\(rawResult\)/);
+assert.match(app, /function createResultCardCanvas\(result\)/);
+assert.match(app, /function saveResultImage\(\)/);
+assert.match(app, /function updateAchievements\(notify = true\)/);
+assert.equal(
+  (app.match(/scoreValue:/g) || []).length,
+  4,
+  "All four challenge games must expose a comparable score",
+);
+assert.equal(
+  (html.match(/data-friend-game="(dodge|runner|stack|fruit)"/g) || []).length,
+  4,
+  "Friend challenges must offer all four seeded games",
+);
+assert.match(
+  styles,
+  /\.friend-challenge-bar\[hidden\]\s*\{\s*display:\s*none;/,
+  "Inactive friend challenges must stay visually hidden",
+);
+assert.match(
+  styles,
+  /\.engagement-actions \.primary-action,\s*\.engagement-actions \.secondary-action\s*\{\s*min-width:\s*0;\s*flex:\s*1;/,
+  "Mobile engagement actions must fit inside the challenge card",
+);
+assert.match(app, /document\.addEventListener\("visibilitychange"/);
+assert.equal(
+  (html.match(/data-game-help="(dodge|runner|stack|fruit)"/g) || []).length,
+  4,
+  "Every long-form canvas game must expose its help button",
+);
 assert.equal(
   (app.match(/navigator\.vibrate/g) || []).length,
   2,

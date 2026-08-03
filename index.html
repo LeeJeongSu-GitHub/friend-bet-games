@@ -15,9 +15,9 @@
       content="같이 하기와 혼자 도전을 골라 빠른 결정, 대결, 장애물 피하기와 간식 재료 러너를 즐겨 보세요."
     />
     <title>딱! 정해 - 룰렛·파티 세션·기록 도전 미니게임</title>
-    <link rel="icon" href="./favicon.svg?v=32" type="image/svg+xml" />
-    <link rel="manifest" href="./manifest.webmanifest?v=32" />
-    <link rel="stylesheet" href="./styles.css?v=32" />
+    <link rel="icon" href="./favicon.svg?v=34" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest?v=34" />
+    <link rel="stylesheet" href="./styles.css?v=34" />
   </head>
   <body>
     <header class="topbar">
@@ -223,6 +223,34 @@
           <span>기록은 현재 기기에 자동 저장돼요.</span>
         </div>
 
+        <section id="engagementHub" class="engagement-hub" aria-labelledby="dailyChallengeTitle">
+          <div class="daily-challenge-copy">
+            <span id="dailyChallengeDate" class="engagement-label">TODAY</span>
+            <div>
+              <strong id="dailyChallengeTitle">오늘의 도전</strong>
+              <span id="dailyChallengeMeta">오늘만의 기록 게임을 준비 중이에요.</span>
+            </div>
+          </div>
+          <div class="daily-challenge-progress" aria-live="polite">
+            <span><small>연속</small><strong id="dailyStreak">0일</strong></span>
+            <span><small>오늘 최고</small><strong id="dailyBest">--</strong></span>
+          </div>
+          <div class="engagement-actions">
+            <button id="openFriendChallenge" class="secondary-action" type="button">친구 기록 대결</button>
+            <button id="startDailyChallenge" class="primary-action coral" type="button">오늘 도전</button>
+          </div>
+        </section>
+
+        <section id="friendChallengeBar" class="friend-challenge-bar" aria-live="polite" hidden>
+          <div>
+            <span class="engagement-label">FRIEND MATCH</span>
+            <strong id="friendChallengeStatus">친구 기록 대결</strong>
+          </div>
+          <div id="friendChallengeScores" class="friend-challenge-scores"></div>
+          <button id="continueFriendChallenge" class="compact-action" type="button" hidden>다음 차례</button>
+          <button id="endFriendChallenge" class="compact-action danger" type="button">대결 종료</button>
+        </section>
+
         <section class="quick-launch" aria-labelledby="quick-launch-title">
           <div class="quick-launch-title">
             <strong id="quick-launch-title">빠른 시작</strong>
@@ -239,6 +267,7 @@
             >
               <span aria-hidden="true">☆</span>
             </button>
+            <button id="openRecords" class="quick-random" type="button">기록</button>
             <button id="randomGame" class="quick-random" type="button">랜덤</button>
             <button
               id="openGameSettings"
@@ -1109,9 +1138,12 @@
                 <span class="game-kicker">14 · DODGE SURVIVAL</span>
                 <h3>장애물 피하기</h3>
               </div>
-              <p id="dodgeStatus" class="status-text" aria-live="polite">
-                처음부터 빠르게 떨어지는 장애물을 피하며 기록에 도전하세요.
-              </p>
+              <div class="game-header-side">
+                <p id="dodgeStatus" class="status-text" aria-live="polite">
+                  처음부터 빠르게 떨어지는 장애물을 피하며 기록에 도전하세요.
+                </p>
+                <button class="game-help-button" type="button" data-game-help="dodge" aria-label="장애물 피하기 방법 보기" title="게임 방법">?</button>
+              </div>
             </div>
             <div class="dodge-stage">
               <div class="mini-game-actions dodge-actions">
@@ -1203,9 +1235,12 @@
                 <span class="game-kicker">16 · SNACK RUNNER</span>
                 <h3>간식 재료 러너</h3>
               </div>
-              <p id="runnerStatus" class="status-text" aria-live="polite">
-                함정과 공중 장애물을 구분해 피하고 피버를 완성하세요.
-              </p>
+              <div class="game-header-side">
+                <p id="runnerStatus" class="status-text" aria-live="polite">
+                  함정과 공중 장애물을 구분해 피하고 피버를 완성하세요.
+                </p>
+                <button class="game-help-button" type="button" data-game-help="runner" aria-label="간식 재료 러너 방법 보기" title="게임 방법">?</button>
+              </div>
             </div>
             <div class="runner-stage">
               <div class="mini-game-actions runner-actions">
@@ -1270,9 +1305,12 @@
                 <span class="game-kicker">17 · TINY TOWER</span>
                 <h3>아슬아슬 탑 쌓기</h3>
               </div>
-              <p id="stackStatus" class="status-text" aria-live="polite">
-                움직이는 블록이 탑과 겹칠 때 화면을 눌러 놓으세요.
-              </p>
+              <div class="game-header-side">
+                <p id="stackStatus" class="status-text" aria-live="polite">
+                  움직이는 블록이 탑과 겹칠 때 화면을 눌러 놓으세요.
+                </p>
+                <button class="game-help-button" type="button" data-game-help="stack" aria-label="탑 쌓기 방법 보기" title="게임 방법">?</button>
+              </div>
             </div>
             <div class="stack-stage">
               <div class="mini-game-actions stack-actions">
@@ -1321,9 +1359,12 @@
                 <span class="game-kicker">18 · FRUIT MERGE</span>
                 <h3>몽글 과일 합치기</h3>
               </div>
-              <p id="fruitStatus" class="status-text" aria-live="polite">
-                탭하거나 좌우로 끌고 손을 놓으면 투하돼요.
-              </p>
+              <div class="game-header-side">
+                <p id="fruitStatus" class="status-text" aria-live="polite">
+                  탭하거나 좌우로 끌고 손을 놓으면 투하돼요.
+                </p>
+                <button class="game-help-button" type="button" data-game-help="fruit" aria-label="과일 합치기 방법 보기" title="게임 방법">?</button>
+              </div>
             </div>
             <div class="fruit-stage">
               <div class="mini-game-actions fruit-actions">
@@ -1405,10 +1446,72 @@
         <button id="tryAnotherGame" class="secondary-action" type="button">추천 게임 시작</button>
         <div class="result-share-row">
           <button id="shareResult" class="secondary-action" type="button">결과 공유</button>
+          <button id="saveResultImage" class="secondary-action" type="button">이미지 저장</button>
           <button id="copyResult" class="secondary-action" type="button">복사</button>
         </div>
         <button id="changeGame" class="text-action" type="button">다른 게임 고르기</button>
       </div>
+    </dialog>
+
+    <dialog id="recordsDialog" class="records-dialog">
+      <button
+        id="closeRecords"
+        class="dialog-close"
+        type="button"
+        aria-label="기록실 닫기"
+        title="닫기"
+      >
+        ×
+      </button>
+      <span class="eyebrow">PERSONAL BEST</span>
+      <h2>나의 기록실</h2>
+      <p id="achievementSummary" class="records-summary">난이도별 기록과 배지를 확인하세요.</p>
+      <div id="recordsGrid" class="records-grid"></div>
+    </dialog>
+
+    <dialog id="gameGuideDialog" class="game-guide-dialog">
+      <button
+        id="closeGameGuide"
+        class="dialog-close"
+        type="button"
+        aria-label="게임 방법 닫기"
+        title="닫기"
+      >
+        ×
+      </button>
+      <span class="eyebrow">HOW TO PLAY</span>
+      <h2 id="gameGuideTitle">게임 방법</h2>
+      <p id="gameGuideSummary" class="game-guide-summary"></p>
+      <ol id="gameGuideSteps" class="game-guide-steps"></ol>
+      <button id="startFromGuide" class="primary-action blue" type="button">
+        게임 시작
+      </button>
+    </dialog>
+
+    <dialog id="friendChallengeDialog" class="friend-challenge-dialog">
+      <button
+        id="closeFriendChallenge"
+        class="dialog-close"
+        type="button"
+        aria-label="친구 기록 대결 닫기"
+        title="닫기"
+      >
+        ×
+      </button>
+      <span class="eyebrow">PASS &amp; PLAY</span>
+      <h2>친구 기록 대결</h2>
+      <p id="friendChallengeMembers" class="friend-challenge-members"></p>
+      <div class="friend-game-control" role="group" aria-label="대결 게임 선택">
+        <button class="is-active" type="button" data-friend-game="dodge" aria-pressed="true">피하기</button>
+        <button type="button" data-friend-game="runner" aria-pressed="false">간식 러너</button>
+        <button type="button" data-friend-game="stack" aria-pressed="false">탑 쌓기</button>
+        <button type="button" data-friend-game="fruit" aria-pressed="false">과일 합치기</button>
+      </div>
+      <div class="friend-challenge-rule">
+        <span><small>난이도</small><strong id="friendChallengeDifficulty">보통</strong></span>
+        <p>모두 같은 장애물 순서로 한 번씩 도전해요.</p>
+      </div>
+      <button id="startFriendChallenge" class="primary-action blue" type="button">대결 시작</button>
     </dialog>
 
     <dialog id="gameSettingsDialog" class="game-settings-dialog">
@@ -1457,9 +1560,10 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./vendor/matter-js/matter.min.js?v=32"></script>
-    <script src="./fruit-logic.js?v=32"></script>
-    <script src="./stack-logic.js?v=32"></script>
-    <script src="./app.js?v=32"></script>
+    <script src="./vendor/matter-js/matter.min.js?v=34"></script>
+    <script src="./fruit-logic.js?v=34"></script>
+    <script src="./stack-logic.js?v=34"></script>
+    <script src="./engagement-logic.js?v=34"></script>
+    <script src="./app.js?v=34"></script>
   </body>
 </html>

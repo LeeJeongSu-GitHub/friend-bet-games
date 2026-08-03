@@ -107,6 +107,77 @@ const DIFFICULTY_PROFILES = {
     fruitDangerDuration: 1250,
   },
 };
+const DIFFICULTY_KEYS = Object.keys(DIFFICULTY_PROFILES);
+const DIFFICULTY_RECORD_FIELDS = [
+  "dodgeBest",
+  "runnerBest",
+  "runnerBestDistance",
+  "stackBest",
+  "fruitBest",
+  "fruitBestTier",
+];
+const GAME_GUIDES = {
+  dodge: {
+    title: "장애물 피하기",
+    summary: "작은 캐릭터를 움직여 위와 양옆에서 오는 장애물을 오래 피하세요.",
+    steps: [
+      "화면을 누른 채 움직이거나 방향키로 캐릭터를 이동해요.",
+      "경고 표시가 보이면 장애물이 들어올 방향부터 확인해요.",
+      "시간이 갈수록 공격 수와 속도가 늘어나요.",
+    ],
+  },
+  runner: {
+    title: "간식 재료 러너",
+    summary: "점프 타이밍을 맞추고 재료와 아이템을 모아 높은 점수를 만드세요.",
+    steps: [
+      "화면을 누르거나 스페이스 키로 점프하고 한 번 더 누르면 이단 점프해요.",
+      "바닥 함정은 뛰어넘고 공중 장애물은 낮게 지나가요.",
+      "재료 세트를 완성해 피버를 열고 보호막과 자석을 챙겨요.",
+    ],
+  },
+  stack: {
+    title: "아슬아슬 탑 쌓기",
+    summary: "움직이는 블록을 정확한 순간에 놓아 더 높은 탑을 만드세요.",
+    steps: [
+      "화면을 누르면 움직이던 블록이 바로 떨어져요.",
+      "아래 블록과 겹치지 않은 부분은 잘려서 다음 블록이 작아져요.",
+      "정확히 맞춘 퍼펙트를 이어 가면 블록 폭을 지킬 수 있어요.",
+    ],
+  },
+  fruit: {
+    title: "몽글 과일 합치기",
+    summary: "같은 과일을 합쳐 더 큰 과일로 키우고 과일 왕관을 완성하세요.",
+    steps: [
+      "화면을 누른 채 좌우로 움직여 위치를 정하고 손을 놓아 투하해요.",
+      "같은 과일 두 개가 닿으면 한 단계 큰 과일로 합쳐져요.",
+      "과일이 위험선을 오래 넘지 않도록 빈 공간을 관리해요.",
+    ],
+  },
+};
+const ACHIEVEMENT_DEFINITIONS = [
+  { id: "first-game", mark: "01", title: "첫 도전", detail: "기록 게임 1회 완료" },
+  { id: "all-rounder", mark: "ALL", title: "올라운더", detail: "기록 게임 4종 완료" },
+  { id: "daily-first", mark: "D1", title: "오늘도 도전", detail: "오늘의 도전 첫 완료" },
+  { id: "streak-3", mark: "3D", title: "사흘 연속", detail: "오늘의 도전 3일 연속" },
+  { id: "streak-7", mark: "7D", title: "일주일 루틴", detail: "오늘의 도전 7일 연속" },
+  { id: "dodge-10", mark: "10s", title: "생존 감각", detail: "피하기 10초 생존" },
+  { id: "runner-5000", mark: "5K", title: "간식 질주", detail: "러너 5,000점" },
+  { id: "stack-10", mark: "10F", title: "균형 장인", detail: "탑 10층" },
+  { id: "fruit-1000", mark: "1K", title: "과일 연구가", detail: "과일 1,000점" },
+  { id: "friend-finish", mark: "VS", title: "승부 완료", detail: "친구 기록 대결 완료" },
+];
+const ACHIEVEMENT_IDS = new Set(
+  ACHIEVEMENT_DEFINITIONS.map((achievement) => achievement.id),
+);
+
+function createEmptyDifficultyRecords() {
+  return Object.fromEntries(
+    DIFFICULTY_KEYS.map((difficulty) => [
+      difficulty,
+      Object.fromEntries(DIFFICULTY_RECORD_FIELDS.map((field) => [field, 0])),
+    ]),
+  );
+}
 
 const elements = {
   setupPanel: document.querySelector("#setupPanel"),
@@ -148,6 +219,7 @@ const elements = {
   quickGameList: document.querySelector("#quickGameList"),
   quickLaunchMeta: document.querySelector("#quickLaunchMeta"),
   favoriteGame: document.querySelector("#favoriteGame"),
+  openRecords: document.querySelector("#openRecords"),
   randomGame: document.querySelector("#randomGame"),
   openGameSettings: document.querySelector("#openGameSettings"),
   gameSettingsDialog: document.querySelector("#gameSettingsDialog"),
@@ -156,6 +228,36 @@ const elements = {
   difficultySummary: document.querySelector("#difficultySummary"),
   soundToggle: document.querySelector("#soundToggle"),
   vibrationToggle: document.querySelector("#vibrationToggle"),
+  recordsDialog: document.querySelector("#recordsDialog"),
+  closeRecords: document.querySelector("#closeRecords"),
+  recordsGrid: document.querySelector("#recordsGrid"),
+  achievementSummary: document.querySelector("#achievementSummary"),
+  gameGuideDialog: document.querySelector("#gameGuideDialog"),
+  closeGameGuide: document.querySelector("#closeGameGuide"),
+  gameGuideTitle: document.querySelector("#gameGuideTitle"),
+  gameGuideSummary: document.querySelector("#gameGuideSummary"),
+  gameGuideSteps: document.querySelector("#gameGuideSteps"),
+  startFromGuide: document.querySelector("#startFromGuide"),
+  gameHelpButtons: [...document.querySelectorAll("[data-game-help]")],
+  engagementHub: document.querySelector("#engagementHub"),
+  dailyChallengeDate: document.querySelector("#dailyChallengeDate"),
+  dailyChallengeTitle: document.querySelector("#dailyChallengeTitle"),
+  dailyChallengeMeta: document.querySelector("#dailyChallengeMeta"),
+  dailyStreak: document.querySelector("#dailyStreak"),
+  dailyBest: document.querySelector("#dailyBest"),
+  startDailyChallenge: document.querySelector("#startDailyChallenge"),
+  openFriendChallenge: document.querySelector("#openFriendChallenge"),
+  friendChallengeBar: document.querySelector("#friendChallengeBar"),
+  friendChallengeStatus: document.querySelector("#friendChallengeStatus"),
+  friendChallengeScores: document.querySelector("#friendChallengeScores"),
+  continueFriendChallenge: document.querySelector("#continueFriendChallenge"),
+  endFriendChallenge: document.querySelector("#endFriendChallenge"),
+  friendChallengeDialog: document.querySelector("#friendChallengeDialog"),
+  closeFriendChallenge: document.querySelector("#closeFriendChallenge"),
+  friendChallengeMembers: document.querySelector("#friendChallengeMembers"),
+  friendChallengeDifficulty: document.querySelector("#friendChallengeDifficulty"),
+  friendGameButtons: [...document.querySelectorAll("[data-friend-game]")],
+  startFriendChallenge: document.querySelector("#startFriendChallenge"),
   partySession: document.querySelector("#partySession"),
   partySessionStatus: document.querySelector("#party-session-title"),
   partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
@@ -350,6 +452,7 @@ const elements = {
   playAgain: document.querySelector("#playAgain"),
   tryAnotherGame: document.querySelector("#tryAnotherGame"),
   shareResult: document.querySelector("#shareResult"),
+  saveResultImage: document.querySelector("#saveResultImage"),
   copyResult: document.querySelector("#copyResult"),
   changeGame: document.querySelector("#changeGame"),
   toast: document.querySelector("#toast"),
@@ -382,15 +485,28 @@ const state = {
   recentGames: savedState.recentGames,
   favoriteGames: savedState.favoriteGames,
   difficulty: savedState.difficulty,
+  difficultyRecords: savedState.difficultyRecords,
+  seenGuides: savedState.seenGuides,
+  dailyProgress: savedState.dailyProgress,
+  dailyStreak: savedState.dailyStreak,
+  lastDailyDate: savedState.lastDailyDate,
+  achievementStats: savedState.achievementStats,
+  unlockedAchievements: savedState.unlockedAchievements,
   soundEnabled: savedState.soundEnabled,
   vibrationEnabled: savedState.vibrationEnabled,
   lastResult: null,
   lastMission: null,
   partySession: null,
+  friendChallenge: null,
   excludedWinners: [],
   setupCollapsed: false,
 };
 
+let activeGuideGame = null;
+let activeGuideStarter = null;
+let activeRunContext = null;
+let specialRandom = null;
+let selectedFriendGame = "dodge";
 let wheelRotation = 0;
 let wheelSpinning = false;
 let menuWheelRotation = 0;
@@ -476,6 +592,7 @@ let runnerInvulnerableUntil = 0;
 let stackPhase = "idle";
 let stackAnimationFrame = null;
 let stackLastFrame = 0;
+let stackResumeCountdown = 0;
 let stackBlocks = [];
 let stackActive = null;
 let stackFragments = [];
@@ -488,6 +605,7 @@ let fruitPhase = "idle";
 let fruitEngine = null;
 let fruitAnimationFrame = null;
 let fruitLastFrame = 0;
+let fruitResumeCountdown = 0;
 let fruitBodies = [];
 let fruitMergeQueue = [];
 let fruitEffects = [];
@@ -605,7 +723,48 @@ function loadState() {
         ? Math.min(Math.max(number, 0), maximum)
         : null;
     };
-    const dodgeBest = readOptionalRecord(parsed?.dodgeBest, 3600000) || 0;
+    const difficulty = Object.prototype.hasOwnProperty.call(
+      DIFFICULTY_PROFILES,
+      parsed?.difficulty,
+    )
+      ? parsed.difficulty
+      : "normal";
+    const hasDifficultyRecords =
+      parsed?.difficultyRecords &&
+      typeof parsed.difficultyRecords === "object" &&
+      !Array.isArray(parsed.difficultyRecords);
+    const readDifficultyRecord = (source) => ({
+      dodgeBest: readOptionalRecord(source?.dodgeBest, 3600000) || 0,
+      runnerBest: Math.round(
+        readOptionalRecord(source?.runnerBest, 999999999) || 0,
+      ),
+      runnerBestDistance: Math.round(
+        readOptionalRecord(source?.runnerBestDistance, 10000000) || 0,
+      ),
+      stackBest: Math.round(
+        readOptionalRecord(source?.stackBest, 10000) || 0,
+      ),
+      fruitBest: Math.round(
+        readOptionalRecord(source?.fruitBest, 999999999) || 0,
+      ),
+      fruitBestTier: Math.round(
+        readOptionalRecord(source?.fruitBestTier, FRUIT_TIERS.length - 1) || 0,
+      ),
+    });
+    const difficultyRecords = Object.fromEntries(
+      DIFFICULTY_KEYS.map((key) => [
+        key,
+        readDifficultyRecord(
+          hasDifficultyRecords
+            ? parsed.difficultyRecords[key]
+            : key === "normal"
+              ? parsed
+              : null,
+        ),
+      ]),
+    );
+    const activeDifficultyRecord = difficultyRecords[difficulty];
+    const dodgeBest = activeDifficultyRecord.dodgeBest;
     const reactionSoloBest = readOptionalRecord(
       parsed?.reactionSoloBest,
       10000,
@@ -614,21 +773,11 @@ function loadState() {
     const tapBest = Math.round(
       readOptionalRecord(parsed?.tapBest, 10000) || 0,
     );
-    const runnerBest = Math.round(
-      readOptionalRecord(parsed?.runnerBest, 999999999) || 0,
-    );
-    const runnerBestDistance = Math.round(
-      readOptionalRecord(parsed?.runnerBestDistance, 10000000) || 0,
-    );
-    const stackBest = Math.round(
-      readOptionalRecord(parsed?.stackBest, 10000) || 0,
-    );
-    const fruitBest = Math.round(
-      readOptionalRecord(parsed?.fruitBest, 999999999) || 0,
-    );
-    const fruitBestTier = Math.round(
-      readOptionalRecord(parsed?.fruitBestTier, FRUIT_TIERS.length - 1) || 0,
-    );
+    const runnerBest = activeDifficultyRecord.runnerBest;
+    const runnerBestDistance = activeDifficultyRecord.runnerBestDistance;
+    const stackBest = activeDifficultyRecord.stackBest;
+    const fruitBest = activeDifficultyRecord.fruitBest;
+    const fruitBestTier = activeDifficultyRecord.fruitBestTier;
     const currentMode = ["together", "solo"].includes(parsed?.currentMode)
       ? parsed.currentMode
       : "together";
@@ -656,12 +805,54 @@ function loadState() {
       parsed?.favoriteGames,
       Object.keys(GAME_LABELS).length,
     );
-    const difficulty = Object.prototype.hasOwnProperty.call(
-      DIFFICULTY_PROFILES,
-      parsed?.difficulty,
-    )
-      ? parsed.difficulty
-      : "normal";
+    const seenGuides = Array.isArray(parsed?.seenGuides)
+      ? [...new Set(parsed.seenGuides)].filter((game) => GAME_GUIDES[game])
+      : [];
+    const dailyProgress = {};
+    if (
+      parsed?.dailyProgress &&
+      typeof parsed.dailyProgress === "object" &&
+      !Array.isArray(parsed.dailyProgress)
+    ) {
+      Object.entries(parsed.dailyProgress)
+        .filter(([date, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && entry)
+        .sort(([left], [right]) => right.localeCompare(left))
+        .slice(0, 14)
+        .forEach(([date, entry]) => {
+          const challenge = EngagementLogic.getDailyChallenge(date);
+          dailyProgress[date] = {
+            game: challenge.game,
+            difficulty: challenge.difficulty,
+            attempts: Math.min(999, Math.max(0, Math.round(Number(entry.attempts) || 0))),
+            bestScore: Math.max(0, Number(entry.bestScore) || 0),
+            bestText:
+              typeof entry.bestText === "string" ? entry.bestText.slice(0, 40) : "",
+            completed: Boolean(entry.completed),
+          };
+        });
+    }
+    const achievementStats = {
+      totalGames: Math.max(0, Math.round(Number(parsed?.achievementStats?.totalGames) || 0)),
+      friendChallenges: Math.max(
+        0,
+        Math.round(Number(parsed?.achievementStats?.friendChallenges) || 0),
+      ),
+      shares: Math.max(0, Math.round(Number(parsed?.achievementStats?.shares) || 0)),
+      gamePlays: Object.fromEntries(
+        EngagementLogic.DAILY_GAMES.map((game) => [
+          game,
+          Math.max(
+            0,
+            Math.round(Number(parsed?.achievementStats?.gamePlays?.[game]) || 0),
+          ),
+        ]),
+      ),
+    };
+    const unlockedAchievements = Array.isArray(parsed?.unlockedAchievements)
+      ? [...new Set(parsed.unlockedAchievements)].filter((id) =>
+          ACHIEVEMENT_IDS.has(id),
+        )
+      : [];
 
     return {
       participants: hasStoredState ? participants : [...DEFAULT_PARTICIPANTS],
@@ -689,6 +880,17 @@ function loadState() {
       recentGames,
       favoriteGames,
       difficulty,
+      difficultyRecords,
+      seenGuides,
+      dailyProgress,
+      dailyStreak: Math.max(0, Math.round(Number(parsed?.dailyStreak) || 0)),
+      lastDailyDate:
+        typeof parsed?.lastDailyDate === "string" &&
+        /^\d{4}-\d{2}-\d{2}$/.test(parsed.lastDailyDate)
+          ? parsed.lastDailyDate
+          : "",
+      achievementStats,
+      unlockedAchievements,
       soundEnabled: parsed?.soundEnabled !== false,
       vibrationEnabled: parsed?.vibrationEnabled !== false,
       hasStoredState,
@@ -720,6 +922,20 @@ function loadState() {
       recentGames: [],
       favoriteGames: [],
       difficulty: "normal",
+      difficultyRecords: createEmptyDifficultyRecords(),
+      seenGuides: [],
+      dailyProgress: {},
+      dailyStreak: 0,
+      lastDailyDate: "",
+      achievementStats: {
+        totalGames: 0,
+        friendChallenges: 0,
+        shares: 0,
+        gamePlays: Object.fromEntries(
+          EngagementLogic.DAILY_GAMES.map((game) => [game, 0]),
+        ),
+      },
+      unlockedAchievements: [],
       soundEnabled: true,
       vibrationEnabled: true,
       hasStoredState: false,
@@ -727,8 +943,26 @@ function loadState() {
   }
 }
 
+function storeActiveDifficultyRecords(difficulty = state.difficulty) {
+  if (!state.difficultyRecords[difficulty]) {
+    state.difficultyRecords[difficulty] = {};
+  }
+  DIFFICULTY_RECORD_FIELDS.forEach((field) => {
+    state.difficultyRecords[difficulty][field] = state[field];
+  });
+}
+
+function loadActiveDifficultyRecords(difficulty = state.difficulty) {
+  const records = state.difficultyRecords[difficulty];
+  if (!records) return;
+  DIFFICULTY_RECORD_FIELDS.forEach((field) => {
+    state[field] = records[field] || 0;
+  });
+}
+
 function saveState() {
   try {
+    storeActiveDifficultyRecords();
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
@@ -757,6 +991,13 @@ function saveState() {
         recentGames: state.recentGames,
         favoriteGames: state.favoriteGames,
         difficulty: state.difficulty,
+        difficultyRecords: state.difficultyRecords,
+        seenGuides: state.seenGuides,
+        dailyProgress: state.dailyProgress,
+        dailyStreak: state.dailyStreak,
+        lastDailyDate: state.lastDailyDate,
+        achievementStats: state.achievementStats,
+        unlockedAchievements: state.unlockedAchievements,
         soundEnabled: state.soundEnabled,
         vibrationEnabled: state.vibrationEnabled,
       }),
@@ -912,7 +1153,16 @@ function launchRandomGame() {
 
 function setDifficulty(difficulty, notify = true) {
   if (!DIFFICULTY_PROFILES[difficulty]) return;
+  const changed = state.difficulty !== difficulty;
+  if (changed) storeActiveDifficultyRecords();
   state.difficulty = difficulty;
+  if (changed) {
+    loadActiveDifficultyRecords();
+    resetDodge();
+    resetRunner();
+    resetStack();
+    resetFruit();
+  }
   elements.difficultyButtons.forEach((button) => {
     const active = button.dataset.difficulty === difficulty;
     button.classList.toggle("is-active", active);
@@ -921,6 +1171,7 @@ function setDifficulty(difficulty, notify = true) {
   elements.difficultySummary.textContent = getDifficultyProfile().label;
   saveState();
   renderQuickLaunch();
+  renderRecords();
   if (notify) {
     showToast(`미니게임 난이도를 ${getDifficultyProfile().label}으로 바꿨어요.`);
     playFeedbackTone("select");
@@ -928,6 +1179,7 @@ function setDifficulty(difficulty, notify = true) {
 }
 
 function openGameSettings() {
+  pauseCanvasGame();
   if (typeof elements.gameSettingsDialog.showModal === "function") {
     elements.gameSettingsDialog.showModal();
   } else {
@@ -944,8 +1196,520 @@ function closeGameSettings() {
   }
 }
 
+function formatDifficultyRecord(game, record) {
+  if (game === "dodge") {
+    return record.dodgeBest > 0
+      ? `${formatDodgeTime(record.dodgeBest)}초`
+      : "--";
+  }
+  if (game === "runner") {
+    return record.runnerBest > 0
+      ? `${record.runnerBest.toLocaleString("ko-KR")}점 · ${record.runnerBestDistance.toLocaleString("ko-KR")}m`
+      : "--";
+  }
+  if (game === "stack") {
+    return record.stackBest > 0 ? `${record.stackBest}층` : "--";
+  }
+  if (game === "fruit") {
+    if (record.fruitBest <= 0 && record.fruitBestTier <= 0) return "--";
+    const tierName = FRUIT_TIERS[record.fruitBestTier]?.name || FRUIT_TIERS[0].name;
+    return `${record.fruitBest.toLocaleString("ko-KR")}점 · ${tierName}`;
+  }
+  return "--";
+}
+
+function createRecordRow(label, value, active = false) {
+  const row = document.createElement("div");
+  row.className = "record-row";
+  row.classList.toggle("is-active", active);
+  const name = document.createElement("span");
+  name.textContent = label;
+  const score = document.createElement("strong");
+  score.textContent = value;
+  row.append(name, score);
+  return row;
+}
+
+function renderRecords() {
+  if (!elements.recordsGrid) return;
+  storeActiveDifficultyRecords();
+  elements.recordsGrid.replaceChildren();
+  [
+    ["dodge", "장애물 피하기"],
+    ["runner", "간식 재료 러너"],
+    ["stack", "아슬아슬 탑 쌓기"],
+    ["fruit", "몽글 과일 합치기"],
+  ].forEach(([game, label]) => {
+    const card = document.createElement("section");
+    card.className = "record-card";
+    const heading = document.createElement("h3");
+    heading.textContent = label;
+    card.append(heading);
+    DIFFICULTY_KEYS.forEach((difficulty) => {
+      card.append(
+        createRecordRow(
+          DIFFICULTY_PROFILES[difficulty].label,
+          formatDifficultyRecord(game, state.difficultyRecords[difficulty]),
+          difficulty === state.difficulty,
+        ),
+      );
+    });
+    elements.recordsGrid.append(card);
+  });
+
+  const personal = document.createElement("section");
+  personal.className = "record-card record-card-wide";
+  const heading = document.createElement("h3");
+  heading.textContent = "개인 기록 게임";
+  personal.append(
+    heading,
+    createRecordRow(
+      "반응속도",
+      state.reactionSoloBest === null ? "--" : `${state.reactionSoloBest}ms`,
+    ),
+    createRecordRow("5초 타이머", formatTimerSoloBest(state.timerSoloBest)),
+    createRecordRow("10초 연타", state.tapBest > 0 ? `${state.tapBest}회` : "--"),
+  );
+  elements.recordsGrid.append(personal);
+
+  const achievementSection = document.createElement("section");
+  achievementSection.className = "achievement-records record-card-wide";
+  const achievementHeading = document.createElement("h3");
+  achievementHeading.textContent = "도전과제 배지";
+  const achievementGrid = document.createElement("div");
+  achievementGrid.className = "achievement-grid";
+  ACHIEVEMENT_DEFINITIONS.forEach((achievement) => {
+    const unlocked = state.unlockedAchievements.includes(achievement.id);
+    const item = document.createElement("div");
+    item.className = "achievement-item";
+    item.classList.toggle("is-unlocked", unlocked);
+    const mark = document.createElement("span");
+    mark.textContent = unlocked ? achievement.mark : "--";
+    const copy = document.createElement("div");
+    const title = document.createElement("strong");
+    title.textContent = achievement.title;
+    const detail = document.createElement("small");
+    detail.textContent = achievement.detail;
+    copy.append(title, detail);
+    item.append(mark, copy);
+    achievementGrid.append(item);
+  });
+  achievementSection.append(achievementHeading, achievementGrid);
+  elements.recordsGrid.append(achievementSection);
+  elements.achievementSummary.textContent =
+    `배지 ${state.unlockedAchievements.length}/${ACHIEVEMENT_DEFINITIONS.length} · ` +
+    "난이도별 기록은 따로 저장돼요.";
+}
+
+function openRecords() {
+  pauseCanvasGame();
+  renderRecords();
+  if (typeof elements.recordsDialog.showModal === "function") {
+    elements.recordsDialog.showModal();
+  } else {
+    elements.recordsDialog.setAttribute("open", "");
+  }
+  window.requestAnimationFrame(() => elements.closeRecords.focus());
+}
+
+function closeRecords() {
+  if (typeof elements.recordsDialog.close === "function") {
+    elements.recordsDialog.close();
+  } else {
+    elements.recordsDialog.removeAttribute("open");
+  }
+}
+
+function openGameGuide(game, starter = null) {
+  const guide = GAME_GUIDES[game];
+  if (!guide) return;
+  activeGuideGame = game;
+  activeGuideStarter = starter;
+  elements.gameGuideTitle.textContent = guide.title;
+  elements.gameGuideSummary.textContent = guide.summary;
+  elements.gameGuideSteps.replaceChildren();
+  guide.steps.forEach((step) => {
+    const item = document.createElement("li");
+    item.textContent = step;
+    elements.gameGuideSteps.append(item);
+  });
+  elements.startFromGuide.textContent = starter ? "게임 시작" : "확인";
+  if (typeof elements.gameGuideDialog.showModal === "function") {
+    elements.gameGuideDialog.showModal();
+  } else {
+    elements.gameGuideDialog.setAttribute("open", "");
+  }
+  window.requestAnimationFrame(() => elements.startFromGuide.focus());
+}
+
+function closeGameGuide() {
+  if (typeof elements.gameGuideDialog.close === "function") {
+    elements.gameGuideDialog.close();
+  } else {
+    elements.gameGuideDialog.removeAttribute("open");
+  }
+  activeGuideGame = null;
+  activeGuideStarter = null;
+}
+
+function requestGuidedStart(game, starter) {
+  if (!state.seenGuides.includes(game)) {
+    openGameGuide(game, starter);
+    return;
+  }
+  starter();
+}
+
+function startGuideGame() {
+  const game = activeGuideGame;
+  const starter = activeGuideStarter;
+  if (game && starter && !state.seenGuides.includes(game)) {
+    state.seenGuides.push(game);
+    saveState();
+  }
+  closeGameGuide();
+  if (starter) starter();
+}
+
+function getTodayChallenge() {
+  return EngagementLogic.getDailyChallenge(EngagementLogic.dateKey());
+}
+
+function getGameStartControl(game) {
+  return {
+    dodge: elements.dodgeStart,
+    runner: elements.runnerStart,
+    stack: elements.stackStart,
+    fruit: elements.fruitStart,
+  }[game];
+}
+
+function formatChallengeDate(date) {
+  const [, month, day] = date.split("-");
+  return `${Number(month)}.${Number(day)}`;
+}
+
+function renderEngagementHub() {
+  const challenge = getTodayChallenge();
+  const progress = state.dailyProgress[challenge.date];
+  const completed = Boolean(progress?.completed);
+  elements.dailyChallengeDate.textContent = formatChallengeDate(challenge.date);
+  elements.dailyChallengeTitle.textContent = `오늘의 도전 · ${getGameShortLabel(challenge.game)}`;
+  elements.dailyChallengeMeta.textContent =
+    `${DIFFICULTY_PROFILES[challenge.difficulty].label} 난이도 · ` +
+    (completed ? `${progress.attempts}회 도전 완료` : "모두에게 같은 조건");
+  elements.dailyStreak.textContent = `${state.dailyStreak}일`;
+  elements.dailyBest.textContent = progress?.bestText || "--";
+  elements.startDailyChallenge.textContent = completed ? "기록 갱신" : "오늘 도전";
+}
+
+function beginSpecialRun(game) {
+  if (!activeRunContext || activeRunContext.game !== game) {
+    specialRandom = null;
+    return;
+  }
+  specialRandom = EngagementLogic.createSeededRandom(activeRunContext.seed);
+}
+
+function launchSpecialRun(context) {
+  specialRandom = null;
+  setDifficulty(context.difficulty, false);
+  setPlayMode("solo");
+  activeRunContext = context;
+  launchGame(context.game);
+  const startControl = getGameStartControl(context.game);
+  window.requestAnimationFrame(() => startControl?.click());
+}
+
+function startDailyChallenge() {
+  const challenge = getTodayChallenge();
+  launchSpecialRun({
+    type: "daily",
+    ...challenge,
+  });
+}
+
+function openFriendChallengeDialog() {
+  if (!hasEnoughParticipants()) return;
+  pauseCanvasGame();
+  elements.friendChallengeMembers.textContent =
+    `${state.participants.length}명 · ${state.participants.join(", ")}`;
+  elements.friendChallengeDifficulty.textContent = getDifficultyProfile().label;
+  if (typeof elements.friendChallengeDialog.showModal === "function") {
+    elements.friendChallengeDialog.showModal();
+  } else {
+    elements.friendChallengeDialog.setAttribute("open", "");
+  }
+  window.requestAnimationFrame(() => elements.startFriendChallenge.focus());
+}
+
+function closeFriendChallengeDialog() {
+  if (typeof elements.friendChallengeDialog.close === "function") {
+    elements.friendChallengeDialog.close();
+  } else {
+    elements.friendChallengeDialog.removeAttribute("open");
+  }
+}
+
+function selectFriendChallengeGame(game) {
+  if (!EngagementLogic.DAILY_GAMES.includes(game)) return;
+  selectedFriendGame = game;
+  elements.friendGameButtons.forEach((button) => {
+    const active = button.dataset.friendGame === game;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function renderFriendChallenge() {
+  const session = state.friendChallenge;
+  elements.friendChallengeBar.hidden = !session;
+  elements.friendChallengeScores.replaceChildren();
+  elements.continueFriendChallenge.hidden = true;
+  if (!session) return;
+  const currentName = session.players[session.index] || session.players[0];
+  elements.friendChallengeStatus.textContent = session.finished
+    ? `${getGameShortLabel(session.game)} · 대결 완료`
+    : `${session.index + 1}/${session.players.length} · ${currentName} 차례`;
+  elements.continueFriendChallenge.hidden =
+    session.finished || session.results.length <= session.index;
+  session.players.forEach((name, index) => {
+    const result = session.results.find((entry) => entry.name === name);
+    const chip = document.createElement("span");
+    chip.className = "friend-score-chip";
+    chip.classList.toggle("is-current", !session.finished && index === session.index);
+    chip.textContent = result ? `${name} ${result.scoreText}` : name;
+    elements.friendChallengeScores.append(chip);
+  });
+}
+
+function advanceFriendChallenge() {
+  const session = state.friendChallenge;
+  if (!session || session.finished || session.results.length <= session.index) {
+    return;
+  }
+  session.index += 1;
+  launchFriendChallengeTurn();
+}
+
+function launchFriendChallengeTurn() {
+  const session = state.friendChallenge;
+  if (!session || session.finished) return;
+  const player = session.players[session.index];
+  launchSpecialRun({
+    type: "friend",
+    game: session.game,
+    difficulty: session.difficulty,
+    seed: session.seed,
+    player,
+  });
+  renderFriendChallenge();
+  showToast(`${player}님의 차례예요.`);
+}
+
+function startFriendChallenge() {
+  if (!hasEnoughParticipants()) return;
+  state.friendChallenge = {
+    game: selectedFriendGame,
+    difficulty: state.difficulty,
+    seed: EngagementLogic.hashString(
+      `${EngagementLogic.dateKey()}:${selectedFriendGame}:${state.participants.join("|")}:${Date.now()}`,
+    ),
+    players: [...state.participants],
+    index: 0,
+    results: [],
+    finished: false,
+  };
+  closeFriendChallengeDialog();
+  renderFriendChallenge();
+  launchFriendChallengeTurn();
+}
+
+function stopFriendChallenge(notify = true) {
+  const game = state.friendChallenge?.game;
+  const resetGame = {
+    dodge: resetDodge,
+    runner: resetRunner,
+    stack: resetStack,
+    fruit: resetFruit,
+  }[game];
+  resetGame?.();
+  state.friendChallenge = null;
+  if (activeRunContext?.type === "friend") activeRunContext = null;
+  specialRandom = null;
+  renderFriendChallenge();
+  if (notify) showToast("친구 기록 대결을 종료했어요.");
+}
+
+function getMaximumRecord(field) {
+  storeActiveDifficultyRecords();
+  return Math.max(
+    0,
+    ...DIFFICULTY_KEYS.map(
+      (difficulty) => Number(state.difficultyRecords[difficulty]?.[field]) || 0,
+    ),
+  );
+}
+
+function getUnlockedAchievementIds() {
+  const playedGames = EngagementLogic.DAILY_GAMES.filter(
+    (game) => state.achievementStats.gamePlays[game] > 0,
+  );
+  const completedDailyCount = Object.values(state.dailyProgress).filter(
+    (entry) => entry.completed,
+  ).length;
+  const unlocked = [];
+  if (state.achievementStats.totalGames >= 1) unlocked.push("first-game");
+  if (playedGames.length >= EngagementLogic.DAILY_GAMES.length) {
+    unlocked.push("all-rounder");
+  }
+  if (completedDailyCount >= 1) unlocked.push("daily-first");
+  if (state.dailyStreak >= 3) unlocked.push("streak-3");
+  if (state.dailyStreak >= 7) unlocked.push("streak-7");
+  if (getMaximumRecord("dodgeBest") >= 10000) unlocked.push("dodge-10");
+  if (getMaximumRecord("runnerBest") >= 5000) unlocked.push("runner-5000");
+  if (getMaximumRecord("stackBest") >= 10) unlocked.push("stack-10");
+  if (getMaximumRecord("fruitBest") >= 1000) unlocked.push("fruit-1000");
+  if (state.achievementStats.friendChallenges >= 1) {
+    unlocked.push("friend-finish");
+  }
+  return unlocked;
+}
+
+function updateAchievements(notify = true) {
+  const eligible = getUnlockedAchievementIds();
+  const newlyUnlocked = eligible.filter(
+    (id) => !state.unlockedAchievements.includes(id),
+  );
+  state.unlockedAchievements = [
+    ...new Set([...state.unlockedAchievements, ...eligible]),
+  ];
+  if (notify && newlyUnlocked.length) {
+    const names = ACHIEVEMENT_DEFINITIONS.filter((achievement) =>
+      newlyUnlocked.includes(achievement.id),
+    ).map((achievement) => achievement.title);
+    showToast(`새 배지 획득 · ${names.join(", ")}`);
+  }
+  renderEngagementHub();
+  return newlyUnlocked;
+}
+
+function registerGameCompletion(game) {
+  if (!EngagementLogic.DAILY_GAMES.includes(game)) return;
+  state.achievementStats.totalGames += 1;
+  state.achievementStats.gamePlays[game] += 1;
+}
+
+function applyEngagementResult(rawResult) {
+  registerGameCompletion(rawResult.game);
+  const context = activeRunContext;
+  specialRandom = null;
+  if (!context || context.game !== rawResult.game || rawResult.scoreValue == null) {
+    updateAchievements();
+    saveState();
+    return rawResult;
+  }
+
+  if (context.type === "daily") {
+    const previous = state.dailyProgress[context.date];
+    const firstCompletion = !previous?.completed;
+    const bestScore = Math.max(previous?.bestScore || 0, rawResult.scoreValue);
+    const bestText =
+      rawResult.scoreValue >= (previous?.bestScore || 0)
+        ? rawResult.scoreText
+        : previous.bestText;
+    state.dailyProgress[context.date] = {
+      game: context.game,
+      difficulty: context.difficulty,
+      attempts: (previous?.attempts || 0) + 1,
+      bestScore,
+      bestText,
+      completed: true,
+    };
+    if (firstCompletion) {
+      state.dailyStreak = EngagementLogic.updateStreak(
+        state.lastDailyDate,
+        context.date,
+        state.dailyStreak,
+      );
+      state.lastDailyDate = context.date;
+    }
+    updateAchievements();
+    saveState();
+    return {
+      ...rawResult,
+      gameLabel: `오늘의 도전 · ${getGameShortLabel(rawResult.game)}`,
+      lead: rawResult.scoreValue >= (previous?.bestScore || 0)
+        ? "오늘의 최고 기록"
+        : "오늘의 도전 완료",
+      stakeLabel: "오늘 최고",
+      stake: bestText,
+      copyText: `${rawResult.copyText}\n오늘의 도전 ${context.date} · 최고 ${bestText}`,
+      dailyChallenge: true,
+    };
+  }
+
+  if (context.type === "friend" && state.friendChallenge) {
+    const session = state.friendChallenge;
+    session.results.push({
+      name: context.player,
+      score: rawResult.scoreValue,
+      scoreText: rawResult.scoreText,
+    });
+    const finalTurn = session.index >= session.players.length - 1;
+    if (finalTurn) {
+      session.finished = true;
+      const ranking = EngagementLogic.rankScores(session.results);
+      state.achievementStats.friendChallenges += 1;
+      activeRunContext = null;
+      updateAchievements();
+      saveState();
+      renderFriendChallenge();
+      const lowestScore = Math.min(...ranking.map((entry) => entry.score));
+      const lastNames = ranking
+        .filter((entry) => entry.score === lowestScore)
+        .map((entry) => entry.name);
+      const rankingText = ranking
+        .map((entry) => `${entry.rank}. ${entry.name} · ${entry.scoreText}`)
+        .join("\n");
+      return {
+        ...rawResult,
+        gameLabel: "친구 기록 대결",
+        lead: "최종 순위",
+        displayText: rankingText,
+        list: true,
+        stakeLabel: "벌칙 대상",
+        stake: `${lastNames.join(", ")} · ${state.stake}`,
+        copyText:
+          `딱! 정해 친구 기록 대결 · ${getGameShortLabel(session.game)}\n` +
+          `${rankingText}\n벌칙: ${lastNames.join(", ")} · ${state.stake}`,
+        friendFinal: true,
+      };
+    }
+
+    activeRunContext = null;
+    updateAchievements();
+    saveState();
+    renderFriendChallenge();
+    return {
+      ...rawResult,
+      gameLabel: "친구 기록 대결",
+      lead: `${context.player}님의 기록`,
+      stakeLabel: "다음 참가자",
+      stake: session.players[session.index + 1],
+      copyText: `${rawResult.copyText}\n친구 기록 대결 ${session.index + 1}/${session.players.length}`,
+      friendProgress: true,
+    };
+  }
+
+  updateAchievements();
+  saveState();
+  return rawResult;
+}
+
 function randomInt(max) {
   if (!Number.isInteger(max) || max <= 0) return 0;
+  if (specialRandom) return Math.floor(specialRandom() * max);
   if (window.crypto?.getRandomValues) {
     const range = 0x100000000;
     const limit = range - (range % max);
@@ -956,6 +1720,10 @@ function randomInt(max) {
     return values[0] % max;
   }
   return Math.floor(Math.random() * max);
+}
+
+function getRandomUnit() {
+  return specialRandom ? specialRandom() : Math.random();
 }
 
 function shuffle(items) {
@@ -1612,6 +2380,10 @@ function selectGame(game) {
   if (!elements.gameViews[game]) return;
 
   const changingGame = state.currentGame !== game;
+  if (changingGame && activeRunContext?.game !== game) {
+    activeRunContext = null;
+    specialRandom = null;
+  }
   const enteringDodge = changingGame && game === "dodge";
   const enteringTap = changingGame && game === "tap";
   const enteringRunner = changingGame && game === "runner";
@@ -3678,7 +4450,8 @@ function setDodgePrompt(title, detail) {
 function renderDodgeBest() {
   elements.dodgeBest.textContent = formatDodgeTime(state.dodgeBest);
   elements.dodgeReset.disabled =
-    state.dodgeBest <= 0 || ["countdown", "running"].includes(dodgePhase);
+    state.dodgeBest <= 0 ||
+    ["countdown", "running", "paused"].includes(dodgePhase);
 }
 
 function resetDodge() {
@@ -4002,6 +4775,8 @@ function finishDodge() {
   resultRevealTimer = window.setTimeout(() => {
     showResult({
       game: "dodge",
+      scoreValue: record,
+      scoreText: `${formatDodgeTime(record)}초`,
       lead: newBest ? "새로운 최고 기록" : "이번 생존 기록",
       displayText: `${formatDodgeTime(record)}초`,
       stakeLabel: "개인 최고",
@@ -4138,7 +4913,8 @@ function runDodgeFrame(now) {
     if (dodgeCountdown <= 0) {
       dodgePhase = "running";
       elements.dodgeArena.dataset.phase = "running";
-      elements.dodgeStart.textContent = "피하는 중";
+      elements.dodgeStart.disabled = false;
+      elements.dodgeStart.textContent = "일시정지";
       elements.dodgeStatus.textContent = "1단계 · 처음부터 빠른 장애물을 피하세요.";
       dodgeLastFrame = now;
     }
@@ -4154,9 +4930,34 @@ function runDodgeFrame(now) {
   }
 }
 
+function pauseDodge() {
+  if (!["countdown", "running"].includes(dodgePhase)) return;
+  if (dodgeAnimationFrame !== null) cancelAnimationFrame(dodgeAnimationFrame);
+  dodgeAnimationFrame = null;
+  dodgePhase = "paused";
+  dodgeLastFrame = 0;
+  dodgePointerId = null;
+  dodgeKeys.clear();
+  elements.dodgeArena.dataset.phase = "paused";
+  elements.dodgeStart.disabled = false;
+  elements.dodgeStart.textContent = "계속하기";
+  elements.dodgeReset.disabled = true;
+  elements.dodgeStatus.textContent = "게임을 잠시 멈췄어요.";
+  setDodgePrompt("PAUSE", "계속하기를 누르면 3초 뒤 재개");
+  drawDodgeScene();
+}
+
 function startDodge() {
-  if (["countdown", "running"].includes(dodgePhase)) return;
-  resetDodge();
+  if (dodgePhase === "running") {
+    pauseDodge();
+    return;
+  }
+  if (dodgePhase === "countdown") return;
+  const resuming = dodgePhase === "paused";
+  if (!resuming) {
+    beginSpecialRun("dodge");
+    resetDodge();
+  }
   dodgePhase = "countdown";
   dodgeCountdown = 3000;
   dodgeLastFrame = 0;
@@ -4164,14 +4965,16 @@ function startDodge() {
   elements.dodgeStart.disabled = true;
   elements.dodgeStart.textContent = "준비 중";
   elements.dodgeReset.disabled = true;
-  elements.dodgeStatus.textContent = "잠시 후 시작합니다. 움직일 준비를 하세요.";
+  elements.dodgeStatus.textContent = resuming
+    ? "3초 뒤 멈춘 기록부터 이어서 시작해요."
+    : "잠시 후 시작합니다. 움직일 준비를 하세요.";
   setDodgePrompt("3", "곧 시작해요");
   elements.dodgeCanvas.focus({ preventScroll: true });
   dodgeAnimationFrame = requestAnimationFrame(runDodgeFrame);
 }
 
 function clearDodgeBest() {
-  if (["countdown", "running"].includes(dodgePhase)) return;
+  if (["countdown", "running", "paused"].includes(dodgePhase)) return;
   state.dodgeBest = 0;
   saveState();
   renderDodgeBest();
@@ -4380,7 +5183,7 @@ function renderRunnerHud() {
   elements.runnerArena.classList.toggle("has-shield", runnerShield > 0);
   elements.runnerReset.disabled =
     (state.runnerBest <= 0 && state.runnerBestDistance <= 0) ||
-    ["countdown", "running"].includes(runnerPhase);
+    ["countdown", "running", "paused"].includes(runnerPhase);
 }
 
 function resetRunner() {
@@ -4973,6 +5776,8 @@ function finishRunner() {
   resultRevealTimer = window.setTimeout(() => {
     showResult({
       game: "runner",
+      scoreValue: runnerScoreValue,
+      scoreText: runnerScoreValue.toLocaleString() + "점",
       lead: newScoreBest ? "새로운 최고 기록!" : "이번 달리기 기록",
       displayText: runnerScoreValue.toLocaleString() + "점",
       stakeLabel: "달린 기록",
@@ -5119,7 +5924,8 @@ function runRunnerFrame(now) {
     if (runnerCountdown <= 0) {
       runnerPhase = "running";
       elements.runnerArena.dataset.phase = "running";
-      elements.runnerStart.textContent = "달리는 중";
+      elements.runnerStart.disabled = false;
+      elements.runnerStart.textContent = "일시정지";
       elements.runnerStatus.textContent =
         "낮은 함정은 점프, 공중 장애물은 낮게 통과하세요!";
       runnerLastFrame = now;
@@ -5136,9 +5942,32 @@ function runRunnerFrame(now) {
   }
 }
 
+function pauseRunner() {
+  if (!["countdown", "running"].includes(runnerPhase)) return;
+  if (runnerAnimationFrame !== null) cancelAnimationFrame(runnerAnimationFrame);
+  runnerAnimationFrame = null;
+  runnerPhase = "paused";
+  runnerLastFrame = 0;
+  elements.runnerArena.dataset.phase = "paused";
+  elements.runnerStart.disabled = false;
+  elements.runnerStart.textContent = "계속하기";
+  elements.runnerReset.disabled = true;
+  elements.runnerStatus.textContent = "달리기를 잠시 멈췄어요.";
+  setRunnerPrompt("PAUSE", "계속하기를 누르면 3초 뒤 재개");
+  drawRunnerScene();
+}
+
 function startRunner() {
-  if (["countdown", "running"].includes(runnerPhase)) return;
-  resetRunner();
+  if (runnerPhase === "running") {
+    pauseRunner();
+    return;
+  }
+  if (runnerPhase === "countdown") return;
+  const resuming = runnerPhase === "paused";
+  if (!resuming) {
+    beginSpecialRun("runner");
+    resetRunner();
+  }
   runnerPhase = "countdown";
   runnerCountdown = 3000;
   runnerLastFrame = 0;
@@ -5146,14 +5975,16 @@ function startRunner() {
   elements.runnerStart.disabled = true;
   elements.runnerStart.textContent = "준비 중";
   elements.runnerReset.disabled = true;
-  elements.runnerStatus.textContent = "3초 뒤 달리기가 시작돼요.";
+  elements.runnerStatus.textContent = resuming
+    ? "3초 뒤 멈춘 거리부터 이어서 달려요."
+    : "3초 뒤 달리기가 시작돼요.";
   setRunnerPrompt("3", "점프할 준비!");
   elements.runnerCanvas.focus({ preventScroll: true });
   runnerAnimationFrame = requestAnimationFrame(runRunnerFrame);
 }
 
 function clearRunnerBest() {
-  if (["countdown", "running"].includes(runnerPhase)) return;
+  if (["countdown", "running", "paused"].includes(runnerPhase)) return;
   state.runnerBest = 0;
   state.runnerBestDistance = 0;
   saveState();
@@ -5172,7 +6003,8 @@ function renderStackHud() {
   elements.stackBest.textContent = String(state.stackBest);
   elements.stackCombo.textContent = String(stackComboValue);
   elements.stackReset.disabled =
-    state.stackBest <= 0 || stackPhase === "running";
+    state.stackBest <= 0 ||
+    ["running", "paused", "resume-countdown"].includes(stackPhase);
 }
 
 function calculateStackPlacement(active, top) {
@@ -5358,6 +6190,7 @@ function resetStack() {
   }
   stackAnimationFrame = null;
   stackLastFrame = 0;
+  stackResumeCountdown = 0;
   stackPhase = "idle";
   stackScoreValue = 0;
   stackComboValue = 0;
@@ -5446,6 +6279,8 @@ function finishStack() {
   resultRevealTimer = window.setTimeout(() => {
     showResult({
       game: "stack",
+      scoreValue: stackScoreValue,
+      scoreText: `${stackScoreValue}층`,
       lead: newBest ? "새로운 최고 기록" : "이번에 쌓은 높이",
       displayText: `${stackScoreValue}층`,
       stakeLabel: "퍼펙트 기록",
@@ -5516,7 +6351,7 @@ function dropStackBlock() {
 
 function runStackFrame(now) {
   if (
-    stackPhase !== "running" &&
+    !["running", "resume-countdown"].includes(stackPhase) &&
     stackFragments.length === 0 &&
     !stackFeedback
   ) {
@@ -5526,11 +6361,28 @@ function runStackFrame(now) {
   if (!stackLastFrame) stackLastFrame = now;
   const delta = Math.min((now - stackLastFrame) / 1000, 0.034);
   stackLastFrame = now;
-  updateStackGame(delta);
+  if (stackPhase === "resume-countdown") {
+    stackResumeCountdown -= delta * 1000;
+    setStackPrompt(
+      String(Math.max(1, Math.ceil(stackResumeCountdown / 1000))),
+      "곧 이어서 쌓아요",
+    );
+    if (stackResumeCountdown <= 0) {
+      stackPhase = "running";
+      elements.stackArena.dataset.phase = "running";
+      elements.stackStart.disabled = false;
+      elements.stackStart.textContent = "일시정지";
+      elements.stackStatus.textContent = "멈춘 블록부터 이어서 쌓아요.";
+      setStackPrompt("GO!", "정확한 순간에 터치");
+      stackLastFrame = now;
+    }
+  } else {
+    updateStackGame(delta);
+  }
   drawStackScene();
 
   if (
-    stackPhase === "running" ||
+    ["running", "resume-countdown"].includes(stackPhase) ||
     stackFragments.length > 0 ||
     stackFeedback
   ) {
@@ -5540,13 +6392,46 @@ function runStackFrame(now) {
   }
 }
 
+function pauseStack() {
+  if (!["running", "resume-countdown"].includes(stackPhase)) return;
+  if (stackAnimationFrame !== null) cancelAnimationFrame(stackAnimationFrame);
+  stackAnimationFrame = null;
+  stackPhase = "paused";
+  stackLastFrame = 0;
+  elements.stackArena.dataset.phase = "paused";
+  elements.stackStart.disabled = false;
+  elements.stackStart.textContent = "계속하기";
+  elements.stackReset.disabled = true;
+  elements.stackStatus.textContent = "탑 쌓기를 잠시 멈췄어요.";
+  setStackPrompt("PAUSE", "계속하기를 누르면 3초 뒤 재개");
+  drawStackScene();
+}
+
 function startStack() {
-  if (stackPhase === "running") return;
+  if (stackPhase === "running") {
+    pauseStack();
+    return;
+  }
+  if (stackPhase === "resume-countdown") return;
+  if (stackPhase === "paused") {
+    stackPhase = "resume-countdown";
+    stackResumeCountdown = 3000;
+    stackLastFrame = 0;
+    elements.stackArena.dataset.phase = "countdown";
+    elements.stackStart.disabled = true;
+    elements.stackStart.textContent = "준비 중";
+    elements.stackStatus.textContent = "3초 뒤 멈춘 블록부터 이어서 시작해요.";
+    setStackPrompt("3", "곧 이어서 쌓아요");
+    elements.stackCanvas.focus({ preventScroll: true });
+    stackAnimationFrame = requestAnimationFrame(runStackFrame);
+    return;
+  }
+  beginSpecialRun("stack");
   resetStack();
   stackPhase = "running";
   elements.stackArena.dataset.phase = "running";
-  elements.stackStart.disabled = true;
-  elements.stackStart.textContent = "쌓는 중";
+  elements.stackStart.disabled = false;
+  elements.stackStart.textContent = "일시정지";
   elements.stackReset.disabled = true;
   elements.stackStatus.textContent =
     "블록이 탑 위에 겹치는 순간 화면을 누르세요.";
@@ -5557,7 +6442,7 @@ function startStack() {
 }
 
 function clearStackBest() {
-  if (stackPhase === "running") return;
+  if (["running", "paused", "resume-countdown"].includes(stackPhase)) return;
   state.stackBest = 0;
   saveState();
   renderStackHud();
@@ -5571,7 +6456,7 @@ function setFruitPrompt(title, detail) {
 }
 
 function getFruitDropTier() {
-  return FruitGameLogic.pickDropTier(Math.random());
+  return FruitGameLogic.pickDropTier(getRandomUnit());
 }
 
 function renderFruitDanger() {
@@ -5590,7 +6475,9 @@ function renderFruitHud() {
   renderFruitDanger();
   elements.fruitReset.disabled =
     (state.fruitBest <= 0 && state.fruitBestTier <= 0) ||
-    ["running", "celebrating"].includes(fruitPhase);
+    ["running", "celebrating", "paused", "resume-countdown"].includes(
+      fruitPhase,
+    );
   drawFruitNextPreview();
 }
 
@@ -6137,6 +7024,7 @@ function resetFruit() {
   }
   fruitAnimationFrame = null;
   fruitLastFrame = 0;
+  fruitResumeCountdown = 0;
   if (fruitEngine) {
     Matter.Events.off(fruitEngine);
     Matter.Composite.clear(fruitEngine.world, false, true);
@@ -6199,6 +7087,8 @@ function finishFruit(completed) {
   resultRevealTimer = window.setTimeout(() => {
     showResult({
       game: "fruit",
+      scoreValue: fruitScoreValue,
+      scoreText: `${fruitScoreValue.toLocaleString()}점`,
       lead: completed
         ? "과일 왕관을 완성했어요!"
         : newBest
@@ -6235,7 +7125,7 @@ function updateFruitGame(delta, now) {
 
 function runFruitFrame(now) {
   if (
-    !["running", "celebrating"].includes(fruitPhase) &&
+    !["running", "celebrating", "resume-countdown"].includes(fruitPhase) &&
     fruitEffects.length === 0
   ) {
     fruitAnimationFrame = null;
@@ -6244,11 +7134,29 @@ function runFruitFrame(now) {
   if (!fruitLastFrame) fruitLastFrame = now;
   const delta = Math.min((now - fruitLastFrame) / 1000, 0.034);
   fruitLastFrame = now;
-  updateFruitGame(delta, now);
+  if (fruitPhase === "resume-countdown") {
+    fruitResumeCountdown -= delta * 1000;
+    setFruitPrompt(
+      String(Math.max(1, Math.ceil(fruitResumeCountdown / 1000))),
+      "곧 이어서 합쳐요",
+    );
+    if (fruitResumeCountdown <= 0) {
+      fruitPhase = "running";
+      fruitCanDropAt = now;
+      elements.fruitArena.dataset.phase = "running";
+      elements.fruitStart.disabled = false;
+      elements.fruitStart.textContent = "일시정지";
+      elements.fruitStatus.textContent = "멈춘 과일부터 이어서 합쳐요.";
+      setFruitPrompt("GO!", "위치를 정하고 손을 놓으세요");
+      fruitLastFrame = now;
+    }
+  } else {
+    updateFruitGame(delta, now);
+  }
   drawFruitScene(now);
 
   if (
-    ["running", "celebrating"].includes(fruitPhase) ||
+    ["running", "celebrating", "resume-countdown"].includes(fruitPhase) ||
     fruitEffects.length > 0
   ) {
     fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
@@ -6378,15 +7286,49 @@ function moveFruitAim(amount) {
   );
 }
 
+function pauseFruit() {
+  if (!["running", "resume-countdown"].includes(fruitPhase)) return;
+  clearFruitAimPointer();
+  if (fruitAnimationFrame !== null) cancelAnimationFrame(fruitAnimationFrame);
+  fruitAnimationFrame = null;
+  fruitPhase = "paused";
+  fruitLastFrame = 0;
+  elements.fruitArena.dataset.phase = "paused";
+  elements.fruitStart.disabled = false;
+  elements.fruitStart.textContent = "계속하기";
+  elements.fruitReset.disabled = true;
+  elements.fruitStatus.textContent = "과일 합치기를 잠시 멈췄어요.";
+  setFruitPrompt("PAUSE", "계속하기를 누르면 3초 뒤 재개");
+  drawFruitScene();
+}
+
 function startFruit() {
-  if (["running", "celebrating"].includes(fruitPhase)) return;
+  if (fruitPhase === "running") {
+    pauseFruit();
+    return;
+  }
+  if (["celebrating", "resume-countdown"].includes(fruitPhase)) return;
+  if (fruitPhase === "paused") {
+    fruitPhase = "resume-countdown";
+    fruitResumeCountdown = 3000;
+    fruitLastFrame = 0;
+    elements.fruitArena.dataset.phase = "countdown";
+    elements.fruitStart.disabled = true;
+    elements.fruitStart.textContent = "준비 중";
+    elements.fruitStatus.textContent = "3초 뒤 멈춘 과일부터 이어서 시작해요.";
+    setFruitPrompt("3", "곧 이어서 합쳐요");
+    elements.fruitCanvas.focus({ preventScroll: true });
+    fruitAnimationFrame = requestAnimationFrame(runFruitFrame);
+    return;
+  }
+  beginSpecialRun("fruit");
   resetFruit();
   fruitPhase = "running";
   fruitLastFrame = 0;
   fruitCanDropAt = performance.now();
   elements.fruitArena.dataset.phase = "running";
-  elements.fruitStart.disabled = true;
-  elements.fruitStart.textContent = "합치는 중";
+  elements.fruitStart.disabled = false;
+  elements.fruitStart.textContent = "일시정지";
   elements.fruitReset.disabled = true;
   elements.fruitStatus.textContent =
     "탭하거나 좌우로 끌고 손을 놓으면 투하돼요.";
@@ -6396,13 +7338,26 @@ function startFruit() {
 }
 
 function clearFruitBest() {
-  if (["running", "celebrating"].includes(fruitPhase)) return;
+  if (
+    ["running", "celebrating", "paused", "resume-countdown"].includes(
+      fruitPhase,
+    )
+  ) {
+    return;
+  }
   state.fruitBest = 0;
   state.fruitBestTier = 0;
   saveState();
   renderFruitHud();
   elements.fruitStatus.textContent = "과일 합치기 최고 기록을 초기화했어요.";
   showToast("과일 합치기 최고 기록을 초기화했어요.");
+}
+
+function pauseCanvasGame(game = state.currentGame) {
+  if (game === "dodge") pauseDodge();
+  if (game === "runner") pauseRunner();
+  if (game === "stack") pauseStack();
+  if (game === "fruit") pauseFruit();
 }
 
 function updateGameAvailability() {
@@ -6493,7 +7448,7 @@ function renderHistory() {
 }
 
 function showResult(resultOrName, game) {
-  const rawResult =
+  let rawResult =
     typeof resultOrName === "string"
       ? {
           game,
@@ -6505,6 +7460,7 @@ function showResult(resultOrName, game) {
           list: false,
         }
       : resultOrName;
+  rawResult = applyEngagementResult(rawResult);
   const partyMessage = applyPartyResult(rawResult);
   const copyText = partyMessage
     ? `${rawResult.copyText}\n파티 세션: ${partyMessage}`
@@ -6529,6 +7485,16 @@ function showResult(resultOrName, game) {
   elements.resultParty.textContent = result.partyMessage;
   resetResultMission();
   elements.drawMission.hidden = result.allowMission === false;
+  elements.playAgain.textContent = result.friendProgress
+    ? "다음 참가자"
+    : result.friendFinal
+      ? "새 대결"
+      : result.dailyChallenge
+        ? "오늘 기록 다시"
+        : "한 판 더";
+  elements.tryAnotherGame.hidden = Boolean(
+    result.friendProgress || result.friendFinal,
+  );
   result.historyId = recordResult(result);
   playFeedbackTone("result");
 
@@ -6549,6 +7515,17 @@ function closeResult() {
 }
 
 function playAgain() {
+  if (state.lastResult?.friendProgress) {
+    closeResult();
+    advanceFriendChallenge();
+    return;
+  }
+  if (state.lastResult?.friendFinal) {
+    closeResult();
+    stopFriendChallenge(false);
+    openFriendChallengeDialog();
+    return;
+  }
   const game = state.lastResult?.game || state.currentGame;
   closeResult();
 
@@ -6655,6 +7632,171 @@ async function writeClipboard(text) {
   }
 }
 
+function wrapCanvasText(context, text, maxWidth, maxLines = 6) {
+  const lines = [];
+  String(text)
+    .split("\n")
+    .forEach((paragraph) => {
+      const words = paragraph.split(/\s+/).filter(Boolean);
+      let line = "";
+      words.forEach((word) => {
+        const candidate = line ? `${line} ${word}` : word;
+        if (context.measureText(candidate).width <= maxWidth) {
+          line = candidate;
+          return;
+        }
+        if (line) lines.push(line);
+        if (context.measureText(word).width <= maxWidth) {
+          line = word;
+          return;
+        }
+        let fragment = "";
+        [...word].forEach((character) => {
+          if (context.measureText(fragment + character).width > maxWidth) {
+            if (fragment) lines.push(fragment);
+            fragment = character;
+          } else {
+            fragment += character;
+          }
+        });
+        line = fragment;
+      });
+      if (line) lines.push(line);
+    });
+  if (lines.length <= maxLines) return lines;
+  const visible = lines.slice(0, maxLines);
+  visible[maxLines - 1] = visible[maxLines - 1].replace(/[. ]+$/, "") + "...";
+  return visible;
+}
+
+function createResultCardCanvas(result) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 1080;
+  canvas.height = 1080;
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#f4f5f7";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+
+  context.fillStyle = "#ffd54a";
+  context.fillRect(0, 0, canvas.width, 34);
+  context.fillStyle = "#17191d";
+  context.fillRect(0, canvas.height - 30, canvas.width, 30);
+
+  makeRoundedRectPath(context, 82, 80, 916, 920, 28);
+  context.fillStyle = "#ffffff";
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 8;
+  context.stroke();
+
+  makeRoundedRectPath(context, 112, 112, 112, 112, 18);
+  context.fillStyle = "#ffd54a";
+  context.fill();
+  context.strokeStyle = "#17191d";
+  context.lineWidth = 6;
+  context.stroke();
+  context.fillStyle = "#17191d";
+  context.font = '900 38px "Malgun Gothic", Arial, sans-serif';
+  context.textAlign = "center";
+  context.textBaseline = "middle";
+  context.fillText("딱!", 168, 168);
+
+  context.textAlign = "left";
+  context.fillStyle = "#d93f32";
+  context.font = '900 22px "Malgun Gothic", Arial, sans-serif';
+  context.fillText("FRIEND BET & MINI GAMES", 258, 140);
+  context.fillStyle = "#17191d";
+  context.font = '900 44px "Malgun Gothic", Arial, sans-serif';
+  context.fillText("딱! 정해", 258, 191);
+
+  context.fillStyle = "#656b75";
+  context.font = '800 25px "Malgun Gothic", Arial, sans-serif';
+  context.fillText(
+    result.gameLabel || GAME_LABELS[result.game] || "게임 결과",
+    116,
+    302,
+  );
+  context.fillStyle = "#17191d";
+  context.font = '900 32px "Malgun Gothic", Arial, sans-serif';
+  context.fillText(result.lead || "이번 결과", 116, 354);
+
+  context.font = result.list
+    ? '900 43px "Malgun Gothic", Arial, sans-serif'
+    : '900 74px "Malgun Gothic", Arial, sans-serif';
+  context.fillStyle = result.list ? "#17191d" : "#d93f32";
+  const resultLines = wrapCanvasText(context, result.displayText, 830, 7);
+  const lineHeight = result.list ? 68 : 94;
+  let resultY = 445;
+  resultLines.forEach((line) => {
+    context.fillText(line, 116, resultY);
+    resultY += lineHeight;
+  });
+
+  const infoY = Math.max(735, Math.min(838, resultY + 28));
+  context.strokeStyle = "#dfe2e7";
+  context.lineWidth = 3;
+  context.beginPath();
+  context.moveTo(116, infoY - 35);
+  context.lineTo(964, infoY - 35);
+  context.stroke();
+  context.fillStyle = "#656b75";
+  context.font = '800 21px "Malgun Gothic", Arial, sans-serif';
+  context.fillText(result.stakeLabel || "기록", 116, infoY);
+  context.fillStyle = "#17191d";
+  context.font = '900 29px "Malgun Gothic", Arial, sans-serif';
+  wrapCanvasText(context, result.stake || "", 830, 2).forEach((line, index) => {
+    context.fillText(line, 116, infoY + 48 + index * 40);
+  });
+
+  context.fillStyle = "#656b75";
+  context.font = '700 20px "Malgun Gothic", Arial, sans-serif';
+  context.fillText(
+    `${getDifficultyProfile().label} 난이도 · ${new Date().toLocaleDateString("ko-KR")}`,
+    116,
+    946,
+  );
+  context.textAlign = "right";
+  context.fillText("친구에게 공유하고 기록에 도전하세요", 964, 946);
+  return canvas;
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("결과 이미지를 만들지 못했습니다."));
+    }, "image/png");
+  });
+}
+
+async function createResultCardFile(result = state.lastResult) {
+  const canvas = createResultCardCanvas(result);
+  const blob = await canvasToBlob(canvas);
+  return new File([blob], `ddak-result-${Date.now()}.png`, {
+    type: "image/png",
+  });
+}
+
+async function saveResultImage() {
+  if (!state.lastResult) return;
+  try {
+    const file = await createResultCardFile();
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    state.achievementStats.shares += 1;
+    saveState();
+    showToast("결과 이미지를 저장했어요.");
+  } catch {
+    showToast("이미지를 저장하지 못했어요. 다시 시도해 주세요.");
+  }
+}
+
 async function copyResult() {
   if (!state.lastResult) return;
   await writeClipboard(state.lastResult.copyText);
@@ -6664,7 +7806,7 @@ async function copyResult() {
 async function shareResult() {
   if (!state.lastResult) return;
   const shareData = {
-    title: `딱! 정해 · ${GAME_LABELS[state.lastResult.game]}`,
+    title: `딱! 정해 · ${state.lastResult.gameLabel || GAME_LABELS[state.lastResult.game]}`,
     text: state.lastResult.copyText,
   };
   if (/^https?:$/.test(window.location.protocol)) {
@@ -6673,7 +7815,11 @@ async function shareResult() {
 
   if (navigator.share) {
     try {
+      const file = await createResultCardFile();
+      if (navigator.canShare?.({ files: [file] })) shareData.files = [file];
       await navigator.share(shareData);
+      state.achievementStats.shares += 1;
+      saveState();
       return;
     } catch (error) {
       if (error?.name === "AbortError") return;
@@ -6800,9 +7946,30 @@ elements.gameTabs.forEach((tab) => {
 });
 
 elements.favoriteGame.addEventListener("click", toggleCurrentFavorite);
+elements.openRecords.addEventListener("click", openRecords);
 elements.randomGame.addEventListener("click", launchRandomGame);
 elements.openGameSettings.addEventListener("click", openGameSettings);
 elements.closeGameSettings.addEventListener("click", closeGameSettings);
+elements.closeRecords.addEventListener("click", closeRecords);
+elements.closeGameGuide.addEventListener("click", closeGameGuide);
+elements.startFromGuide.addEventListener("click", startGuideGame);
+elements.startDailyChallenge.addEventListener("click", startDailyChallenge);
+elements.openFriendChallenge.addEventListener("click", openFriendChallengeDialog);
+elements.closeFriendChallenge.addEventListener("click", closeFriendChallengeDialog);
+elements.startFriendChallenge.addEventListener("click", startFriendChallenge);
+elements.continueFriendChallenge.addEventListener("click", advanceFriendChallenge);
+elements.endFriendChallenge.addEventListener("click", () => stopFriendChallenge());
+elements.friendGameButtons.forEach((button) => {
+  button.addEventListener("click", () =>
+    selectFriendChallengeGame(button.dataset.friendGame),
+  );
+});
+elements.gameHelpButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    pauseCanvasGame(button.dataset.gameHelp);
+    openGameGuide(button.dataset.gameHelp);
+  });
+});
 elements.difficultyButtons.forEach((button) => {
   button.addEventListener("click", () => setDifficulty(button.dataset.difficulty));
 });
@@ -6876,7 +8043,9 @@ elements.timerStart.addEventListener("click", startTimerTurn);
 elements.timerReset.addEventListener("click", resetTimer);
 elements.timerSoloStart.addEventListener("click", startTimerSoloTurn);
 elements.timerSoloReset.addEventListener("click", clearTimerSoloBest);
-elements.dodgeStart.addEventListener("click", startDodge);
+elements.dodgeStart.addEventListener("click", () =>
+  requestGuidedStart("dodge", startDodge),
+);
 elements.dodgeReset.addEventListener("click", clearDodgeBest);
 elements.dodgeCanvas.addEventListener("pointerdown", (event) => {
   if (!["countdown", "running"].includes(dodgePhase)) return;
@@ -6921,7 +8090,9 @@ elements.tapPad.addEventListener("keydown", (event) => {
   event.preventDefault();
   handleTapPress();
 });
-elements.runnerStart.addEventListener("click", startRunner);
+elements.runnerStart.addEventListener("click", () =>
+  requestGuidedStart("runner", startRunner),
+);
 elements.runnerReset.addEventListener("click", clearRunnerBest);
 elements.runnerCanvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
@@ -6935,7 +8106,9 @@ elements.runnerCanvas.addEventListener("keydown", (event) => {
 elements.runnerCanvas.addEventListener("contextmenu", (event) =>
   event.preventDefault(),
 );
-elements.stackStart.addEventListener("click", startStack);
+elements.stackStart.addEventListener("click", () =>
+  requestGuidedStart("stack", startStack),
+);
 elements.stackReset.addEventListener("click", clearStackBest);
 elements.stackCanvas.addEventListener("pointerdown", (event) => {
   event.preventDefault();
@@ -6949,7 +8122,9 @@ elements.stackCanvas.addEventListener("keydown", (event) => {
 elements.stackCanvas.addEventListener("contextmenu", (event) =>
   event.preventDefault(),
 );
-elements.fruitStart.addEventListener("click", startFruit);
+elements.fruitStart.addEventListener("click", () =>
+  requestGuidedStart("fruit", startFruit),
+);
 elements.fruitReset.addEventListener("click", clearFruitBest);
 elements.fruitCanvas.addEventListener("pointermove", updateFruitAimFromPointer);
 elements.fruitCanvas.addEventListener("pointerdown", beginFruitAim);
@@ -7027,6 +8202,7 @@ elements.drawMission.addEventListener("click", drawMissionCard);
 elements.playAgain.addEventListener("click", playAgain);
 elements.tryAnotherGame.addEventListener("click", tryAnotherGame);
 elements.shareResult.addEventListener("click", shareResult);
+elements.saveResultImage.addEventListener("click", saveResultImage);
 elements.copyResult.addEventListener("click", copyResult);
 elements.changeGame.addEventListener("click", () => {
   closeResult();
@@ -7034,6 +8210,9 @@ elements.changeGame.addEventListener("click", () => {
     .querySelector(".game-category-control")
     .scrollIntoView({ behavior: "smooth", block: "center" });
   elements.gameTabs.find((tab) => tab.dataset.game === state.currentGame)?.focus();
+});
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) pauseCanvasGame();
 });
 window.addEventListener("beforeunload", () => {
   window.clearTimeout(bombTimer);
@@ -7092,6 +8271,10 @@ selectGame(state.currentGame);
 elements.soundToggle.checked = state.soundEnabled;
 elements.vibrationToggle.checked = state.vibrationEnabled;
 setDifficulty(state.difficulty, false);
+updateAchievements(false);
+saveState();
+renderEngagementHub();
+renderFriendChallenge();
 if (window.matchMedia("(max-width: 1240px)").matches) {
   setSetupCollapsed(true);
 } else {
@@ -7110,7 +8293,7 @@ if (
   });
   window.addEventListener("load", () => {
     navigator.serviceWorker
-      .register("./sw.js?v=32", { updateViaCache: "none" })
+      .register("./sw.js?v=34", { updateViaCache: "none" })
       .then((registration) => registration.update())
       .catch(() => {
         // Offline support is optional and does not block the games.

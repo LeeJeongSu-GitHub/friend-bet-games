@@ -42,17 +42,18 @@ const scripts = Array.from(
   (match) => match[1],
 );
 assert.deepEqual(
-  scripts.slice(-4).map((script) => script.split("?")[0]),
+  scripts.slice(-5).map((script) => script.split("?")[0]),
   [
     "vendor/matter-js/matter.min.js",
     "fruit-logic.js",
     "stack-logic.js",
+    "engagement-logic.js",
     "app.js",
   ],
   "Physics and game logic must load before app.js",
 );
 assert.ok(
-  scripts.slice(-4).every((script) => script.endsWith("?v=32")),
+  scripts.slice(-5).every((script) => script.endsWith("?v=34")),
   "All runtime scripts must share the current cache-busting build number",
 );
 for (const script of scripts) {
@@ -68,7 +69,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /register\("\.\/sw\.js\?v=32",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
+  /register\("\.\/sw\.js\?v=34",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
   "Service worker updates must bypass the browser cache",
 );
 assert.match(
