@@ -1,0 +1,30 @@
+const { defineConfig } = require("@playwright/test");
+
+module.exports = defineConfig({
+  testDir: "./tests/e2e",
+  timeout: 30000,
+  expect: { timeout: 7000 },
+  fullyParallel: false,
+  workers: 1,
+  reporter: process.env.CI ? "github" : "list",
+  use: {
+    baseURL: "http://127.0.0.1:4174",
+    screenshot: "only-on-failure",
+    trace: "retain-on-failure",
+  },
+  projects: [
+    {
+      name: "desktop-chromium",
+      use: { browserName: "chromium", viewport: { width: 1280, height: 800 } },
+    },
+    {
+      name: "mobile-chromium",
+      use: {
+        browserName: "chromium",
+        viewport: { width: 390, height: 844 },
+        hasTouch: true,
+        isMobile: true,
+      },
+    },
+  ],
+});

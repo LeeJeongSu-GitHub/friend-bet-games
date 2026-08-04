@@ -180,6 +180,10 @@ function createEmptyDifficultyRecords() {
 }
 
 const elements = {
+  installApp: document.querySelector("#installApp"),
+  appUpdateBanner: document.querySelector("#appUpdateBanner"),
+  applyAppUpdate: document.querySelector("#applyAppUpdate"),
+  dismissAppUpdate: document.querySelector("#dismissAppUpdate"),
   setupPanel: document.querySelector("#setupPanel"),
   setupToggle: document.querySelector("#setupToggle"),
   setupToggleLabel: document.querySelector(".setup-toggle-label"),
@@ -247,6 +251,11 @@ const elements = {
   dailyBest: document.querySelector("#dailyBest"),
   startDailyChallenge: document.querySelector("#startDailyChallenge"),
   openFriendChallenge: document.querySelector("#openFriendChallenge"),
+  sharedChallengeBar: document.querySelector("#sharedChallengeBar"),
+  sharedChallengeTitle: document.querySelector("#sharedChallengeTitle"),
+  sharedChallengeMeta: document.querySelector("#sharedChallengeMeta"),
+  startSharedChallenge: document.querySelector("#startSharedChallenge"),
+  dismissSharedChallenge: document.querySelector("#dismissSharedChallenge"),
   friendChallengeBar: document.querySelector("#friendChallengeBar"),
   friendChallengeStatus: document.querySelector("#friendChallengeStatus"),
   friendChallengeScores: document.querySelector("#friendChallengeScores"),
@@ -507,6 +516,7 @@ let activeGuideStarter = null;
 let activeRunContext = null;
 let specialRandom = null;
 let selectedFriendGame = "dodge";
+let incomingSharedChallenge = ChallengeLogic.parseUrl(window.location.href);
 let wheelRotation = 0;
 let wheelSpinning = false;
 let menuWheelRotation = 0;
@@ -1403,10 +1413,64 @@ function renderEngagementHub() {
   elements.startDailyChallenge.textContent = completed ? "기록 갱신" : "오늘 도전";
 }
 
+function formatChallengeScore(game, score) {
+  const numericScore = Number(score) || 0;
+  if (game === "dodge") return `${(numericScore / 1000).toFixed(2)}초`;
+  if (game === "stack") return `${Math.round(numericScore)}층`;
+  return `${Math.round(numericScore).toLocaleString()}점`;
+}
+
+function createRunSeed() {
+  if (window.crypto?.getRandomValues) {
+    const value = new Uint32Array(1);
+    window.crypto.getRandomValues(value);
+    return value[0] >>> 0;
+  }
+  return EngagementLogic.hashString(`${Date.now()}:${Math.random()}`) >>> 0;
+}
+
+function renderSharedChallenge() {
+  const challenge = incomingSharedChallenge;
+  elements.sharedChallengeBar.hidden = !challenge;
+  if (!challenge) return;
+  elements.sharedChallengeTitle.textContent =
+    `${challenge.challenger}님의 ${getGameShortLabel(challenge.game)} 도전장`;
+  elements.sharedChallengeMeta.textContent =
+    `${DIFFICULTY_PROFILES[challenge.difficulty].label} 난이도 · ` +
+    `목표 ${formatChallengeScore(challenge.game, challenge.score)}`;
+}
+
+function dismissSharedChallenge() {
+  incomingSharedChallenge = null;
+  if (activeRunContext?.type === "shared") activeRunContext = null;
+  const url = new URL(window.location.href);
+  ["challenge", "game", "level", "seed", "score", "by"].forEach((key) =>
+    url.searchParams.delete(key),
+  );
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  renderSharedChallenge();
+}
+
+function startSharedChallenge() {
+  if (!incomingSharedChallenge) return;
+  launchSpecialRun({
+    type: "shared",
+    ...incomingSharedChallenge,
+  });
+}
+
 function beginSpecialRun(game) {
-  if (!activeRunContext || activeRunContext.game !== game) {
-    specialRandom = null;
-    return;
+  if (
+    !activeRunContext ||
+    activeRunContext.game !== game ||
+    activeRunContext.type === "solo"
+  ) {
+    activeRunContext = {
+      type: "solo",
+      game,
+      difficulty: state.difficulty,
+      seed: createRunSeed(),
+    };
   }
   specialRandom = EngagementLogic.createSeededRandom(activeRunContext.seed);
 }
@@ -1600,6 +1664,17 @@ function registerGameCompletion(game) {
   state.achievementStats.gamePlays[game] += 1;
 }
 
+function attachChallengeResult(rawResult, context, challenger) {
+  const challenge = ChallengeLogic.normalize({
+    game: rawResult.game,
+    difficulty: context.difficulty,
+    seed: context.seed,
+    score: rawResult.scoreValue,
+    challenger,
+  });
+  return challenge ? { ...rawResult, challenge } : rawResult;
+}
+
 function applyEngagementResult(rawResult) {
   registerGameCompletion(rawResult.game);
   const context = activeRunContext;
@@ -1609,6 +1684,13 @@ function applyEngagementResult(rawResult) {
     saveState();
     return rawResult;
   }
+  rawResult = attachChallengeResult(
+    rawResult,
+    context,
+    context.type === "friend"
+      ? context.player
+      : state.participants[0] || "친구",
+  );
 
   if (context.type === "daily") {
     const previous = state.dailyProgress[context.date];
@@ -1649,6 +1731,32 @@ function applyEngagementResult(rawResult) {
     };
   }
 
+  if (context.type === "shared") {
+    const comparison = ChallengeLogic.compare(
+      rawResult.scoreValue,
+      context.score,
+    );
+    const comparisonLead = {
+      win: "친구 기록을 넘었어요!",
+      tie: "친구 기록과 똑같아요!",
+      lose: "조금만 더 하면 넘을 수 있어요",
+    }[comparison];
+    updateAchievements();
+    saveState();
+    return {
+      ...rawResult,
+      gameLabel: `친구 도전 · ${getGameShortLabel(rawResult.game)}`,
+      lead: comparisonLead,
+      stakeLabel: `${context.challenger}님의 목표`,
+      stake: formatChallengeScore(context.game, context.score),
+      copyText:
+        `${rawResult.copyText}\n${context.challenger}님의 목표 ` +
+        `${formatChallengeScore(context.game, context.score)}에 ${comparison === "win" ? "성공" : comparison === "tie" ? "동점" : "도전"}`,
+      sharedChallenge: true,
+      challengeComparison: comparison,
+    };
+  }
+
   if (context.type === "friend" && state.friendChallenge) {
     const session = state.friendChallenge;
     session.results.push({
@@ -1672,8 +1780,16 @@ function applyEngagementResult(rawResult) {
       const rankingText = ranking
         .map((entry) => `${entry.rank}. ${entry.name} · ${entry.scoreText}`)
         .join("\n");
+      const winner = ranking[0];
       return {
         ...rawResult,
+        challenge: ChallengeLogic.normalize({
+          game: session.game,
+          difficulty: session.difficulty,
+          seed: session.seed,
+          score: winner.score,
+          challenger: winner.name,
+        }),
         gameLabel: "친구 기록 대결",
         lead: "최종 순위",
         displayText: rankingText,
@@ -7447,6 +7563,11 @@ function renderHistory() {
   });
 }
 
+function createChallengeUrl(result) {
+  if (!result.challenge || !/^https?:$/.test(window.location.protocol)) return "";
+  return ChallengeLogic.buildUrl(window.location.href, result.challenge);
+}
+
 function showResult(resultOrName, game) {
   let rawResult =
     typeof resultOrName === "string"
@@ -7461,6 +7582,14 @@ function showResult(resultOrName, game) {
         }
       : resultOrName;
   rawResult = applyEngagementResult(rawResult);
+  const challengeUrl = createChallengeUrl(rawResult);
+  if (challengeUrl) {
+    rawResult = {
+      ...rawResult,
+      challengeUrl,
+      copyText: `${rawResult.copyText}\n같은 조건에 도전: ${challengeUrl}`,
+    };
+  }
   const partyMessage = applyPartyResult(rawResult);
   const copyText = partyMessage
     ? `${rawResult.copyText}\n파티 세션: ${partyMessage}`
@@ -7491,7 +7620,9 @@ function showResult(resultOrName, game) {
       ? "새 대결"
       : result.dailyChallenge
         ? "오늘 기록 다시"
-        : "한 판 더";
+        : result.sharedChallenge
+          ? "같은 도전 다시"
+          : "한 판 더";
   elements.tryAnotherGame.hidden = Boolean(
     result.friendProgress || result.friendFinal,
   );
@@ -7632,148 +7763,12 @@ async function writeClipboard(text) {
   }
 }
 
-function wrapCanvasText(context, text, maxWidth, maxLines = 6) {
-  const lines = [];
-  String(text)
-    .split("\n")
-    .forEach((paragraph) => {
-      const words = paragraph.split(/\s+/).filter(Boolean);
-      let line = "";
-      words.forEach((word) => {
-        const candidate = line ? `${line} ${word}` : word;
-        if (context.measureText(candidate).width <= maxWidth) {
-          line = candidate;
-          return;
-        }
-        if (line) lines.push(line);
-        if (context.measureText(word).width <= maxWidth) {
-          line = word;
-          return;
-        }
-        let fragment = "";
-        [...word].forEach((character) => {
-          if (context.measureText(fragment + character).width > maxWidth) {
-            if (fragment) lines.push(fragment);
-            fragment = character;
-          } else {
-            fragment += character;
-          }
-        });
-        line = fragment;
-      });
-      if (line) lines.push(line);
-    });
-  if (lines.length <= maxLines) return lines;
-  const visible = lines.slice(0, maxLines);
-  visible[maxLines - 1] = visible[maxLines - 1].replace(/[. ]+$/, "") + "...";
-  return visible;
-}
-
-function createResultCardCanvas(result) {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1080;
-  canvas.height = 1080;
-  const context = canvas.getContext("2d");
-  context.fillStyle = "#f4f5f7";
-  context.fillRect(0, 0, canvas.width, canvas.height);
-
-  context.fillStyle = "#ffd54a";
-  context.fillRect(0, 0, canvas.width, 34);
-  context.fillStyle = "#17191d";
-  context.fillRect(0, canvas.height - 30, canvas.width, 30);
-
-  makeRoundedRectPath(context, 82, 80, 916, 920, 28);
-  context.fillStyle = "#ffffff";
-  context.fill();
-  context.strokeStyle = "#17191d";
-  context.lineWidth = 8;
-  context.stroke();
-
-  makeRoundedRectPath(context, 112, 112, 112, 112, 18);
-  context.fillStyle = "#ffd54a";
-  context.fill();
-  context.strokeStyle = "#17191d";
-  context.lineWidth = 6;
-  context.stroke();
-  context.fillStyle = "#17191d";
-  context.font = '900 38px "Malgun Gothic", Arial, sans-serif';
-  context.textAlign = "center";
-  context.textBaseline = "middle";
-  context.fillText("딱!", 168, 168);
-
-  context.textAlign = "left";
-  context.fillStyle = "#d93f32";
-  context.font = '900 22px "Malgun Gothic", Arial, sans-serif';
-  context.fillText("FRIEND BET & MINI GAMES", 258, 140);
-  context.fillStyle = "#17191d";
-  context.font = '900 44px "Malgun Gothic", Arial, sans-serif';
-  context.fillText("딱! 정해", 258, 191);
-
-  context.fillStyle = "#656b75";
-  context.font = '800 25px "Malgun Gothic", Arial, sans-serif';
-  context.fillText(
-    result.gameLabel || GAME_LABELS[result.game] || "게임 결과",
-    116,
-    302,
-  );
-  context.fillStyle = "#17191d";
-  context.font = '900 32px "Malgun Gothic", Arial, sans-serif';
-  context.fillText(result.lead || "이번 결과", 116, 354);
-
-  context.font = result.list
-    ? '900 43px "Malgun Gothic", Arial, sans-serif'
-    : '900 74px "Malgun Gothic", Arial, sans-serif';
-  context.fillStyle = result.list ? "#17191d" : "#d93f32";
-  const resultLines = wrapCanvasText(context, result.displayText, 830, 7);
-  const lineHeight = result.list ? 68 : 94;
-  let resultY = 445;
-  resultLines.forEach((line) => {
-    context.fillText(line, 116, resultY);
-    resultY += lineHeight;
-  });
-
-  const infoY = Math.max(735, Math.min(838, resultY + 28));
-  context.strokeStyle = "#dfe2e7";
-  context.lineWidth = 3;
-  context.beginPath();
-  context.moveTo(116, infoY - 35);
-  context.lineTo(964, infoY - 35);
-  context.stroke();
-  context.fillStyle = "#656b75";
-  context.font = '800 21px "Malgun Gothic", Arial, sans-serif';
-  context.fillText(result.stakeLabel || "기록", 116, infoY);
-  context.fillStyle = "#17191d";
-  context.font = '900 29px "Malgun Gothic", Arial, sans-serif';
-  wrapCanvasText(context, result.stake || "", 830, 2).forEach((line, index) => {
-    context.fillText(line, 116, infoY + 48 + index * 40);
-  });
-
-  context.fillStyle = "#656b75";
-  context.font = '700 20px "Malgun Gothic", Arial, sans-serif';
-  context.fillText(
-    `${getDifficultyProfile().label} 난이도 · ${new Date().toLocaleDateString("ko-KR")}`,
-    116,
-    946,
-  );
-  context.textAlign = "right";
-  context.fillText("친구에게 공유하고 기록에 도전하세요", 964, 946);
-  return canvas;
-}
-
-function canvasToBlob(canvas) {
-  return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => {
-      if (blob) resolve(blob);
-      else reject(new Error("결과 이미지를 만들지 못했습니다."));
-    }, "image/png");
-  });
-}
-
 async function createResultCardFile(result = state.lastResult) {
-  const canvas = createResultCardCanvas(result);
-  const blob = await canvasToBlob(canvas);
-  return new File([blob], `ddak-result-${Date.now()}.png`, {
-    type: "image/png",
+  const difficulty = result?.challenge?.difficulty || state.difficulty;
+  return ResultShare.createFile(result, {
+    gameLabel: result.gameLabel || GAME_LABELS[result.game] || "게임 결과",
+    difficultyLabel: `${DIFFICULTY_PROFILES[difficulty].label} 난이도`,
+    dateLabel: new Date().toLocaleDateString("ko-KR"),
   });
 }
 
@@ -7781,14 +7776,7 @@ async function saveResultImage() {
   if (!state.lastResult) return;
   try {
     const file = await createResultCardFile();
-    const url = URL.createObjectURL(file);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = file.name;
-    document.body.append(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    ResultShare.download(file);
     state.achievementStats.shares += 1;
     saveState();
     showToast("결과 이미지를 저장했어요.");
@@ -7810,7 +7798,7 @@ async function shareResult() {
     text: state.lastResult.copyText,
   };
   if (/^https?:$/.test(window.location.protocol)) {
-    shareData.url = window.location.href;
+    shareData.url = state.lastResult.challengeUrl || window.location.href;
   }
 
   if (navigator.share) {
@@ -7955,6 +7943,8 @@ elements.closeGameGuide.addEventListener("click", closeGameGuide);
 elements.startFromGuide.addEventListener("click", startGuideGame);
 elements.startDailyChallenge.addEventListener("click", startDailyChallenge);
 elements.openFriendChallenge.addEventListener("click", openFriendChallengeDialog);
+elements.startSharedChallenge.addEventListener("click", startSharedChallenge);
+elements.dismissSharedChallenge.addEventListener("click", dismissSharedChallenge);
 elements.closeFriendChallenge.addEventListener("click", closeFriendChallengeDialog);
 elements.startFriendChallenge.addEventListener("click", startFriendChallenge);
 elements.continueFriendChallenge.addEventListener("click", advanceFriendChallenge);
@@ -8235,6 +8225,29 @@ window.addEventListener("beforeunload", () => {
   window.clearTimeout(fruitCompletionTimer);
 });
 
+function handleStartupAction() {
+  if (incomingSharedChallenge) {
+    setDifficulty(incomingSharedChallenge.difficulty, false);
+    setPlayMode("solo");
+    launchGame(incomingSharedChallenge.game);
+    renderSharedChallenge();
+    elements.sharedChallengeBar.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+    return;
+  }
+
+  const url = new URL(window.location.href);
+  const shortcut = url.searchParams.get("shortcut");
+  if (!shortcut) return;
+  url.searchParams.delete("shortcut");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  if (shortcut === "daily") startDailyChallenge();
+  if (shortcut === "friend") openFriendChallengeDialog();
+  if (shortcut === "random") launchRandomGame();
+}
+
 elements.noRepeatToggle.checked = state.noRepeat;
 renderSavedGroups();
 renderHistory();
@@ -8275,28 +8288,20 @@ updateAchievements(false);
 saveState();
 renderEngagementHub();
 renderFriendChallenge();
+renderSharedChallenge();
 if (window.matchMedia("(max-width: 1240px)").matches) {
   setSetupCollapsed(true);
 } else {
   setSetupCollapsed(false);
 }
 
-if (
-  "serviceWorker" in navigator &&
-  /^https?:$/.test(window.location.protocol)
-) {
-  let serviceWorkerReloading = false;
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (serviceWorkerReloading) return;
-    serviceWorkerReloading = true;
-    window.location.reload();
-  });
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("./sw.js?v=34", { updateViaCache: "none" })
-      .then((registration) => registration.update())
-      .catch(() => {
-        // Offline support is optional and does not block the games.
-      });
-  });
-}
+window.requestAnimationFrame(handleStartupAction);
+
+PwaManager.setup({
+  installButton: elements.installApp,
+  updateBanner: elements.appUpdateBanner,
+  updateButton: elements.applyAppUpdate,
+  dismissUpdateButton: elements.dismissAppUpdate,
+  serviceWorkerUrl: "./sw.js?v=35",
+  notify: showToast,
+});

@@ -4,6 +4,10 @@ const fs = require("node:fs");
 const html = fs.readFileSync("index.html", "utf8");
 const app = fs.readFileSync("app.js", "utf8");
 const styles = fs.readFileSync("styles.css", "utf8");
+const challengeLogic = fs.readFileSync("challenge-logic.js", "utf8");
+const resultShare = fs.readFileSync("result-share.js", "utf8");
+const pwaManager = fs.readFileSync("pwa-manager.js", "utf8");
+const manifest = JSON.parse(fs.readFileSync("manifest.webmanifest", "utf8"));
 
 const gameTabs = Array.from(
   html.matchAll(/<button(?=[^>]*class="game-tab)[\s\S]*?<\/button>/g),
@@ -107,9 +111,15 @@ assert.doesNotMatch(
   "engagementHub",
   "startDailyChallenge",
   "openFriendChallenge",
+  "sharedChallengeBar",
+  "startSharedChallenge",
+  "dismissSharedChallenge",
   "friendChallengeDialog",
   "friendChallengeBar",
   "saveResultImage",
+  "installApp",
+  "appUpdateBanner",
+  "applyAppUpdate",
   "soundToggle",
   "vibrationToggle",
   "tryAnotherGame",
@@ -147,10 +157,22 @@ assert.match(app, /function pauseStack\(\)/);
 assert.match(app, /function pauseFruit\(\)/);
 assert.match(app, /function startDailyChallenge\(\)/);
 assert.match(app, /function startFriendChallenge\(\)/);
+assert.match(app, /function startSharedChallenge\(\)/);
 assert.match(app, /function applyEngagementResult\(rawResult\)/);
-assert.match(app, /function createResultCardCanvas\(result\)/);
+assert.match(app, /ResultShare\.createFile\(result,/);
 assert.match(app, /function saveResultImage\(\)/);
 assert.match(app, /function updateAchievements\(notify = true\)/);
+assert.match(challengeLogic, /function buildUrl\(baseUrl, payload\)/);
+assert.match(challengeLogic, /function parseUrl\(urlValue\)/);
+assert.match(resultShare, /function createCanvas\(result, options = \{\}\)/);
+assert.match(pwaManager, /beforeinstallprompt/);
+assert.match(pwaManager, /registration\.waiting\.postMessage/);
+assert.deepEqual(
+  manifest.icons.map((icon) => icon.sizes),
+  ["192x192", "512x512", "512x512"],
+  "PWA must provide install and maskable PNG icons",
+);
+assert.equal(manifest.shortcuts.length, 3, "PWA must expose three quick actions");
 assert.equal(
   (app.match(/scoreValue:/g) || []).length,
   4,

@@ -1,16 +1,22 @@
-const CACHE_NAME = "friend-bet-games-v34";
+const CACHE_NAME = "friend-bet-games-v35";
 const CACHE_PREFIX = "friend-bet-games-";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=34",
-  "./vendor/matter-js/matter.min.js?v=34",
-  "./fruit-logic.js?v=34",
-  "./stack-logic.js?v=34",
-  "./engagement-logic.js?v=34",
-  "./app.js?v=34",
-  "./manifest.webmanifest?v=34",
-  "./favicon.svg?v=34",
+  "./styles.css?v=35",
+  "./vendor/matter-js/matter.min.js?v=35",
+  "./fruit-logic.js?v=35",
+  "./stack-logic.js?v=35",
+  "./engagement-logic.js?v=35",
+  "./challenge-logic.js?v=35",
+  "./result-share.js?v=35",
+  "./pwa-manager.js?v=35",
+  "./app.js?v=35",
+  "./manifest.webmanifest?v=35",
+  "./favicon.svg?v=35",
+  "./icons/icon-192.png?v=35",
+  "./icons/icon-512.png?v=35",
+  "./icons/icon-maskable-512.png?v=35",
 ];
 
 self.addEventListener("install", (event) => {
@@ -24,9 +30,12 @@ self.addEventListener("install", (event) => {
           }),
       );
       await cache.addAll(requests);
-      await self.skipWaiting();
     })(),
   );
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "SKIP_WAITING") self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {

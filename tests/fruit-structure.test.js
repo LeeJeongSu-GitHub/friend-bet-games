@@ -5,6 +5,7 @@ const html = fs.readFileSync("index.html", "utf8");
 const app = fs.readFileSync("app.js", "utf8");
 const styles = fs.readFileSync("styles.css", "utf8");
 const serviceWorker = fs.readFileSync("sw.js", "utf8");
+const pwaManager = fs.readFileSync("pwa-manager.js", "utf8");
 const { tiers } = require("../fruit-logic.js");
 
 const ids = Array.from(html.matchAll(/\bid="([^"]+)"/g), (match) => match[1]);
@@ -42,18 +43,21 @@ const scripts = Array.from(
   (match) => match[1],
 );
 assert.deepEqual(
-  scripts.slice(-5).map((script) => script.split("?")[0]),
+  scripts.slice(-8).map((script) => script.split("?")[0]),
   [
     "vendor/matter-js/matter.min.js",
     "fruit-logic.js",
     "stack-logic.js",
     "engagement-logic.js",
+    "challenge-logic.js",
+    "result-share.js",
+    "pwa-manager.js",
     "app.js",
   ],
   "Physics and game logic must load before app.js",
 );
 assert.ok(
-  scripts.slice(-5).every((script) => script.endsWith("?v=34")),
+  scripts.slice(-8).every((script) => script.endsWith("?v=35")),
   "All runtime scripts must share the current cache-busting build number",
 );
 for (const script of scripts) {
@@ -68,14 +72,19 @@ assert.doesNotMatch(
   "The running game must keep its disabled start button visible",
 );
 assert.match(
-  app,
-  /register\("\.\/sw\.js\?v=34",\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
+  pwaManager,
+  /register\(serviceWorkerUrl,\s*\{\s*updateViaCache:\s*"none"\s*\}\)/,
   "Service worker updates must bypass the browser cache",
 );
 assert.match(
-  app,
+  pwaManager,
   /serviceWorker\.addEventListener\("controllerchange"/,
   "A newly activated worker must refresh the page through controllerchange",
+);
+assert.match(
+  serviceWorker,
+  /event\.data\?\.type === "SKIP_WAITING"/,
+  "A waiting service worker must activate only after the update action",
 );
 assert.match(
   serviceWorker,

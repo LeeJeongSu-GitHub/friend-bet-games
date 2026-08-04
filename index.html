@@ -15,9 +15,10 @@
       content="같이 하기와 혼자 도전을 골라 빠른 결정, 대결, 장애물 피하기와 간식 재료 러너를 즐겨 보세요."
     />
     <title>딱! 정해 - 룰렛·파티 세션·기록 도전 미니게임</title>
-    <link rel="icon" href="./favicon.svg?v=34" type="image/svg+xml" />
-    <link rel="manifest" href="./manifest.webmanifest?v=34" />
-    <link rel="stylesheet" href="./styles.css?v=34" />
+    <link rel="icon" href="./favicon.svg?v=35" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png?v=35" />
+    <link rel="manifest" href="./manifest.webmanifest?v=35" />
+    <link rel="stylesheet" href="./styles.css?v=35" />
   </head>
   <body>
     <header class="topbar">
@@ -28,7 +29,13 @@
           <small>선택 &amp; 미니게임</small>
         </span>
       </a>
-      <span class="privacy-note">입력 내용은 이 기기에만 저장돼요</span>
+      <div class="topbar-actions">
+        <span class="privacy-note">입력 내용은 이 기기에만 저장돼요</span>
+        <button id="installApp" class="install-app" type="button" hidden>
+          <span aria-hidden="true">↓</span>
+          앱 설치
+        </button>
+      </div>
     </header>
 
     <main class="app-shell">
@@ -238,6 +245,20 @@
           <div class="engagement-actions">
             <button id="openFriendChallenge" class="secondary-action" type="button">친구 기록 대결</button>
             <button id="startDailyChallenge" class="primary-action coral" type="button">오늘 도전</button>
+          </div>
+        </section>
+
+        <section id="sharedChallengeBar" class="shared-challenge-bar" aria-labelledby="sharedChallengeTitle" aria-live="polite" hidden>
+          <div class="shared-challenge-copy">
+            <span class="engagement-label">CHALLENGE</span>
+            <div>
+              <strong id="sharedChallengeTitle">친구의 도전장이 도착했어요</strong>
+              <span id="sharedChallengeMeta"></span>
+            </div>
+          </div>
+          <div class="shared-challenge-actions">
+            <button id="dismissSharedChallenge" class="compact-action" type="button">닫기</button>
+            <button id="startSharedChallenge" class="primary-action coral" type="button">같은 조건으로 도전</button>
           </div>
         </section>
 
@@ -1558,12 +1579,24 @@
       </div>
     </dialog>
 
+    <aside id="appUpdateBanner" class="app-update-banner" aria-live="polite" hidden>
+      <div>
+        <strong>새 버전이 준비됐어요</strong>
+        <span>새로고침하면 바로 적용돼요.</span>
+      </div>
+      <button id="applyAppUpdate" class="compact-action" type="button">새로고침</button>
+      <button id="dismissAppUpdate" class="icon-command" type="button" aria-label="업데이트 알림 닫기">×</button>
+    </aside>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./vendor/matter-js/matter.min.js?v=34"></script>
-    <script src="./fruit-logic.js?v=34"></script>
-    <script src="./stack-logic.js?v=34"></script>
-    <script src="./engagement-logic.js?v=34"></script>
-    <script src="./app.js?v=34"></script>
+    <script src="./vendor/matter-js/matter.min.js?v=35"></script>
+    <script src="./fruit-logic.js?v=35"></script>
+    <script src="./stack-logic.js?v=35"></script>
+    <script src="./engagement-logic.js?v=35"></script>
+    <script src="./challenge-logic.js?v=35"></script>
+    <script src="./result-share.js?v=35"></script>
+    <script src="./pwa-manager.js?v=35"></script>
+    <script src="./app.js?v=35"></script>
   </body>
 </html>

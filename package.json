@@ -1,0 +1,16 @@
+{
+  "name": "friend-bet-games",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/serve.cjs",
+    "build:icons": "node scripts/build-icons.cjs",
+    "test": "node tests/run-all.cjs",
+    "test:e2e": "node scripts/run-e2e.cjs",
+    "test:all": "npm run test && npm run test:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.62.1",
+    "sharp": "0.35.3"
+  }
+}
