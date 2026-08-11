@@ -14,6 +14,65 @@ test.afterEach(async ({ page }) => {
   expect(page.__consoleErrors).toEqual([]);
 });
 
+async function installFakeOnlinePeer(page) {
+  await page.addInitScript(() => {
+    class FakeEmitter {
+      constructor() {
+        this.listeners = new Map();
+      }
+
+      on(type, listener) {
+        const listeners = this.listeners.get(type) || [];
+        listeners.push(listener);
+        this.listeners.set(type, listeners);
+      }
+
+      emit(type, value) {
+        (this.listeners.get(type) || []).forEach((listener) => listener(value));
+      }
+    }
+
+    class FakeConnection extends FakeEmitter {
+      constructor() {
+        super();
+        this.peer = "online-friend";
+        this.open = true;
+      }
+
+      send() {}
+
+      close() {
+        this.open = false;
+      }
+    }
+
+    window.__DDACK_PEER_CTOR__ = class FakePeer extends FakeEmitter {
+      constructor(id) {
+        super();
+        this.id = id || "online-self";
+        window.setTimeout(() => {
+          this.emit("open", this.id);
+          if (!String(this.id).startsWith("ddak-room-")) return;
+          const connection = new FakeConnection();
+          this.emit("connection", connection);
+          window.setTimeout(() => {
+            connection.emit("data", {
+              type: "join",
+              version: 1,
+              nickname: "준호",
+            });
+            window.setTimeout(() => {
+              connection.emit("data", { type: "ready", ready: true });
+            }, 20);
+          }, 20);
+        }, 0);
+      }
+
+      destroy() {}
+    };
+  });
+}
+
 test("opens a seeded friend challenge and shares the next challenge link", async ({ page }) => {
   await page.goto(
     "/?challenge=1&game=stack&level=hard&seed=24681357&score=3&by=%EB%AF%BC%EC%A7%80",
@@ -75,15 +134,52 @@ test("shows and completes the custom install prompt", async ({ page }) => {
   await expect(installButton).toBeHidden();
 });
 
+test("creates an online room and starts a synchronized match", async ({ page }) => {
+  await installFakeOnlinePeer(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "온라인 방" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "온라인 친구 대결" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("내 닉네임").fill("민지");
+  await dialog.getByRole("button", { name: "새 방 만들기" }).click();
+
+  await expect(dialog.getByText("민지 (나)")).toBeVisible();
+  await expect(dialog.getByText("준호")).toBeVisible();
+  const roomCode = await dialog.locator("#onlineLobbyCode").innerText();
+  expect(roomCode).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
+  await expect(dialog.locator("[data-online-game]")).toHaveCount(7);
+  await dialog.locator('[data-online-game="fruit"]').click();
+  await expect(dialog.locator('[data-online-game="fruit"]')).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await dialog.locator('[data-online-difficulty="hard"]').click();
+  await expect(dialog.locator('[data-online-difficulty="hard"]')).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(dialog.locator("#onlineGameRule")).toContainText("90");
+  await dialog.locator('[data-online-game="reaction"]').click();
+
+  const startButton = dialog.getByRole("button", { name: "대결 시작" });
+  await expect(startButton).toBeEnabled();
+  await startButton.click();
+  await expect(page.locator("#onlineCountdownOverlay")).toBeVisible();
+  await expect(page.locator("#onlineCountdownOverlay")).toBeHidden({ timeout: 6000 });
+  await expect(page.getByRole("heading", { name: "개인 반응속도" })).toBeVisible();
+  await expect(page.locator("#onlineRoomBar")).toContainText(roomCode);
+});
+
 test("serves the install manifest, PNG icons, and active service worker", async ({ page, request }) => {
   await page.goto("/");
-  const manifest = await (await request.get("/manifest.webmanifest?v=35")).json();
+  const manifest = await (await request.get("/manifest.webmanifest?v=38")).json();
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual([
     "192x192",
     "512x512",
     "512x512",
   ]);
-  expect(manifest.shortcuts).toHaveLength(3);
+  expect(manifest.shortcuts).toHaveLength(4);
 
   for (const icon of ["icon-192.png", "icon-512.png", "icon-maskable-512.png"]) {
     const response = await request.get(`/icons/${icon}`);
@@ -98,7 +194,7 @@ test("serves the install manifest, PNG icons, and active service worker", async 
         return registration.active?.scriptURL || "";
       }),
     )
-    .toContain("sw.js?v=35");
+    .toContain("sw.js?v=38");
 });
 
 test("reloads the app from the service worker cache while offline", async ({ context, page }) => {

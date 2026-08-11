@@ -5,6 +5,7 @@ const html = fs.readFileSync("index.html", "utf8");
 const app = fs.readFileSync("app.js", "utf8");
 const styles = fs.readFileSync("styles.css", "utf8");
 const challengeLogic = fs.readFileSync("challenge-logic.js", "utf8");
+const onlineRoom = fs.readFileSync("online-room.js", "utf8");
 const resultShare = fs.readFileSync("result-share.js", "utf8");
 const pwaManager = fs.readFileSync("pwa-manager.js", "utf8");
 const manifest = JSON.parse(fs.readFileSync("manifest.webmanifest", "utf8"));
@@ -111,11 +112,22 @@ assert.doesNotMatch(
   "engagementHub",
   "startDailyChallenge",
   "openFriendChallenge",
+  "openOnlineRoom",
   "sharedChallengeBar",
   "startSharedChallenge",
   "dismissSharedChallenge",
   "friendChallengeDialog",
   "friendChallengeBar",
+  "onlineRoomDialog",
+  "onlineRoomBar",
+  "onlineMatchTimer",
+  "createOnlineRoom",
+  "joinOnlineRoomForm",
+  "onlinePlayerList",
+  "onlineGameRule",
+  "onlineDifficultyControl",
+  "startOnlineMatch",
+  "onlineCountdownOverlay",
   "saveResultImage",
   "installApp",
   "appUpdateBanner",
@@ -126,6 +138,26 @@ assert.doesNotMatch(
 ].forEach((id) => {
   assert.match(html, new RegExp(`id="${id}"`), `${id} must exist`);
 });
+assert.match(
+  html,
+  /class="online-entry-intro"/,
+  "The online room intro must have its own layout hook",
+);
+assert.doesNotMatch(
+  styles,
+  /\.online-entry-view\s*>\s*p/,
+  "Online room paragraph styles must not affect the status message",
+);
+assert.equal(
+  (html.match(/data-online-game="[^"]+"/g) || []).length,
+  7,
+  "All seven online match games must be selectable",
+);
+assert.equal(
+  (html.match(/data-online-difficulty="(easy|normal|hard)"/g) || []).length,
+  3,
+  "Online matches must expose all three difficulty choices",
+);
 assert.equal(
   (html.match(/data-difficulty="(easy|normal|hard)"/g) || []).length,
   3,
@@ -158,12 +190,24 @@ assert.match(app, /function pauseFruit\(\)/);
 assert.match(app, /function startDailyChallenge\(\)/);
 assert.match(app, /function startFriendChallenge\(\)/);
 assert.match(app, /function startSharedChallenge\(\)/);
+assert.match(app, /function createOnlineRoom\(\)/);
+assert.match(app, /function scheduleOnlineMatch\(snapshot\)/);
+assert.match(app, /submitOnlineScore\("reaction", record/);
+assert.match(app, /submitOnlineScore\(\s*"timer",\s*averageDifference/);
+assert.match(app, /submitOnlineScore\("tap", tapCount/);
+assert.match(app, /submitOnlineScore\(\s*"dodge",\s*record/);
+assert.match(app, /submitOnlineScore\(\s*"runner",\s*runnerScoreValue/);
+assert.match(app, /submitOnlineScore\(\s*"stack",\s*stackScoreValue/);
+assert.match(app, /submitOnlineScore\(\s*"fruit",\s*fruitScoreValue/);
 assert.match(app, /function applyEngagementResult\(rawResult\)/);
 assert.match(app, /ResultShare\.createFile\(result,/);
 assert.match(app, /function saveResultImage\(\)/);
 assert.match(app, /function updateAchievements\(notify = true\)/);
 assert.match(challengeLogic, /function buildUrl\(baseUrl, payload\)/);
 assert.match(challengeLogic, /function parseUrl\(urlValue\)/);
+assert.match(onlineRoom, /class RoomSession/);
+assert.match(onlineRoom, /function buildInviteUrl\(baseUrl, roomCode\)/);
+assert.match(onlineRoom, /function rankPlayers\(players, game\)/);
 assert.match(resultShare, /function createCanvas\(result, options = \{\}\)/);
 assert.match(pwaManager, /beforeinstallprompt/);
 assert.match(pwaManager, /registration\.waiting\.postMessage/);
@@ -172,7 +216,7 @@ assert.deepEqual(
   ["192x192", "512x512", "512x512"],
   "PWA must provide install and maskable PNG icons",
 );
-assert.equal(manifest.shortcuts.length, 3, "PWA must expose three quick actions");
+assert.equal(manifest.shortcuts.length, 4, "PWA must expose four quick actions");
 assert.equal(
   (app.match(/scoreValue:/g) || []).length,
   4,
@@ -187,6 +231,16 @@ assert.match(
   styles,
   /\.friend-challenge-bar\[hidden\]\s*\{\s*display:\s*none;/,
   "Inactive friend challenges must stay visually hidden",
+);
+assert.match(
+  styles,
+  /\.online-room-bar\[hidden\]\s*\{\s*display:\s*none;/,
+  "Inactive online rooms must stay visually hidden",
+);
+assert.match(
+  html,
+  /vendor\/peerjs\/peerjs\.min\.js\?v=38/,
+  "PeerJS must be served locally for online rooms",
 );
 assert.match(
   styles,

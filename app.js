@@ -81,6 +81,15 @@ const GAME_LABELS = {
   stack: "아슬아슬 탑 쌓기",
   fruit: "몽글 과일 합치기",
 };
+const ONLINE_GAME_DESCRIPTIONS = {
+  reaction: "신호가 바뀐 뒤 가장 빠르게 누른 기록이 승리해요.",
+  timer: "5초와의 오차가 가장 작은 기록이 승리해요.",
+  tap: "10초 동안 가장 많이 누른 사람이 승리해요.",
+  dodge: "같은 장애물 순서에서 가장 오래 생존한 사람이 승리해요.",
+  runner: "같은 코스에서 간식 재료를 모아 가장 높은 점수를 내세요.",
+  stack: "같은 블록 움직임에서 가장 높은 층을 쌓은 사람이 승리해요.",
+  fruit: "같은 과일 순서로 90초 동안 가장 높은 점수를 내세요.",
+};
 const DIFFICULTY_PROFILES = {
   easy: {
     label: "쉬움",
@@ -251,6 +260,7 @@ const elements = {
   dailyBest: document.querySelector("#dailyBest"),
   startDailyChallenge: document.querySelector("#startDailyChallenge"),
   openFriendChallenge: document.querySelector("#openFriendChallenge"),
+  openOnlineRoom: document.querySelector("#openOnlineRoom"),
   sharedChallengeBar: document.querySelector("#sharedChallengeBar"),
   sharedChallengeTitle: document.querySelector("#sharedChallengeTitle"),
   sharedChallengeMeta: document.querySelector("#sharedChallengeMeta"),
@@ -267,6 +277,43 @@ const elements = {
   friendChallengeDifficulty: document.querySelector("#friendChallengeDifficulty"),
   friendGameButtons: [...document.querySelectorAll("[data-friend-game]")],
   startFriendChallenge: document.querySelector("#startFriendChallenge"),
+  onlineRoomBar: document.querySelector("#onlineRoomBar"),
+  onlineRoomBarTitle: document.querySelector("#onlineRoomBarTitle"),
+  onlineRoomBarSummary: document.querySelector("#onlineRoomBarSummary"),
+  onlineMatchTimer: document.querySelector("#onlineMatchTimer"),
+  onlineRoomBarPlayers: document.querySelector("#onlineRoomBarPlayers"),
+  openOnlineLobby: document.querySelector("#openOnlineLobby"),
+  onlineRoomDialog: document.querySelector("#onlineRoomDialog"),
+  closeOnlineRoom: document.querySelector("#closeOnlineRoom"),
+  onlineEntryView: document.querySelector("#onlineEntryView"),
+  onlineLobbyView: document.querySelector("#onlineLobbyView"),
+  onlineNickname: document.querySelector("#onlineNickname"),
+  createOnlineRoom: document.querySelector("#createOnlineRoom"),
+  joinOnlineRoomForm: document.querySelector("#joinOnlineRoomForm"),
+  joinOnlineRoom: document.querySelector("#joinOnlineRoom"),
+  onlineRoomCode: document.querySelector("#onlineRoomCode"),
+  onlineEntryStatus: document.querySelector("#onlineEntryStatus"),
+  onlineLobbyCode: document.querySelector("#onlineLobbyCode"),
+  onlineConnectionState: document.querySelector("#onlineConnectionState"),
+  copyOnlineCode: document.querySelector("#copyOnlineCode"),
+  shareOnlineInvite: document.querySelector("#shareOnlineInvite"),
+  onlineGameControl: document.querySelector("#onlineGameControl"),
+  onlineGameButtons: [...document.querySelectorAll("[data-online-game]")],
+  onlineGameRule: document.querySelector("#onlineGameRule"),
+  onlineDifficultyControl: document.querySelector("#onlineDifficultyControl"),
+  onlineDifficultyButtons: [
+    ...document.querySelectorAll("[data-online-difficulty]"),
+  ],
+  onlinePlayerCount: document.querySelector("#onlinePlayerCount"),
+  onlinePlayerList: document.querySelector("#onlinePlayerList"),
+  onlineLobbyStatus: document.querySelector("#onlineLobbyStatus"),
+  toggleOnlineReady: document.querySelector("#toggleOnlineReady"),
+  startOnlineMatch: document.querySelector("#startOnlineMatch"),
+  rematchOnline: document.querySelector("#rematchOnline"),
+  leaveOnlineRoom: document.querySelector("#leaveOnlineRoom"),
+  onlineCountdownOverlay: document.querySelector("#onlineCountdownOverlay"),
+  onlineCountdownValue: document.querySelector("#onlineCountdownValue"),
+  onlineCountdownGame: document.querySelector("#onlineCountdownGame"),
   partySession: document.querySelector("#partySession"),
   partySessionStatus: document.querySelector("#party-session-title"),
   partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
@@ -517,6 +564,13 @@ let activeRunContext = null;
 let specialRandom = null;
 let selectedFriendGame = "dodge";
 let incomingSharedChallenge = ChallengeLogic.parseUrl(window.location.href);
+let incomingOnlineRoomCode = OnlineRoom.parseInviteUrl(window.location.href);
+let onlineSession = null;
+let onlineSnapshot = null;
+let onlineMatchKey = "";
+let onlineSubmittedKey = "";
+let onlineCountdownFrame = null;
+let onlineDeadlineTimer = null;
 let wheelRotation = 0;
 let wheelSpinning = false;
 let menuWheelRotation = 0;
@@ -1605,6 +1659,485 @@ function stopFriendChallenge(notify = true) {
   if (notify) showToast("친구 기록 대결을 종료했어요.");
 }
 
+function setOnlineEntryStatus(message, isError = false) {
+  elements.onlineEntryStatus.textContent = message;
+  elements.onlineEntryStatus.classList.toggle("is-error", isError);
+}
+
+function setOnlineEntryBusy(busy) {
+  elements.createOnlineRoom.disabled = busy;
+  elements.joinOnlineRoom.disabled = busy;
+  elements.onlineNickname.disabled = busy;
+  elements.onlineRoomCode.disabled = busy;
+}
+
+function getSavedOnlineNickname() {
+  try {
+    return localStorage.getItem("ddak-online-nickname") || state.participants[0] || "";
+  } catch {
+    return state.participants[0] || "";
+  }
+}
+
+function readOnlineNickname() {
+  const nickname = OnlineRoom.sanitizeNickname(elements.onlineNickname.value);
+  elements.onlineNickname.value = nickname;
+  try {
+    localStorage.setItem("ddak-online-nickname", nickname);
+  } catch {
+    // Private browsing can block local storage without affecting the room.
+  }
+  return nickname;
+}
+
+function createOnlineSession() {
+  onlineSession?.leave(false);
+  onlineSession = OnlineRoom.createSession({
+    PeerCtor: window.__DDACK_PEER_CTOR__ || window.Peer,
+    onState: handleOnlineRoomState,
+    onEvent: handleOnlineRoomEvent,
+  });
+  return onlineSession;
+}
+
+function openOnlineRoomDialog() {
+  pauseCanvasGame();
+  if (elements.resultDialog.open) closeResult();
+  if (!elements.onlineNickname.value) {
+    elements.onlineNickname.value = getSavedOnlineNickname();
+  }
+  if (incomingOnlineRoomCode && !onlineSnapshot) {
+    elements.onlineRoomCode.value = incomingOnlineRoomCode;
+  }
+  renderOnlineRoom();
+  if (typeof elements.onlineRoomDialog.showModal === "function") {
+    if (!elements.onlineRoomDialog.open) elements.onlineRoomDialog.showModal();
+  } else {
+    elements.onlineRoomDialog.setAttribute("open", "");
+  }
+  window.requestAnimationFrame(() => {
+    const target = onlineSnapshot
+      ? elements.onlineRoomDialog.querySelector("button:not([hidden]):not(:disabled)")
+      : incomingOnlineRoomCode
+        ? elements.onlineNickname
+        : elements.createOnlineRoom;
+    target?.focus();
+  });
+}
+
+function closeOnlineRoomDialog() {
+  if (!elements.onlineRoomDialog.open) return;
+  if (typeof elements.onlineRoomDialog.close === "function") {
+    elements.onlineRoomDialog.close();
+  } else {
+    elements.onlineRoomDialog.removeAttribute("open");
+  }
+}
+
+function handleOnlineRoomEvent(event) {
+  if (event.type === "created") {
+    showToast(`온라인 방 ${event.code}을 만들었어요.`);
+  } else if (event.type === "joined") {
+    showToast(`온라인 방 ${event.code}에 참가했어요.`);
+  } else if (event.type === "host-left") {
+    stopOnlineGame(onlineSnapshot?.game);
+    setOnlineEntryStatus("방장이 나가서 방이 종료됐어요.", true);
+    onlineSession = null;
+    openOnlineRoomDialog();
+  } else if (event.type === "network-lost") {
+    elements.onlineConnectionState.textContent = "연결 확인 중";
+    elements.onlineLobbyStatus.textContent = "네트워크 연결을 확인해 주세요.";
+  } else if (event.type === "error") {
+    showToast(event.message || "온라인 연결을 확인해 주세요.");
+  }
+}
+
+function getOnlineRoomStatus(snapshot) {
+  const localPlayer = snapshot.players.find(
+    (player) => player.id === snapshot.localPeerId,
+  );
+  if (snapshot.status === "countdown") return "잠시 후 모든 기기에서 시작해요.";
+  if (snapshot.status === "playing") {
+    return localPlayer?.score === null
+      ? "게임 진행 중 · 기록을 완료해 주세요."
+      : "기록 제출 완료 · 친구들을 기다리는 중이에요.";
+  }
+  if (snapshot.status === "results") {
+    const winner = OnlineRoom.rankPlayers(snapshot.players, snapshot.game)[0];
+    return `${winner.nickname} 1위 · ${OnlineRoom.formatScore(snapshot.game, winner.score)}`;
+  }
+  if (snapshot.isHost) {
+    return snapshot.players.length < 2
+      ? "친구에게 코드를 보내 참가를 기다리세요."
+      : "모두 준비되면 대결을 시작하세요.";
+  }
+  return localPlayer?.ready
+    ? "준비 완료 · 방장의 시작을 기다리세요."
+    : "준비하기를 눌러 주세요.";
+}
+
+function renderOnlinePlayers(snapshot) {
+  const ranked = snapshot.status === "results";
+  const players = ranked
+    ? OnlineRoom.rankPlayers(snapshot.players, snapshot.game)
+    : snapshot.players.map((player, index) => ({ ...player, rank: index + 1 }));
+  elements.onlinePlayerList.replaceChildren();
+  players.forEach((player) => {
+    const item = document.createElement("li");
+    item.classList.toggle("is-me", player.id === snapshot.localPeerId);
+    item.dataset.ranked = String(ranked);
+    const rank = document.createElement("span");
+    rank.className = "online-player-rank";
+    rank.textContent = ranked ? String(player.rank || "-") : String(player.rank);
+    const copy = document.createElement("div");
+    const name = document.createElement("strong");
+    name.className = "online-player-name";
+    name.textContent = `${player.nickname}${player.id === snapshot.localPeerId ? " (나)" : ""}`;
+    const stateLabel = document.createElement("small");
+    stateLabel.className = "online-player-state";
+    stateLabel.textContent = player.isHost
+      ? "방장"
+      : snapshot.status === "lobby"
+        ? player.ready
+          ? "준비 완료"
+          : "준비 중"
+        : player.score === null
+          ? "도전 중"
+          : "기록 제출";
+    copy.append(name, stateLabel);
+    const score = document.createElement("span");
+    score.className = "online-player-score";
+    score.textContent = snapshot.status === "lobby"
+      ? player.ready
+        ? "READY"
+        : "WAIT"
+      : OnlineRoom.formatScore(snapshot.game, player.score);
+    item.append(rank, copy, score);
+    elements.onlinePlayerList.append(item);
+  });
+}
+
+function renderOnlineRoomBar(snapshot) {
+  elements.onlineRoomBar.hidden = !snapshot;
+  elements.onlineRoomBarPlayers.replaceChildren();
+  if (!snapshot) return;
+  elements.onlineRoomBarTitle.textContent = `${snapshot.code} · ${OnlineRoom.GAME_RULES[snapshot.game].label}`;
+  elements.onlineRoomBarSummary.textContent = getOnlineRoomStatus(snapshot);
+  snapshot.players.slice(0, 5).forEach((player) => {
+    const mark = document.createElement("span");
+    mark.title = player.nickname;
+    mark.textContent = player.nickname.slice(0, 1);
+    elements.onlineRoomBarPlayers.append(mark);
+  });
+  if (snapshot.players.length > 5) {
+    const more = document.createElement("span");
+    more.textContent = `+${snapshot.players.length - 5}`;
+    elements.onlineRoomBarPlayers.append(more);
+  }
+}
+
+function renderOnlineRoom() {
+  const snapshot = onlineSnapshot;
+  elements.onlineEntryView.hidden = Boolean(snapshot);
+  elements.onlineLobbyView.hidden = !snapshot;
+  renderOnlineRoomBar(snapshot);
+  if (!snapshot) return;
+
+  const localPlayer = snapshot.players.find(
+    (player) => player.id === snapshot.localPeerId,
+  );
+  const lobby = snapshot.status === "lobby";
+  const results = snapshot.status === "results";
+  elements.onlineLobbyCode.textContent = snapshot.code;
+  elements.onlineConnectionState.textContent = results
+    ? "대결 완료"
+    : snapshot.status === "playing"
+      ? "게임 중"
+      : snapshot.status === "countdown"
+        ? "시작 준비"
+        : "연결됨";
+  elements.onlinePlayerCount.textContent = `${snapshot.players.length} / ${OnlineRoom.MAX_PLAYERS}`;
+  elements.onlineLobbyStatus.textContent = getOnlineRoomStatus(snapshot);
+  elements.onlineGameButtons.forEach((button) => {
+    const active = button.dataset.onlineGame === snapshot.game;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.disabled = !snapshot.isHost || !lobby;
+  });
+  const difficultyRelevant = ["dodge", "runner", "stack", "fruit"].includes(
+    snapshot.game,
+  );
+  elements.onlineGameRule.textContent = ONLINE_GAME_DESCRIPTIONS[snapshot.game];
+  elements.onlineDifficultyControl.parentElement.classList.toggle(
+    "is-disabled",
+    !difficultyRelevant,
+  );
+  elements.onlineDifficultyButtons.forEach((button) => {
+    const active = button.dataset.onlineDifficulty === snapshot.difficulty;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.disabled = !snapshot.isHost || !lobby || !difficultyRelevant;
+  });
+  renderOnlinePlayers(snapshot);
+
+  elements.toggleOnlineReady.hidden = snapshot.isHost || !lobby;
+  elements.toggleOnlineReady.textContent = localPlayer?.ready ? "준비 취소" : "준비하기";
+  elements.startOnlineMatch.hidden = !snapshot.isHost || !lobby;
+  elements.startOnlineMatch.disabled = !OnlineRoom.canStartRoom(snapshot);
+  elements.rematchOnline.hidden = !snapshot.isHost || !results;
+  elements.startOnlineMatch.parentElement.classList.toggle(
+    "is-single",
+    snapshot.isHost || !lobby,
+  );
+}
+
+function handleOnlineRoomState(snapshot) {
+  const previousStatus = onlineSnapshot?.status;
+  onlineSnapshot = snapshot;
+  renderOnlineRoom();
+  if (!snapshot) {
+    clearOnlineCountdown();
+    return;
+  }
+  if (snapshot.status === "countdown") scheduleOnlineMatch(snapshot);
+  if (snapshot.status === "results" && previousStatus !== "results") {
+    triggerHaptic([45, 30, 80]);
+    showToast("온라인 대결 결과가 완성됐어요.");
+  }
+}
+
+async function createOnlineRoom() {
+  const nickname = readOnlineNickname();
+  setOnlineEntryBusy(true);
+  setOnlineEntryStatus("새 방을 연결하고 있어요.");
+  try {
+    await createOnlineSession().create({
+      nickname,
+      game: "reaction",
+      difficulty: state.difficulty,
+    });
+    incomingOnlineRoomCode = "";
+    setOnlineEntryStatus("방장은 대결이 끝날 때까지 페이지를 열어 두세요.");
+  } catch (error) {
+    onlineSession = null;
+    setOnlineEntryStatus(error.message || "방을 만들지 못했어요.", true);
+  } finally {
+    setOnlineEntryBusy(false);
+    renderOnlineRoom();
+  }
+}
+
+async function joinOnlineRoom(event) {
+  event?.preventDefault();
+  const nickname = readOnlineNickname();
+  const code = OnlineRoom.normalizeRoomCode(elements.onlineRoomCode.value);
+  elements.onlineRoomCode.value = code;
+  if (!OnlineRoom.isValidRoomCode(code)) {
+    setOnlineEntryStatus("영문과 숫자로 된 6자리 방 코드를 확인해 주세요.", true);
+    elements.onlineRoomCode.focus();
+    return;
+  }
+  setOnlineEntryBusy(true);
+  setOnlineEntryStatus(`${code} 방을 찾고 있어요.`);
+  try {
+    await createOnlineSession().join({ nickname, code });
+    incomingOnlineRoomCode = "";
+    setOnlineEntryStatus("방장은 대결이 끝날 때까지 페이지를 열어 두세요.");
+  } catch (error) {
+    onlineSession = null;
+    setOnlineEntryStatus(error.message || "방에 참가하지 못했어요.", true);
+  } finally {
+    setOnlineEntryBusy(false);
+    renderOnlineRoom();
+  }
+}
+
+async function copyOnlineRoomCode() {
+  if (!onlineSnapshot) return;
+  await writeClipboard(onlineSnapshot.code);
+  showToast("방 코드를 복사했어요.");
+}
+
+async function shareOnlineRoomInvite() {
+  if (!onlineSnapshot) return;
+  const url = OnlineRoom.buildInviteUrl(window.location.href, onlineSnapshot.code);
+  const shareData = {
+    title: "딱! 정해 온라인 친구 대결",
+    text: `방 코드 ${onlineSnapshot.code} · 링크를 열고 같이 대결해요.`,
+    url,
+  };
+  if (navigator.share) {
+    try {
+      await navigator.share(shareData);
+      return;
+    } catch (error) {
+      if (error.name === "AbortError") return;
+    }
+  }
+  await writeClipboard(url);
+  showToast("온라인 초대 링크를 복사했어요.");
+}
+
+function clearOnlineCountdown() {
+  if (onlineCountdownFrame !== null) cancelAnimationFrame(onlineCountdownFrame);
+  onlineCountdownFrame = null;
+  elements.onlineCountdownOverlay.hidden = true;
+}
+
+function clearOnlineGameDeadline() {
+  window.clearInterval(onlineDeadlineTimer);
+  onlineDeadlineTimer = null;
+  elements.onlineMatchTimer.hidden = true;
+}
+
+function startOnlineGameDeadline(snapshot, matchKey) {
+  clearOnlineGameDeadline();
+  const duration = Number(OnlineRoom.GAME_RULES[snapshot.game]?.duration) || 0;
+  if (duration <= 0) return;
+  const deadline = snapshot.startsAt + duration;
+  const update = () => {
+    if (onlineMatchKey !== matchKey || onlineSubmittedKey === matchKey) {
+      clearOnlineGameDeadline();
+      return;
+    }
+    const remaining = Math.max(0, deadline - Date.now());
+    const totalSeconds = Math.ceil(remaining / 1000);
+    elements.onlineMatchTimer.textContent =
+      `${String(Math.floor(totalSeconds / 60)).padStart(2, "0")}:` +
+      `${String(totalSeconds % 60).padStart(2, "0")}`;
+    elements.onlineMatchTimer.hidden = false;
+    if (remaining > 0) return;
+    clearOnlineGameDeadline();
+    if (snapshot.game === "fruit") {
+      if (["running", "celebrating"].includes(fruitPhase)) {
+        finishFruit(false);
+      } else {
+        submitOnlineScore(
+          "fruit",
+          fruitScoreValue,
+          `${FRUIT_TIERS[fruitHighestTier].name} · ${fruitScoreValue.toLocaleString()}점`,
+        );
+      }
+    }
+  };
+  update();
+  if (!elements.onlineMatchTimer.hidden) {
+    onlineDeadlineTimer = window.setInterval(update, 200);
+  }
+}
+
+function stopOnlineGame(game) {
+  if (game === "reaction") resetReactionSolo();
+  if (game === "timer") resetTimerSolo();
+  if (game === "tap") resetTap();
+  if (game === "dodge") resetDodge();
+  if (game === "runner") resetRunner();
+  if (game === "stack") resetStack();
+  if (game === "fruit") resetFruit();
+  if (activeRunContext?.type === "online") activeRunContext = null;
+  specialRandom = null;
+  clearOnlineGameDeadline();
+  clearOnlineCountdown();
+}
+
+function startOnlineGame(game, matchKey) {
+  if (onlineMatchKey !== matchKey || !onlineSnapshot) return;
+  clearOnlineCountdown();
+  onlineSubmittedKey = "";
+  setDifficulty(onlineSnapshot.difficulty, false);
+  setPlayMode("solo");
+  selectGame(game);
+  scrollGameIntoView(game);
+  activeRunContext = {
+    type: "online",
+    game,
+    difficulty: onlineSnapshot.difficulty,
+    seed: onlineSnapshot.seed,
+    roomCode: onlineSnapshot.code,
+    round: onlineSnapshot.round,
+  };
+  specialRandom = EngagementLogic.createSeededRandom(onlineSnapshot.seed);
+  if (game === "reaction") {
+    resetReactionSolo();
+    startReactionSolo();
+  } else if (game === "timer") {
+    resetTimerSolo();
+    startTimerSoloTurn();
+  } else if (game === "tap") {
+    startTap(true);
+  } else if (game === "dodge") {
+    startDodge();
+  } else if (game === "runner") {
+    startRunner();
+  } else if (game === "stack") {
+    startStack();
+  } else if (game === "fruit") {
+    startFruit();
+  }
+  startOnlineGameDeadline(onlineSnapshot, matchKey);
+}
+
+function scheduleOnlineMatch(snapshot) {
+  const matchKey = `${snapshot.code}:${snapshot.round}:${snapshot.startsAt}`;
+  if (onlineMatchKey === matchKey) return;
+  onlineMatchKey = matchKey;
+  onlineSubmittedKey = "";
+  closeOnlineRoomDialog();
+  if (elements.gameGuideDialog.open) closeGameGuide();
+  setPlayMode("solo");
+  selectGame(snapshot.game);
+  scrollGameIntoView(snapshot.game);
+  elements.onlineCountdownGame.textContent = OnlineRoom.GAME_RULES[snapshot.game].label;
+
+  const updateCountdown = () => {
+    if (onlineMatchKey !== matchKey) return;
+    const remaining = snapshot.startsAt - Date.now();
+    if (remaining <= 0) {
+      startOnlineGame(snapshot.game, matchKey);
+      return;
+    }
+    elements.onlineCountdownOverlay.hidden = false;
+    elements.onlineCountdownValue.textContent = String(Math.max(1, Math.ceil(remaining / 1000)));
+    onlineCountdownFrame = requestAnimationFrame(updateCountdown);
+  };
+  clearOnlineCountdown();
+  updateCountdown();
+}
+
+function submitOnlineScore(game, score, detail) {
+  if (!onlineSession || !onlineSnapshot) return false;
+  const matchKey = `${onlineSnapshot.code}:${onlineSnapshot.round}:${onlineSnapshot.startsAt}`;
+  if (
+    onlineSubmittedKey === matchKey ||
+    onlineSnapshot.game !== game ||
+    !["countdown", "playing"].includes(onlineSnapshot.status)
+  ) {
+    return false;
+  }
+  const submitted = onlineSession.submitScore(score, detail);
+  if (submitted) {
+    onlineSubmittedKey = matchKey;
+    clearOnlineGameDeadline();
+    showToast("온라인 기록을 전송했어요.");
+  }
+  return submitted;
+}
+
+function leaveOnlineRoom() {
+  const wasHost = onlineSnapshot?.isHost;
+  stopOnlineGame(onlineSnapshot?.game);
+  onlineSession?.leave(true);
+  onlineSession = null;
+  onlineSnapshot = null;
+  onlineMatchKey = "";
+  onlineSubmittedKey = "";
+  renderOnlineRoom();
+  setOnlineEntryStatus(
+    wasHost ? "방을 종료했어요." : "온라인 방에서 나왔어요.",
+  );
+  showToast(wasHost ? "온라인 방을 종료했어요." : "온라인 방에서 나왔어요.");
+}
+
 function getMaximumRecord(field) {
   storeActiveDifficultyRecords();
   return Math.max(
@@ -1683,6 +2216,19 @@ function applyEngagementResult(rawResult) {
     updateAchievements();
     saveState();
     return rawResult;
+  }
+  if (context.type === "online") {
+    activeRunContext = null;
+    updateAchievements();
+    saveState();
+    return {
+      ...rawResult,
+      gameLabel: `온라인 대결 · ${OnlineRoom.GAME_RULES[rawResult.game].label}`,
+      lead: "온라인 기록 제출 완료",
+      stakeLabel: "방 코드",
+      stake: context.roomCode,
+      copyText: `${rawResult.copyText}\n온라인 대결 방 ${context.roomCode}`,
+    };
   }
   rawResult = attachChallengeResult(
     rawResult,
@@ -4179,6 +4725,7 @@ function handleReactionSoloTap() {
     ? `${record}ms · 새로운 최고 기록이에요!`
     : `${record}ms · 최고 ${state.reactionSoloBest}ms`;
   triggerHaptic([35, 25, 60]);
+  submitOnlineScore("reaction", record, `${record}ms`);
 
   resultRevealTimer = window.setTimeout(() => {
     showResult({
@@ -4485,6 +5032,11 @@ function finishTimerSoloTurn(forcedElapsed = null) {
   elements.timerSoloRoundLabel.textContent = "3 ROUNDS COMPLETE";
   elements.timerSoloStart.textContent = "다시 도전";
   elements.timerStatus.textContent = `평균 오차 ${(averageDifference / 1000).toFixed(2)}초 · 최고 오차 ${(bestAttempt.difference / 1000).toFixed(2)}초`;
+  submitOnlineScore(
+    "timer",
+    averageDifference,
+    `평균 오차 ${(averageDifference / 1000).toFixed(2)}초`,
+  );
 
   resultRevealTimer = window.setTimeout(() => {
     showResult({
@@ -4886,6 +5438,11 @@ function finishDodge() {
   );
   drawDodgeScene();
   triggerHaptic([70, 40, 110]);
+  submitOnlineScore(
+    "dodge",
+    record,
+    `${formatDodgeTime(record)}초 생존`,
+  );
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -5157,6 +5714,7 @@ function finishTap() {
     ? `${tapCount}회 · 새로운 최고 기록이에요!`
     : `${tapCount}회 · 최고 ${state.tapBest}회`;
   triggerHaptic([45, 30, 80]);
+  submitOnlineScore("tap", tapCount, `${(tapCount / 10).toFixed(1)}회/초`);
 
   resultRevealTimer = window.setTimeout(() => {
     showResult({
@@ -5206,20 +5764,23 @@ function runTapFrame(now) {
   tapAnimationFrame = requestAnimationFrame(runTapFrame);
 }
 
-function startTap() {
+function startTap(immediate = false) {
   if (["countdown", "running"].includes(tapPhase)) return;
   resetTap();
-  tapPhase = "countdown";
+  tapPhase = immediate ? "running" : "countdown";
   tapPhaseStartedAt = performance.now();
-  elements.tapPad.dataset.phase = "countdown";
+  elements.tapPad.dataset.phase = immediate ? "running" : "countdown";
   elements.tapPad.disabled = false;
   elements.tapCount.textContent = "0";
-  elements.tapPrompt.textContent = "3";
+  elements.tapPrompt.textContent = immediate ? "빠르게 눌러요!" : "3";
   elements.tapStart.disabled = true;
-  elements.tapStart.textContent = "준비 중";
+  elements.tapStart.textContent = immediate ? "대결 중" : "준비 중";
   elements.tapReset.disabled = true;
-  elements.tapStatus.textContent = "손가락을 준비하세요. 곧 시작합니다.";
+  elements.tapStatus.textContent = immediate
+    ? "지금부터 10초! 최대한 빠르게 누르세요."
+    : "손가락을 준비하세요. 곧 시작합니다.";
   elements.tapPad.focus({ preventScroll: true });
+  if (immediate) triggerHaptic(35);
   tapAnimationFrame = requestAnimationFrame(runTapFrame);
 }
 
@@ -5887,6 +6448,11 @@ function finishRunner() {
   );
   drawRunnerScene();
   triggerHaptic([65, 35, 95]);
+  submitOnlineScore(
+    "runner",
+    runnerScoreValue,
+    `${distance}m · 간식 ${runnerSnackCount}개`,
+  );
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -6390,6 +6956,11 @@ function finishStack() {
     `${stackScoreValue}층 · 퍼펙트 연속 ${stackPeakCombo}회`,
   );
   triggerHaptic([65, 35, 95]);
+  submitOnlineScore(
+    "stack",
+    stackScoreValue,
+    `${stackScoreValue}층 · 퍼펙트 ${stackPeakCombo}회`,
+  );
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -7198,6 +7769,11 @@ function finishFruit(completed) {
   );
   drawFruitScene();
   triggerHaptic(completed ? [70, 35, 70, 35, 130] : [80, 45, 110]);
+  submitOnlineScore(
+    "fruit",
+    fruitScoreValue,
+    `${FRUIT_TIERS[fruitHighestTier].name} · ${fruitScoreValue.toLocaleString()}점`,
+  );
 
   window.clearTimeout(resultRevealTimer);
   resultRevealTimer = window.setTimeout(() => {
@@ -7943,6 +8519,41 @@ elements.closeGameGuide.addEventListener("click", closeGameGuide);
 elements.startFromGuide.addEventListener("click", startGuideGame);
 elements.startDailyChallenge.addEventListener("click", startDailyChallenge);
 elements.openFriendChallenge.addEventListener("click", openFriendChallengeDialog);
+elements.openOnlineRoom.addEventListener("click", openOnlineRoomDialog);
+elements.openOnlineLobby.addEventListener("click", openOnlineRoomDialog);
+elements.closeOnlineRoom.addEventListener("click", closeOnlineRoomDialog);
+elements.createOnlineRoom.addEventListener("click", createOnlineRoom);
+elements.joinOnlineRoomForm.addEventListener("submit", joinOnlineRoom);
+elements.onlineRoomCode.addEventListener("input", () => {
+  elements.onlineRoomCode.value = OnlineRoom.normalizeRoomCode(
+    elements.onlineRoomCode.value,
+  );
+});
+elements.copyOnlineCode.addEventListener("click", copyOnlineRoomCode);
+elements.shareOnlineInvite.addEventListener("click", shareOnlineRoomInvite);
+elements.toggleOnlineReady.addEventListener("click", () => {
+  const localPlayer = onlineSnapshot?.players.find(
+    (player) => player.id === onlineSnapshot.localPeerId,
+  );
+  onlineSession?.setReady(!localPlayer?.ready);
+});
+elements.startOnlineMatch.addEventListener("click", () => {
+  if (!onlineSession?.startRound()) {
+    showToast("두 명 이상 모두 준비해야 시작할 수 있어요.");
+  }
+});
+elements.rematchOnline.addEventListener("click", () => onlineSession?.rematch());
+elements.leaveOnlineRoom.addEventListener("click", leaveOnlineRoom);
+elements.onlineGameButtons.forEach((button) => {
+  button.addEventListener("click", () =>
+    onlineSession?.setGame(button.dataset.onlineGame),
+  );
+});
+elements.onlineDifficultyButtons.forEach((button) => {
+  button.addEventListener("click", () =>
+    onlineSession?.setDifficulty(button.dataset.onlineDifficulty),
+  );
+});
 elements.startSharedChallenge.addEventListener("click", startSharedChallenge);
 elements.dismissSharedChallenge.addEventListener("click", dismissSharedChallenge);
 elements.closeFriendChallenge.addEventListener("click", closeFriendChallengeDialog);
@@ -8205,6 +8816,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) pauseCanvasGame();
 });
 window.addEventListener("beforeunload", () => {
+  onlineSession?.leave(false);
   window.clearTimeout(bombTimer);
   window.clearTimeout(bombRevealTimer);
   window.clearTimeout(resultRevealTimer);
@@ -8238,6 +8850,12 @@ function handleStartupAction() {
     return;
   }
 
+  if (incomingOnlineRoomCode) {
+    elements.onlineRoomCode.value = incomingOnlineRoomCode;
+    openOnlineRoomDialog();
+    return;
+  }
+
   const url = new URL(window.location.href);
   const shortcut = url.searchParams.get("shortcut");
   if (!shortcut) return;
@@ -8245,6 +8863,7 @@ function handleStartupAction() {
   window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
   if (shortcut === "daily") startDailyChallenge();
   if (shortcut === "friend") openFriendChallengeDialog();
+  if (shortcut === "online") openOnlineRoomDialog();
   if (shortcut === "random") launchRandomGame();
 }
 
@@ -8289,6 +8908,7 @@ saveState();
 renderEngagementHub();
 renderFriendChallenge();
 renderSharedChallenge();
+renderOnlineRoom();
 if (window.matchMedia("(max-width: 1240px)").matches) {
   setSetupCollapsed(true);
 } else {
@@ -8302,6 +8922,6 @@ PwaManager.setup({
   updateBanner: elements.appUpdateBanner,
   updateButton: elements.applyAppUpdate,
   dismissUpdateButton: elements.dismissAppUpdate,
-  serviceWorkerUrl: "./sw.js?v=35",
+  serviceWorkerUrl: "./sw.js?v=38",
   notify: showToast,
 });
