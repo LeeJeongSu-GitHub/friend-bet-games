@@ -80,6 +80,9 @@ const GAME_LABELS = {
   runner: "간식 재료 러너",
   stack: "아슬아슬 탑 쌓기",
   fruit: "몽글 과일 합치기",
+  initialQuiz: "초성 퀴즈",
+  triviaQuiz: "상식 퀴즈",
+  rps: "가위바위보 토너먼트",
 };
 const ONLINE_GAME_DESCRIPTIONS = {
   reaction: "신호가 바뀐 뒤 가장 빠르게 누른 기록이 승리해요.",
@@ -89,7 +92,11 @@ const ONLINE_GAME_DESCRIPTIONS = {
   runner: "같은 코스에서 간식 재료를 모아 가장 높은 점수를 내세요.",
   stack: "같은 블록 움직임에서 가장 높은 층을 쌓은 사람이 승리해요.",
   fruit: "같은 과일 순서로 90초 동안 가장 높은 점수를 내세요.",
+  initialQuiz: "버저를 먼저 누른 뒤 초성 정답을 맞히면 승리해요.",
+  triviaQuiz: "버저를 먼저 누른 뒤 상식 문제의 정답을 맞히면 승리해요.",
+  rps: "상대에게 보이지 않게 동시에 선택하고 토너먼트 우승자를 가려요.",
 };
+const ONLINE_ACTIVITY_GAMES = new Set(["initialQuiz", "triviaQuiz", "rps"]);
 const DIFFICULTY_PROFILES = {
   easy: {
     label: "쉬움",
@@ -314,6 +321,24 @@ const elements = {
   onlineCountdownOverlay: document.querySelector("#onlineCountdownOverlay"),
   onlineCountdownValue: document.querySelector("#onlineCountdownValue"),
   onlineCountdownGame: document.querySelector("#onlineCountdownGame"),
+  onlineActivityArena: document.querySelector("#onlineActivityArena"),
+  onlineActivityTitle: document.querySelector("#onlineActivityTitle"),
+  onlineActivityStatus: document.querySelector("#onlineActivityStatus"),
+  onlineQuizPanel: document.querySelector("#onlineQuizPanel"),
+  onlineQuizType: document.querySelector("#onlineQuizType"),
+  onlineQuizPrompt: document.querySelector("#onlineQuizPrompt"),
+  onlineQuizClue: document.querySelector("#onlineQuizClue"),
+  onlineQuizBuzz: document.querySelector("#onlineQuizBuzz"),
+  onlineQuizAnswerForm: document.querySelector("#onlineQuizAnswerForm"),
+  onlineQuizAnswer: document.querySelector("#onlineQuizAnswer"),
+  onlineQuizFeedback: document.querySelector("#onlineQuizFeedback"),
+  onlineRpsPanel: document.querySelector("#onlineRpsPanel"),
+  onlineRpsStage: document.querySelector("#onlineRpsStage"),
+  onlineRpsOpponent: document.querySelector("#onlineRpsOpponent"),
+  onlineRpsChoices: document.querySelector("#onlineRpsChoices"),
+  onlineRpsChoiceButtons: [...document.querySelectorAll("[data-rps-choice]")],
+  onlineRpsBracket: document.querySelector("#onlineRpsBracket"),
+  onlineRpsFeedback: document.querySelector("#onlineRpsFeedback"),
   partySession: document.querySelector("#partySession"),
   partySessionStatus: document.querySelector("#party-session-title"),
   partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
@@ -571,6 +596,9 @@ let onlineMatchKey = "";
 let onlineSubmittedKey = "";
 let onlineCountdownFrame = null;
 let onlineDeadlineTimer = null;
+let onlineQuizFocusedBuzz = "";
+let onlineRpsChoiceMatchKey = "";
+let onlineRpsPendingChoice = "";
 let wheelRotation = 0;
 let wheelSpinning = false;
 let menuWheelRotation = 0;
@@ -1763,6 +1791,16 @@ function getOnlineRoomStatus(snapshot) {
       : "기록 제출 완료 · 친구들을 기다리는 중이에요.";
   }
   if (snapshot.status === "results") {
+    if (["initialQuiz", "triviaQuiz"].includes(snapshot.game)) {
+      const winner = getOnlinePlayer(snapshot, snapshot.activity?.winnerId);
+      return winner
+        ? `${winner.nickname} 정답 · ${snapshot.activity.answer}`
+        : `정답 공개 · ${snapshot.activity?.answer || "-"}`;
+    }
+    if (snapshot.game === "rps") {
+      const champion = getOnlinePlayer(snapshot, snapshot.activity?.championId);
+      return `${champion?.nickname || "친구"} 토너먼트 우승`;
+    }
     const winner = OnlineRoom.rankPlayers(snapshot.players, snapshot.game)[0];
     return `${winner.nickname} 1위 · ${OnlineRoom.formatScore(snapshot.game, winner.score)}`;
   }
@@ -1891,15 +1929,224 @@ function renderOnlineRoom() {
   );
 }
 
+function getOnlinePlayer(snapshot, peerId) {
+  return snapshot?.players.find((player) => player.id === peerId);
+}
+
+function showOnlineActivityArena(game) {
+  Object.values(elements.gameViews).forEach((view) => {
+    view.hidden = true;
+    view.classList.remove("is-active");
+  });
+  elements.onlineActivityArena.hidden = false;
+  elements.onlineActivityArena.classList.add("is-active");
+  elements.onlineActivityTitle.textContent = OnlineRoom.GAME_RULES[game].label;
+  if (window.matchMedia("(max-width: 680px)").matches) {
+    window.requestAnimationFrame(() => {
+      elements.onlineActivityArena.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+  }
+}
+
+function hideOnlineActivityArena(restoreGame = true) {
+  elements.onlineActivityArena.hidden = true;
+  elements.onlineActivityArena.classList.remove("is-active");
+  onlineQuizFocusedBuzz = "";
+  onlineRpsChoiceMatchKey = "";
+  onlineRpsPendingChoice = "";
+  if (restoreGame && elements.gameViews[state.currentGame]) {
+    elements.gameViews[state.currentGame].hidden = false;
+    elements.gameViews[state.currentGame].classList.add("is-active");
+  }
+}
+
+function renderOnlineQuiz(snapshot) {
+  const activity = snapshot.activity;
+  const localId = snapshot.localPeerId;
+  const localPlayer = getOnlinePlayer(snapshot, localId);
+  const lockedOut = activity?.lockedOut?.includes(localId);
+  const myTurn = activity?.buzzedBy === localId;
+  const buzzOwner = getOnlinePlayer(snapshot, activity?.buzzedBy);
+  elements.onlineQuizPanel.hidden = false;
+  elements.onlineRpsPanel.hidden = true;
+  elements.onlineQuizType.textContent = snapshot.game === "initialQuiz"
+    ? "INITIAL QUIZ"
+    : "TRIVIA QUIZ";
+  elements.onlineQuizPrompt.textContent = activity?.prompt || "문제를 준비하고 있어요.";
+  elements.onlineQuizClue.textContent = activity?.clue
+    ? `힌트 · ${activity.clue}`
+    : "모든 참가자에게 동시에 문제가 공개돼요.";
+  elements.onlineQuizFeedback.textContent = activity?.message ||
+    (snapshot.status === "countdown" ? "카운트다운 뒤 문제가 공개돼요." : "문제 연결 중");
+
+  const canBuzz = snapshot.status === "playing" && activity &&
+    !activity.buzzedBy && !lockedOut;
+  elements.onlineQuizBuzz.hidden = snapshot.status === "results" || myTurn;
+  elements.onlineQuizBuzz.disabled = !canBuzz;
+  elements.onlineQuizBuzz.classList.toggle("is-locked", Boolean(activity?.buzzedBy));
+  elements.onlineQuizBuzz.querySelector("strong").textContent = lockedOut
+    ? "다음 문제 대기"
+    : activity?.buzzedBy
+      ? `${buzzOwner?.nickname || "친구"} 답변 중`
+      : "정답!";
+
+  elements.onlineQuizAnswerForm.hidden = !myTurn || snapshot.status !== "playing";
+  if (myTurn && onlineQuizFocusedBuzz !== `${snapshot.round}:${localId}`) {
+    onlineQuizFocusedBuzz = `${snapshot.round}:${localId}`;
+    elements.onlineQuizAnswer.value = "";
+    window.requestAnimationFrame(() => elements.onlineQuizAnswer.focus());
+  }
+  if (!myTurn && activity?.buzzedBy !== localId) onlineQuizFocusedBuzz = "";
+
+  if (snapshot.status === "results") {
+    const winner = getOnlinePlayer(snapshot, activity?.winnerId);
+    elements.onlineActivityStatus.textContent = winner
+      ? `${winner.nickname} 정답 · ${activity.answer}`
+      : `정답 공개 · ${activity?.answer || "-"}`;
+  } else if (lockedOut) {
+    elements.onlineActivityStatus.textContent = `${localPlayer?.nickname || "내"} 답변은 오답 · 관전 중`;
+  } else {
+    elements.onlineActivityStatus.textContent = myTurn
+      ? "버저 선점 성공 · 정답을 입력하세요."
+      : "먼저 버저를 누른 참가자에게 답변 기회가 주어져요.";
+  }
+}
+
+function getRpsChoiceLabel(choice) {
+  return { rock: "바위", paper: "보", scissors: "가위" }[choice] || "선택 완료";
+}
+
+function renderOnlineRpsBracket(snapshot) {
+  const activity = snapshot.activity;
+  elements.onlineRpsBracket.replaceChildren();
+  if (!activity) return;
+  const currentMatches = activity.matches.map((match) => ({ ...match, current: true }));
+  const displayMatches = [...activity.history, ...currentMatches];
+  displayMatches.forEach((match) => {
+    const item = document.createElement("li");
+    const left = getOnlinePlayer(snapshot, match.leftId);
+    const right = getOnlinePlayer(snapshot, match.rightId);
+    const winner = getOnlinePlayer(snapshot, match.winnerId);
+    const stage = document.createElement("span");
+    stage.textContent = `R${match.stage || activity.stage}`;
+    const names = document.createElement("strong");
+    names.textContent = `${left?.nickname || "-"} vs ${right?.nickname || "-"}`;
+    const result = document.createElement("small");
+    result.textContent = winner
+      ? `${getRpsChoiceLabel(match.leftChoice)} : ${getRpsChoiceLabel(match.rightChoice)} · ${winner.nickname} 승`
+      : match.phase === "reveal"
+        ? `${getRpsChoiceLabel(match.leftChoice)} : ${getRpsChoiceLabel(match.rightChoice)} · 무승부`
+        : `${match.leftSubmitted ? "선택 완료" : "대기"} : ${match.rightSubmitted ? "선택 완료" : "대기"}`;
+    if (match.current) item.classList.add("is-current");
+    item.append(stage, names, result);
+    elements.onlineRpsBracket.append(item);
+  });
+  activity.byeIds.forEach((peerId) => {
+    const item = document.createElement("li");
+    item.className = "is-current is-bye";
+    const stage = document.createElement("span");
+    stage.textContent = `R${activity.stage}`;
+    const name = document.createElement("strong");
+    name.textContent = getOnlinePlayer(snapshot, peerId)?.nickname || "참가자";
+    const result = document.createElement("small");
+    result.textContent = "부전승";
+    item.append(stage, name, result);
+    elements.onlineRpsBracket.append(item);
+  });
+}
+
+function renderOnlineRps(snapshot) {
+  const activity = snapshot.activity;
+  const localId = snapshot.localPeerId;
+  const match = activity?.matches?.find(
+    (entry) => entry.leftId === localId || entry.rightId === localId,
+  );
+  const opponentId = match
+    ? match.leftId === localId
+      ? match.rightId
+      : match.leftId
+    : "";
+  const opponent = getOnlinePlayer(snapshot, opponentId);
+  const submitted = match
+    ? match.leftId === localId
+      ? match.leftSubmitted
+      : match.rightSubmitted
+    : false;
+  const matchKey = match ? `${snapshot.round}:${activity.stage}:${match.id}` : "";
+  if (matchKey !== onlineRpsChoiceMatchKey) {
+    onlineRpsChoiceMatchKey = matchKey;
+    onlineRpsPendingChoice = "";
+  }
+  if (
+    match?.phase === "choosing" &&
+    !submitted &&
+    activity?.message?.includes("재대결")
+  ) {
+    onlineRpsPendingChoice = "";
+  }
+
+  elements.onlineQuizPanel.hidden = true;
+  elements.onlineRpsPanel.hidden = false;
+  elements.onlineRpsStage.textContent = activity ? `ROUND ${activity.stage}` : "BRACKET READY";
+  elements.onlineRpsOpponent.textContent = snapshot.status === "results"
+    ? `${getOnlinePlayer(snapshot, activity?.championId)?.nickname || "친구"} 최종 우승`
+    : opponent
+      ? `${opponent.nickname}님과 대결`
+      : activity?.byeIds?.includes(localId)
+        ? "이번 라운드는 부전승이에요."
+        : "다른 대진 결과를 기다리고 있어요.";
+  elements.onlineRpsFeedback.textContent = activity?.message ||
+    (snapshot.status === "countdown" ? "카운트다운 뒤 대진이 공개돼요." : "대진 생성 중");
+  const champion = getOnlinePlayer(snapshot, activity?.championId);
+  elements.onlineActivityStatus.textContent = snapshot.status === "results"
+    ? `${champion?.nickname || "친구"} 최종 우승 · 토너먼트 종료`
+    : submitted
+      ? "선택 완료 · 상대의 선택을 기다리는 중"
+      : "선택은 두 참가자가 모두 결정한 뒤 공개돼요.";
+  elements.onlineRpsChoiceButtons.forEach((button) => {
+    const selected = button.dataset.rpsChoice === onlineRpsPendingChoice;
+    button.classList.toggle("is-selected", selected);
+    button.disabled =
+      snapshot.status !== "playing" ||
+      !match ||
+      match.phase !== "choosing" ||
+      submitted;
+  });
+  renderOnlineRpsBracket(snapshot);
+}
+
+function renderOnlineActivity(snapshot) {
+  if (!snapshot || !ONLINE_ACTIVITY_GAMES.has(snapshot.game)) return;
+  elements.onlineActivityTitle.textContent = OnlineRoom.GAME_RULES[snapshot.game].label;
+  if (snapshot.game === "rps") {
+    renderOnlineRps(snapshot);
+  } else {
+    renderOnlineQuiz(snapshot);
+  }
+}
+
 function handleOnlineRoomState(snapshot) {
   const previousStatus = onlineSnapshot?.status;
+  const previousGame = onlineSnapshot?.game;
   onlineSnapshot = snapshot;
   renderOnlineRoom();
   if (!snapshot) {
     clearOnlineCountdown();
+    if (ONLINE_ACTIVITY_GAMES.has(previousGame)) hideOnlineActivityArena();
     return;
   }
   if (snapshot.status === "countdown") scheduleOnlineMatch(snapshot);
+  if (ONLINE_ACTIVITY_GAMES.has(snapshot.game)) renderOnlineActivity(snapshot);
+  if (
+    snapshot.status === "lobby" &&
+    previousStatus === "results" &&
+    ONLINE_ACTIVITY_GAMES.has(snapshot.game)
+  ) {
+    hideOnlineActivityArena();
+  }
   if (snapshot.status === "results" && previousStatus !== "results") {
     triggerHaptic([45, 30, 80]);
     showToast("온라인 대결 결과가 완성됐어요.");
@@ -2034,6 +2281,7 @@ function stopOnlineGame(game) {
   if (game === "runner") resetRunner();
   if (game === "stack") resetStack();
   if (game === "fruit") resetFruit();
+  if (ONLINE_ACTIVITY_GAMES.has(game)) hideOnlineActivityArena();
   if (activeRunContext?.type === "online") activeRunContext = null;
   specialRandom = null;
   clearOnlineGameDeadline();
@@ -2046,8 +2294,14 @@ function startOnlineGame(game, matchKey) {
   onlineSubmittedKey = "";
   setDifficulty(onlineSnapshot.difficulty, false);
   setPlayMode("solo");
-  selectGame(game);
-  scrollGameIntoView(game);
+  if (ONLINE_ACTIVITY_GAMES.has(game)) {
+    showOnlineActivityArena(game);
+    renderOnlineActivity(onlineSnapshot);
+  } else {
+    hideOnlineActivityArena(false);
+    selectGame(game);
+    scrollGameIntoView(game);
+  }
   activeRunContext = {
     type: "online",
     game,
@@ -2085,8 +2339,14 @@ function scheduleOnlineMatch(snapshot) {
   closeOnlineRoomDialog();
   if (elements.gameGuideDialog.open) closeGameGuide();
   setPlayMode("solo");
-  selectGame(snapshot.game);
-  scrollGameIntoView(snapshot.game);
+  if (ONLINE_ACTIVITY_GAMES.has(snapshot.game)) {
+    showOnlineActivityArena(snapshot.game);
+    renderOnlineActivity(snapshot);
+  } else {
+    hideOnlineActivityArena(false);
+    selectGame(snapshot.game);
+    scrollGameIntoView(snapshot.game);
+  }
   elements.onlineCountdownGame.textContent = OnlineRoom.GAME_RULES[snapshot.game].label;
 
   const updateCountdown = () => {
@@ -8554,6 +8814,33 @@ elements.onlineDifficultyButtons.forEach((button) => {
     onlineSession?.setDifficulty(button.dataset.onlineDifficulty),
   );
 });
+elements.onlineQuizBuzz.addEventListener("click", () => {
+  onlineSession?.submitAction("quiz-buzz");
+});
+elements.onlineQuizAnswerForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const answer = elements.onlineQuizAnswer.value.trim();
+  if (!answer) {
+    elements.onlineQuizAnswer.focus();
+    return;
+  }
+  onlineSession?.submitAction("quiz-answer", { answer });
+});
+elements.onlineRpsChoiceButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (button.disabled) return;
+    onlineRpsPendingChoice = button.dataset.rpsChoice;
+    elements.onlineRpsChoiceButtons.forEach((choiceButton) => {
+      choiceButton.classList.toggle(
+        "is-selected",
+        choiceButton === button,
+      );
+    });
+    onlineSession?.submitAction("rps-choice", {
+      choice: button.dataset.rpsChoice,
+    });
+  });
+});
 elements.startSharedChallenge.addEventListener("click", startSharedChallenge);
 elements.dismissSharedChallenge.addEventListener("click", dismissSharedChallenge);
 elements.closeFriendChallenge.addEventListener("click", closeFriendChallengeDialog);
@@ -8922,6 +9209,6 @@ PwaManager.setup({
   updateBanner: elements.appUpdateBanner,
   updateButton: elements.applyAppUpdate,
   dismissUpdateButton: elements.dismissAppUpdate,
-  serviceWorkerUrl: "./sw.js?v=38",
+  serviceWorkerUrl: "./sw.js?v=39",
   notify: showToast,
 });

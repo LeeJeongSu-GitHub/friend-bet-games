@@ -128,6 +128,11 @@ assert.doesNotMatch(
   "onlineDifficultyControl",
   "startOnlineMatch",
   "onlineCountdownOverlay",
+  "onlineActivityArena",
+  "onlineQuizBuzz",
+  "onlineQuizAnswerForm",
+  "onlineRpsChoices",
+  "onlineRpsBracket",
   "saveResultImage",
   "installApp",
   "appUpdateBanner",
@@ -150,8 +155,13 @@ assert.doesNotMatch(
 );
 assert.equal(
   (html.match(/data-online-game="[^"]+"/g) || []).length,
-  7,
-  "All seven online match games must be selectable",
+  10,
+  "All ten online match games must be selectable",
+);
+assert.equal(
+  (html.match(/data-rps-choice="(rock|paper|scissors)"/g) || []).length,
+  3,
+  "All three rock-paper-scissors choices must be available",
 );
 assert.equal(
   (html.match(/data-online-difficulty="(easy|normal|hard)"/g) || []).length,
@@ -192,6 +202,8 @@ assert.match(app, /function startFriendChallenge\(\)/);
 assert.match(app, /function startSharedChallenge\(\)/);
 assert.match(app, /function createOnlineRoom\(\)/);
 assert.match(app, /function scheduleOnlineMatch\(snapshot\)/);
+assert.match(app, /function renderOnlineQuiz\(snapshot\)/);
+assert.match(app, /function renderOnlineRps\(snapshot\)/);
 assert.match(app, /submitOnlineScore\("reaction", record/);
 assert.match(app, /submitOnlineScore\(\s*"timer",\s*averageDifference/);
 assert.match(app, /submitOnlineScore\("tap", tapCount/);
@@ -239,7 +251,7 @@ assert.match(
 );
 assert.match(
   html,
-  /vendor\/peerjs\/peerjs\.min\.js\?v=38/,
+  /vendor\/peerjs\/peerjs\.min\.js\?v=39/,
   "PeerJS must be served locally for online rooms",
 );
 assert.match(

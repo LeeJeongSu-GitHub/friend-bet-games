@@ -15,10 +15,10 @@
       content="같이 하기와 혼자 도전을 골라 빠른 결정, 대결, 장애물 피하기와 간식 재료 러너를 즐겨 보세요."
     />
     <title>딱! 정해 - 룰렛·파티 세션·기록 도전 미니게임</title>
-    <link rel="icon" href="./favicon.svg?v=38" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icons/icon-192.png?v=38" />
-    <link rel="manifest" href="./manifest.webmanifest?v=38" />
-    <link rel="stylesheet" href="./styles.css?v=38" />
+    <link rel="icon" href="./favicon.svg?v=39" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png?v=39" />
+    <link rel="manifest" href="./manifest.webmanifest?v=39" />
+    <link rel="stylesheet" href="./styles.css?v=39" />
   </head>
   <body>
     <header class="topbar">
@@ -1442,6 +1442,57 @@
               </p>
             </div>
           </section>
+
+          <section
+            id="onlineActivityArena"
+            class="game-view online-activity-game"
+            aria-labelledby="onlineActivityTitle"
+            hidden
+          >
+            <div class="game-view-header online-activity-header">
+              <div>
+                <span class="game-kicker">LIVE · REALTIME MATCH</span>
+                <h3 id="onlineActivityTitle">온라인 스피드전</h3>
+              </div>
+              <p id="onlineActivityStatus" class="status-text" aria-live="polite">
+                참가자 연결을 확인하고 있어요.
+              </p>
+            </div>
+
+            <div id="onlineQuizPanel" class="online-quiz-panel" hidden>
+              <div class="online-quiz-question">
+                <span id="onlineQuizType">QUIZ</span>
+                <strong id="onlineQuizPrompt">문제를 준비하고 있어요.</strong>
+                <small id="onlineQuizClue"></small>
+              </div>
+              <button id="onlineQuizBuzz" class="online-buzz-button" type="button">
+                <span>BUZZ</span>
+                <strong>정답!</strong>
+              </button>
+              <form id="onlineQuizAnswerForm" class="online-quiz-answer" hidden>
+                <label for="onlineQuizAnswer">정답 입력</label>
+                <div>
+                  <input id="onlineQuizAnswer" maxlength="40" autocomplete="off" placeholder="정답을 입력하세요" />
+                  <button class="primary-action blue" type="submit">제출</button>
+                </div>
+              </form>
+              <p id="onlineQuizFeedback" class="online-activity-feedback" aria-live="assertive"></p>
+            </div>
+
+            <div id="onlineRpsPanel" class="online-rps-panel" hidden>
+              <div class="online-rps-heading">
+                <span id="onlineRpsStage">ROUND 1</span>
+                <strong id="onlineRpsOpponent">상대를 확인하고 있어요.</strong>
+              </div>
+              <div id="onlineRpsChoices" class="online-rps-choices" role="group" aria-label="가위바위보 선택">
+                <button type="button" data-rps-choice="scissors"><span aria-hidden="true">V</span><strong>가위</strong></button>
+                <button type="button" data-rps-choice="rock"><span aria-hidden="true">●</span><strong>바위</strong></button>
+                <button type="button" data-rps-choice="paper"><span aria-hidden="true">■</span><strong>보</strong></button>
+              </div>
+              <ol id="onlineRpsBracket" class="online-rps-bracket" aria-label="가위바위보 대진"></ol>
+              <p id="onlineRpsFeedback" class="online-activity-feedback" aria-live="assertive"></p>
+            </div>
+          </section>
         </div>
       </section>
     </main>
@@ -1613,6 +1664,9 @@
           <button type="button" data-online-game="stack" aria-pressed="false">탑 쌓기</button>
           <button type="button" data-online-game="runner" aria-pressed="false">간식 러너</button>
           <button type="button" data-online-game="fruit" aria-pressed="false">과일 합치기</button>
+          <button type="button" data-online-game="initialQuiz" aria-pressed="false">초성 퀴즈</button>
+          <button type="button" data-online-game="triviaQuiz" aria-pressed="false">상식 퀴즈</button>
+          <button type="button" data-online-game="rps" aria-pressed="false">가위바위보</button>
         </div>
         <p id="onlineGameRule" class="online-game-rule">신호가 바뀐 뒤 가장 빠른 기록이 승리해요.</p>
 
@@ -1704,15 +1758,16 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./vendor/matter-js/matter.min.js?v=38"></script>
-    <script src="./vendor/peerjs/peerjs.min.js?v=38"></script>
-    <script src="./fruit-logic.js?v=38"></script>
-    <script src="./stack-logic.js?v=38"></script>
-    <script src="./engagement-logic.js?v=38"></script>
-    <script src="./challenge-logic.js?v=38"></script>
-    <script src="./online-room.js?v=38"></script>
-    <script src="./result-share.js?v=38"></script>
-    <script src="./pwa-manager.js?v=38"></script>
-    <script src="./app.js?v=38"></script>
+    <script src="./vendor/matter-js/matter.min.js?v=39"></script>
+    <script src="./vendor/peerjs/peerjs.min.js?v=39"></script>
+    <script src="./fruit-logic.js?v=39"></script>
+    <script src="./stack-logic.js?v=39"></script>
+    <script src="./engagement-logic.js?v=39"></script>
+    <script src="./challenge-logic.js?v=39"></script>
+    <script src="./online-activity-logic.js?v=39"></script>
+    <script src="./online-room.js?v=39"></script>
+    <script src="./result-share.js?v=39"></script>
+    <script src="./pwa-manager.js?v=39"></script>
+    <script src="./app.js?v=39"></script>
   </body>
 </html>

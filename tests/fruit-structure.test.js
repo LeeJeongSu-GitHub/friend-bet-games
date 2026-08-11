@@ -43,7 +43,7 @@ const scripts = Array.from(
   (match) => match[1],
 );
 assert.deepEqual(
-  scripts.slice(-10).map((script) => script.split("?")[0]),
+  scripts.slice(-11).map((script) => script.split("?")[0]),
   [
     "vendor/matter-js/matter.min.js",
     "vendor/peerjs/peerjs.min.js",
@@ -51,6 +51,7 @@ assert.deepEqual(
     "stack-logic.js",
     "engagement-logic.js",
     "challenge-logic.js",
+    "online-activity-logic.js",
     "online-room.js",
     "result-share.js",
     "pwa-manager.js",
@@ -59,7 +60,7 @@ assert.deepEqual(
   "Physics and game logic must load before app.js",
 );
 assert.ok(
-  scripts.slice(-10).every((script) => script.endsWith("?v=38")),
+  scripts.slice(-11).every((script) => script.endsWith("?v=39")),
   "All runtime scripts must share the current cache-busting build number",
 );
 for (const script of scripts) {

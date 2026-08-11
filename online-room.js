@@ -1,11 +1,17 @@
 (function attachOnlineRoom(root, factory) {
-  const api = factory();
+  const activityLogic = root?.OnlineActivityLogic ||
+    (typeof module === "object" && module.exports
+      ? require("./online-activity-logic.js")
+      : null);
+  const api = factory(activityLogic);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.OnlineRoom = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createOnlineRoomApi() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createOnlineRoomApi(ActivityLogic) {
   "use strict";
 
-  const VERSION = 1;
+  if (!ActivityLogic) throw new Error("Online activity logic is required");
+
+  const VERSION = 2;
   const ROOM_PREFIX = "ddak-room-";
   const ROOM_CODE_LENGTH = 6;
   const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -60,6 +66,30 @@
       minimum: 0,
       maximum: 100000000,
       duration: 90000,
+    },
+    initialQuiz: {
+      label: "초성 퀴즈",
+      unit: "정답",
+      lowerIsBetter: false,
+      minimum: 0,
+      maximum: 1,
+      activity: "quiz",
+    },
+    triviaQuiz: {
+      label: "상식 퀴즈",
+      unit: "정답",
+      lowerIsBetter: false,
+      minimum: 0,
+      maximum: 1,
+      activity: "quiz",
+    },
+    rps: {
+      label: "가위바위보 토너먼트",
+      unit: "승",
+      lowerIsBetter: false,
+      minimum: 0,
+      maximum: 1100,
+      activity: "rps",
     },
   });
   const DIFFICULTIES = Object.freeze(["easy", "normal", "hard"]);
@@ -126,7 +156,7 @@
     const score = Number(value);
     if (!rule || !Number.isFinite(score)) return null;
     if (score < rule.minimum || score > rule.maximum) return null;
-    return ["tap", "runner", "stack", "fruit"].includes(game)
+    return ["tap", "runner", "stack", "fruit", "initialQuiz", "triviaQuiz", "rps"].includes(game)
       ? Math.round(score)
       : Math.round(score * 100) / 100;
   }
@@ -139,6 +169,12 @@
     if (game === "dodge") return `${(score / 1000).toFixed(2)}초`;
     if (game === "stack") return `${Math.round(score)}층`;
     if (game === "tap") return `${Math.round(score)}회`;
+    if (["initialQuiz", "triviaQuiz"].includes(game)) {
+      return score >= 1 ? "정답" : "도전 종료";
+    }
+    if (game === "rps") {
+      return score >= 1000 ? "우승" : `${Math.round(score)}승`;
+    }
     return `${Math.round(score).toLocaleString()}점`;
   }
 
@@ -188,6 +224,10 @@
       this.isHost = false;
       this.startTimer = null;
       this.connectionTimer = null;
+      this.activityTimers = new Set();
+      this.quizAnswer = null;
+      this.rpsChoices = new Map();
+      this.rpsWins = new Map();
       this.closed = false;
     }
 
@@ -250,6 +290,7 @@
             round: 1,
             startsAt: null,
             seed: null,
+            activity: null,
             players: [
               {
                 id: this.localPeerId,
@@ -324,6 +365,10 @@
               return;
             }
             if (message?.type !== "state" || !message.room) return;
+            if (message.room.version !== VERSION) {
+              rejectOnce(new Error("게임 버전이 달라요. 페이지를 새로고침해 주세요."));
+              return;
+            }
             this.room = message.room;
             this.emitState();
             if (!settled) {
@@ -360,6 +405,14 @@
     handleHostMessage(connection, message) {
       if (!this.isHost || !this.room || !message || typeof message !== "object") return;
       if (message.type === "join") {
+        if (message.version !== VERSION) {
+          connection.send({
+            type: "reject",
+            message: "게임 버전이 달라요. 페이지를 새로고침해 주세요.",
+          });
+          connection.close();
+          return;
+        }
         if (this.room.status !== "lobby") {
           connection.send({ type: "reject", message: "이미 대결이 시작된 방이에요." });
           connection.close();
@@ -393,6 +446,13 @@
       if (message.type === "score") {
         this.recordScore(connection.peer, message.score, message.detail);
       }
+      if (message.type === "action") {
+        this.handleActivityAction(
+          connection.peer,
+          String(message.action || ""),
+          message.payload,
+        );
+      }
       if (message.type === "leave") this.removeGuest(connection.peer);
     }
 
@@ -401,7 +461,40 @@
       const nextPlayers = this.room.players.filter((player) => player.id !== peerId);
       this.connections.delete(peerId);
       if (nextPlayers.length === this.room.players.length) return;
+      const activity = this.room.activity;
+      if (this.room.status === "playing" && activity?.kind === "quiz") {
+        activity.lockedOut = activity.lockedOut.filter((id) => id !== peerId);
+        if (activity.buzzedBy === peerId) {
+          activity.buzzedBy = "";
+          activity.message = "답변자가 나가 다른 참가자에게 기회가 넘어갔어요.";
+        }
+      }
+      if (this.room.status === "playing" && activity?.kind === "rps") {
+        activity.byeIds = activity.byeIds.filter((id) => id !== peerId);
+        const match = activity.matches.find(
+          (entry) =>
+            !entry.winnerId &&
+            (entry.leftId === peerId || entry.rightId === peerId),
+        );
+        if (match) {
+          const winnerId = match.leftId === peerId ? match.rightId : match.leftId;
+          match.winnerId = winnerId;
+          match.phase = "reveal";
+          this.rpsWins.set(winnerId, (this.rpsWins.get(winnerId) || 0) + 1);
+          activity.message = `${nextPlayers.find((player) => player.id === winnerId)?.nickname || "친구"} 부전승`;
+          const stage = activity.stage;
+          this.scheduleActivity(() => this.advanceRpsStage(stage), 500);
+        }
+      }
       this.room.players = nextPlayers;
+      if (
+        this.room.status === "playing" &&
+        activity?.kind === "quiz" &&
+        activity.lockedOut.length >= nextPlayers.length
+      ) {
+        this.finishQuiz("");
+        return;
+      }
       this.finishRoundIfReady();
       this.broadcastState();
     }
@@ -441,6 +534,236 @@
       return true;
     }
 
+    scheduleActivity(callback, delay) {
+      const timer = setTimeout(() => {
+        this.activityTimers.delete(timer);
+        callback();
+      }, delay);
+      this.activityTimers.add(timer);
+    }
+
+    clearActivity() {
+      this.activityTimers.forEach((timer) => clearTimeout(timer));
+      this.activityTimers.clear();
+      this.quizAnswer = null;
+      this.rpsChoices.clear();
+      this.rpsWins.clear();
+      if (this.room) this.room.activity = null;
+    }
+
+    prepareActivity() {
+      if (!this.room) return;
+      if (["initialQuiz", "triviaQuiz"].includes(this.room.game)) {
+        const question = ActivityLogic.getQuizQuestion(
+          this.room.game,
+          this.room.seed,
+        );
+        this.quizAnswer = question;
+        this.room.activity = {
+          kind: "quiz",
+          questionId: question.id,
+          prompt: question.prompt,
+          clue: question.clue,
+          buzzedBy: "",
+          lockedOut: [],
+          winnerId: "",
+          answer: "",
+          message: "정답을 알겠다면 먼저 버저를 누르세요.",
+        };
+        return;
+      }
+      if (this.room.game === "rps") {
+        const stage = ActivityLogic.buildRpsStage(
+          this.room.players.map((player) => player.id),
+          1,
+        );
+        this.room.activity = {
+          kind: "rps",
+          ...stage,
+          history: [],
+          championId: "",
+          message: "상대에게 보이지 않게 하나를 선택하세요.",
+        };
+      }
+    }
+
+    submitAction(action, payload = {}) {
+      if (!this.room || this.room.status !== "playing") return false;
+      if (this.isHost) {
+        return this.handleActivityAction(this.localPeerId, action, payload);
+      }
+      this.send(this.hostConnection, {
+        type: "action",
+        action: String(action || "").slice(0, 30),
+        payload,
+      });
+      return true;
+    }
+
+    handleActivityAction(peerId, action, payload = {}) {
+      if (!this.isHost || this.room?.status !== "playing") return false;
+      if (!this.room.players.some((player) => player.id === peerId)) return false;
+      if (this.room.activity?.kind === "quiz") {
+        return this.handleQuizAction(peerId, action, payload);
+      }
+      if (this.room.activity?.kind === "rps") {
+        return this.handleRpsAction(peerId, action, payload);
+      }
+      return false;
+    }
+
+    finishQuiz(winnerId = "") {
+      if (!this.room || this.room.activity?.kind !== "quiz") return;
+      const answer = this.quizAnswer?.answers?.[0] || "";
+      this.room.activity.winnerId = winnerId;
+      this.room.activity.answer = answer;
+      this.room.activity.buzzedBy = "";
+      this.room.activity.message = winnerId
+        ? `${this.room.players.find((player) => player.id === winnerId)?.nickname || "친구"} 정답!`
+        : `정답은 ${answer}였어요.`;
+      this.room.players.forEach((player) => {
+        player.score = player.id === winnerId ? 1 : 0;
+        player.detail = player.id === winnerId ? "정답" : "다음 문제에 도전";
+      });
+      this.room.status = "results";
+      this.broadcastState();
+    }
+
+    handleQuizAction(peerId, action, payload) {
+      const activity = this.room.activity;
+      if (action === "quiz-buzz") {
+        if (activity.buzzedBy || activity.lockedOut.includes(peerId)) return false;
+        activity.buzzedBy = peerId;
+        const player = this.room.players.find((entry) => entry.id === peerId);
+        activity.message = `${player?.nickname || "친구"} 답변 차례예요.`;
+        this.broadcastState();
+        return true;
+      }
+      if (action !== "quiz-answer" || activity.buzzedBy !== peerId) return false;
+      const answer = String(payload?.answer || "").slice(0, 40);
+      if (!answer.trim()) return false;
+      if (ActivityLogic.isCorrectAnswer(this.quizAnswer, answer)) {
+        this.finishQuiz(peerId);
+        return true;
+      }
+      activity.lockedOut.push(peerId);
+      activity.buzzedBy = "";
+      const player = this.room.players.find((entry) => entry.id === peerId);
+      activity.message = `${player?.nickname || "친구"} 오답! 다른 참가자에게 기회가 넘어갔어요.`;
+      if (activity.lockedOut.length >= this.room.players.length) {
+        this.finishQuiz("");
+      } else {
+        this.broadcastState();
+      }
+      return true;
+    }
+
+    handleRpsAction(peerId, action, payload) {
+      if (action !== "rps-choice") return false;
+      const choice = ActivityLogic.normalizeRpsChoice(payload?.choice);
+      if (!choice) return false;
+      const activity = this.room.activity;
+      const match = activity.matches.find(
+        (entry) =>
+          entry.phase === "choosing" &&
+          (entry.leftId === peerId || entry.rightId === peerId),
+      );
+      if (!match) return false;
+      const choices = this.rpsChoices.get(match.id) || {};
+      if (choices[peerId]) return false;
+      choices[peerId] = choice;
+      this.rpsChoices.set(match.id, choices);
+      if (match.leftId === peerId) match.leftSubmitted = true;
+      if (match.rightId === peerId) match.rightSubmitted = true;
+      if (!match.leftSubmitted || !match.rightSubmitted) {
+        this.broadcastState();
+        return true;
+      }
+
+      const result = ActivityLogic.resolveRps(
+        choices[match.leftId],
+        choices[match.rightId],
+      );
+      match.leftChoice = choices[match.leftId];
+      match.rightChoice = choices[match.rightId];
+      match.phase = "reveal";
+      this.rpsChoices.delete(match.id);
+
+      if (result === "tie") {
+        activity.message = "무승부! 같은 상대와 다시 선택하세요.";
+        this.broadcastState();
+        const stage = activity.stage;
+        this.scheduleActivity(() => {
+          if (
+            this.room?.status !== "playing" ||
+            this.room.activity?.stage !== stage
+          ) return;
+          const current = this.room.activity.matches.find(
+            (entry) => entry.id === match.id,
+          );
+          if (!current || current.winnerId) return;
+          Object.assign(current, {
+            leftSubmitted: false,
+            rightSubmitted: false,
+            leftChoice: "",
+            rightChoice: "",
+            phase: "choosing",
+          });
+          this.room.activity.message = "무승부 재대결! 다시 선택하세요.";
+          this.broadcastState();
+        }, 1000);
+        return true;
+      }
+
+      const winnerId = result === "left" ? match.leftId : match.rightId;
+      match.winnerId = winnerId;
+      this.rpsWins.set(winnerId, (this.rpsWins.get(winnerId) || 0) + 1);
+      activity.message = `${this.room.players.find((player) => player.id === winnerId)?.nickname || "친구"} 승리!`;
+      this.broadcastState();
+      const stage = activity.stage;
+      this.scheduleActivity(() => this.advanceRpsStage(stage), 1100);
+      return true;
+    }
+
+    advanceRpsStage(stage) {
+      if (
+        !this.room ||
+        this.room.status !== "playing" ||
+        this.room.activity?.kind !== "rps" ||
+        this.room.activity.stage !== stage ||
+        this.room.activity.matches.some((match) => !match.winnerId)
+      ) return;
+      const activity = this.room.activity;
+      const winners = [
+        ...activity.matches.map((match) => match.winnerId),
+        ...activity.byeIds,
+      ];
+      activity.history.push(
+        ...activity.matches.map((match) => ({ ...match, stage })),
+      );
+      if (winners.length === 1) {
+        const championId = winners[0];
+        activity.championId = championId;
+        activity.message = `${this.room.players.find((player) => player.id === championId)?.nickname || "친구"} 최종 우승!`;
+        activity.matches = [];
+        activity.byeIds = [];
+        this.room.players.forEach((player) => {
+          const wins = this.rpsWins.get(player.id) || 0;
+          player.score = player.id === championId ? 1000 + wins : wins;
+          player.detail = player.id === championId ? "토너먼트 우승" : `${wins}승`;
+        });
+        this.room.status = "results";
+        this.broadcastState();
+        return;
+      }
+      const next = ActivityLogic.buildRpsStage(winners, stage + 1);
+      activity.stage = next.stage;
+      activity.matches = next.matches;
+      activity.byeIds = next.byeIds;
+      activity.message = `${next.stage}라운드가 시작됐어요. 동시에 선택하세요.`;
+      this.broadcastState();
+    }
+
     setReady(ready) {
       if (!this.room || this.room.status !== "lobby") return false;
       if (this.isHost) {
@@ -456,6 +779,7 @@
 
     startRound(delay = 3200) {
       if (!this.isHost || !canStartRoom(this.room)) return false;
+      this.clearActivity();
       this.room.status = "countdown";
       this.room.startsAt = this.now() + Math.max(1500, Math.min(Number(delay) || 3200, 8000));
       this.room.seed = Math.floor(this.random() * 0x100000000) >>> 0;
@@ -468,6 +792,7 @@
       this.startTimer = setTimeout(() => {
         if (!this.room || this.room.status !== "countdown") return;
         this.room.status = "playing";
+        this.prepareActivity();
         this.broadcastState();
       }, Math.max(0, this.room.startsAt - this.now()));
       return true;
@@ -507,6 +832,7 @@
 
     rematch() {
       if (!this.isHost || this.room?.status !== "results") return false;
+      this.clearActivity();
       this.room.status = "lobby";
       this.room.round += 1;
       this.room.startsAt = null;
@@ -524,8 +850,13 @@
       this.closed = true;
       clearTimeout(this.startTimer);
       clearTimeout(this.connectionTimer);
+      this.activityTimers.forEach((timer) => clearTimeout(timer));
+      this.activityTimers.clear();
       this.startTimer = null;
       this.connectionTimer = null;
+      this.quizAnswer = null;
+      this.rpsChoices.clear();
+      this.rpsWins.clear();
       if (notify && this.isHost) {
         this.connections.forEach((connection) => this.send(connection, { type: "closed" }));
       } else if (notify) {

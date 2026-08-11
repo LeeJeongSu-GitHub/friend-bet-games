@@ -37,9 +37,49 @@ async function installFakeOnlinePeer(page) {
         super();
         this.peer = "online-friend";
         this.open = true;
+        this.readyRounds = new Set();
+        this.rpsMatches = new Set();
       }
 
-      send() {}
+      send(message) {
+        const room = message?.room;
+        if (message?.type !== "state" || !room) return;
+        const guest = room.players.find((player) => player.id === this.peer);
+        if (
+          room.status === "lobby" &&
+          guest &&
+          !guest.ready &&
+          !this.readyRounds.has(room.round)
+        ) {
+          this.readyRounds.add(room.round);
+          window.setTimeout(
+            () => this.emit("data", { type: "ready", ready: true }),
+            20,
+          );
+        }
+        const match = room.activity?.matches?.find(
+          (entry) =>
+            entry.phase === "choosing" &&
+            (entry.leftId === this.peer || entry.rightId === this.peer),
+        );
+        const matchKey = match ? `${room.round}:${room.activity.stage}:${match.id}` : "";
+        if (
+          room.status === "playing" &&
+          room.activity?.kind === "rps" &&
+          match &&
+          !this.rpsMatches.has(matchKey)
+        ) {
+          this.rpsMatches.add(matchKey);
+          window.setTimeout(
+            () => this.emit("data", {
+              type: "action",
+              action: "rps-choice",
+              payload: { choice: "scissors" },
+            }),
+            30,
+          );
+        }
+      }
 
       close() {
         this.open = false;
@@ -58,7 +98,7 @@ async function installFakeOnlinePeer(page) {
           window.setTimeout(() => {
             connection.emit("data", {
               type: "join",
-              version: 1,
+              version: 2,
               nickname: "준호",
             });
             window.setTimeout(() => {
@@ -148,7 +188,7 @@ test("creates an online room and starts a synchronized match", async ({ page }) 
   await expect(dialog.getByText("준호")).toBeVisible();
   const roomCode = await dialog.locator("#onlineLobbyCode").innerText();
   expect(roomCode).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
-  await expect(dialog.locator("[data-online-game]")).toHaveCount(7);
+  await expect(dialog.locator("[data-online-game]")).toHaveCount(10);
   await dialog.locator('[data-online-game="fruit"]').click();
   await expect(dialog.locator('[data-online-game="fruit"]')).toHaveAttribute(
     "aria-pressed",
@@ -171,9 +211,57 @@ test("creates an online room and starts a synchronized match", async ({ page }) 
   await expect(page.locator("#onlineRoomBar")).toContainText(roomCode);
 });
 
+test("plays a buzzer quiz and an automatic rock-paper-scissors bracket", async ({ page }) => {
+  await installFakeOnlinePeer(page);
+  await page.goto("/");
+  await page.locator("#openOnlineRoom").click();
+
+  const dialog = page.locator("#onlineRoomDialog");
+  await dialog.locator("#onlineNickname").fill("민지");
+  await dialog.locator("#createOnlineRoom").click();
+  await expect(dialog.locator("#onlinePlayerList li")).toHaveCount(2);
+  await expect(dialog.locator("#startOnlineMatch")).toBeEnabled();
+
+  await dialog.locator('[data-online-game="initialQuiz"]').click();
+  await dialog.locator("#startOnlineMatch").click();
+  await expect(page.locator("#onlineCountdownOverlay")).toBeHidden({ timeout: 6000 });
+  await expect(page.locator("#onlineActivityArena")).toBeVisible();
+  await expect(page.locator("#onlineQuizPanel")).toBeVisible();
+  await expect.poll(() => page.locator("#onlineQuizPrompt").innerText()).not.toBe(
+    "문제를 준비하고 있어요.",
+  );
+
+  await page.locator("#onlineQuizBuzz").click();
+  await expect(page.locator("#onlineQuizAnswerForm")).toBeVisible();
+  const answer = await page.evaluate(() => {
+    const prompt = document.querySelector("#onlineQuizPrompt")?.textContent;
+    const questions = Object.values(window.OnlineActivityLogic.QUIZ_BANKS).flat();
+    return questions.find((question) => question.prompt === prompt)?.answers?.[0] || "";
+  });
+  expect(answer).not.toBe("");
+  await page.locator("#onlineQuizAnswer").fill(answer);
+  await page.locator("#onlineQuizAnswerForm button[type='submit']").click();
+  await expect(page.locator("#onlineRoomBarSummary")).toContainText("정답");
+
+  await page.locator("#openOnlineLobby").click();
+  await expect(dialog.locator("#rematchOnline")).toBeVisible();
+  await dialog.locator("#rematchOnline").click();
+  await expect(dialog.locator("#startOnlineMatch")).toBeEnabled();
+  await dialog.locator('[data-online-game="rps"]').click();
+  await dialog.locator("#startOnlineMatch").click();
+  await expect(page.locator("#onlineCountdownOverlay")).toBeHidden({ timeout: 6000 });
+  await expect(page.locator("#onlineRpsPanel")).toBeVisible();
+  await expect(page.locator('[data-rps-choice="rock"]')).toBeEnabled();
+  await page.locator('[data-rps-choice="rock"]').click();
+  await expect(page.locator("#onlineRoomBarSummary")).toContainText(
+    "토너먼트 우승",
+    { timeout: 4000 },
+  );
+});
+
 test("serves the install manifest, PNG icons, and active service worker", async ({ page, request }) => {
   await page.goto("/");
-  const manifest = await (await request.get("/manifest.webmanifest?v=38")).json();
+  const manifest = await (await request.get("/manifest.webmanifest?v=39")).json();
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual([
     "192x192",
     "512x512",
@@ -194,7 +282,7 @@ test("serves the install manifest, PNG icons, and active service worker", async 
         return registration.active?.scriptURL || "";
       }),
     )
-    .toContain("sw.js?v=38");
+    .toContain("sw.js?v=39");
 });
 
 test("reloads the app from the service worker cache while offline", async ({ context, page }) => {
