@@ -7,6 +7,20 @@ assert.deepEqual(initialQuestion, sameInitialQuestion);
 assert.ok(initialQuestion.prompt);
 assert.ok(initialQuestion.clue);
 assert.ok(initialQuestion.answers.length > 0);
+assert.equal(OnlineActivityLogic.getKoreanInitials("도깨비"), "ㄷㄲㅂ");
+assert.equal(OnlineActivityLogic.getKoreanInitials("아이스크림"), "ㅇㅇㅅㅋㄹ");
+for (let offset = 0; offset < OnlineActivityLogic.QUIZ_BANKS.initialQuiz.length; offset += 1) {
+  const question = OnlineActivityLogic.getQuizQuestion("initialQuiz", 12345, offset);
+  assert.equal(
+    question.prompt,
+    OnlineActivityLogic.getKoreanInitials(question.answers[0]),
+    `${question.answers[0]}의 초성이 정답과 일치해야 합니다.`,
+  );
+}
+assert.notEqual(
+  OnlineActivityLogic.getQuizQuestion("initialQuiz", 12345, 0).id,
+  OnlineActivityLogic.getQuizQuestion("initialQuiz", 12345, 1).id,
+);
 assert.equal(
   OnlineActivityLogic.isCorrectAnswer(
     { answers: ["10월 9일"] },

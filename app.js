@@ -92,8 +92,8 @@ const ONLINE_GAME_DESCRIPTIONS = {
   runner: "같은 코스에서 간식 재료를 모아 가장 높은 점수를 내세요.",
   stack: "같은 블록 움직임에서 가장 높은 층을 쌓은 사람이 승리해요.",
   fruit: "같은 과일 순서로 90초 동안 가장 높은 점수를 내세요.",
-  initialQuiz: "버저를 먼저 누른 뒤 초성 정답을 맞히면 승리해요.",
-  triviaQuiz: "버저를 먼저 누른 뒤 상식 문제의 정답을 맞히면 승리해요.",
+  initialQuiz: "버저를 선점해 초성 퀴즈 3문제를 먼저 맞히면 승리해요.",
+  triviaQuiz: "버저를 선점해 상식 퀴즈 3문제를 먼저 맞히면 승리해요.",
   rps: "상대에게 보이지 않게 동시에 선택하고 토너먼트 우승자를 가려요.",
 };
 const ONLINE_ACTIVITY_GAMES = new Set(["initialQuiz", "triviaQuiz", "rps"]);
@@ -324,10 +324,14 @@ const elements = {
   onlineActivityArena: document.querySelector("#onlineActivityArena"),
   onlineActivityTitle: document.querySelector("#onlineActivityTitle"),
   onlineActivityStatus: document.querySelector("#onlineActivityStatus"),
+  onlineResultActions: document.querySelector("#onlineResultActions"),
+  onlineChooseNextGame: document.querySelector("#onlineChooseNextGame"),
   onlineQuizPanel: document.querySelector("#onlineQuizPanel"),
   onlineQuizType: document.querySelector("#onlineQuizType"),
   onlineQuizPrompt: document.querySelector("#onlineQuizPrompt"),
   onlineQuizClue: document.querySelector("#onlineQuizClue"),
+  onlineQuizProgress: document.querySelector("#onlineQuizProgress"),
+  onlineQuizScores: document.querySelector("#onlineQuizScores"),
   onlineQuizBuzz: document.querySelector("#onlineQuizBuzz"),
   onlineQuizAnswerForm: document.querySelector("#onlineQuizAnswerForm"),
   onlineQuizAnswer: document.querySelector("#onlineQuizAnswer"),
@@ -1785,16 +1789,31 @@ function getOnlineRoomStatus(snapshot) {
     (player) => player.id === snapshot.localPeerId,
   );
   if (snapshot.status === "countdown") return "잠시 후 모든 기기에서 시작해요.";
+  if (snapshot.status === "choosing") {
+    const nextGame = OnlineRoom.GAME_RULES[snapshot.pendingGame]?.label || "다음 게임";
+    return snapshot.isHost
+      ? `${nextGame} 선택 중 · 게임을 고른 뒤 시작하세요.`
+      : "방장이 다음 게임을 고르고 있어요. 결과 화면에서 기다려 주세요.";
+  }
   if (snapshot.status === "playing") {
+    if (["initialQuiz", "triviaQuiz"].includes(snapshot.game)) {
+      const activity = snapshot.activity;
+      return activity?.phase === "reveal"
+        ? activity.message
+        : `${activity?.questionNumber || 1}번째 문제 · 먼저 ${activity?.targetScore || 3}점`;
+    }
     return localPlayer?.score === null
       ? "게임 진행 중 · 기록을 완료해 주세요."
       : "기록 제출 완료 · 친구들을 기다리는 중이에요.";
   }
   if (snapshot.status === "results") {
     if (["initialQuiz", "triviaQuiz"].includes(snapshot.game)) {
-      const winner = getOnlinePlayer(snapshot, snapshot.activity?.winnerId);
+      const winner = getOnlinePlayer(
+        snapshot,
+        snapshot.activity?.championId || snapshot.activity?.winnerId,
+      );
       return winner
-        ? `${winner.nickname} 정답 · ${snapshot.activity.answer}`
+        ? `${winner.nickname} ${snapshot.activity?.targetScore || 3}점 선점 승리 · 다음 게임 선택 가능`
         : `정답 공개 · ${snapshot.activity?.answer || "-"}`;
     }
     if (snapshot.game === "rps") {
@@ -1815,7 +1834,7 @@ function getOnlineRoomStatus(snapshot) {
 }
 
 function renderOnlinePlayers(snapshot) {
-  const ranked = snapshot.status === "results";
+  const ranked = ["results", "choosing"].includes(snapshot.status);
   const players = ranked
     ? OnlineRoom.rankPlayers(snapshot.players, snapshot.game)
     : snapshot.players.map((player, index) => ({ ...player, rank: index + 1 }));
@@ -1833,13 +1852,19 @@ function renderOnlinePlayers(snapshot) {
     name.textContent = `${player.nickname}${player.id === snapshot.localPeerId ? " (나)" : ""}`;
     const stateLabel = document.createElement("small");
     stateLabel.className = "online-player-state";
+    const quizInProgress = ["initialQuiz", "triviaQuiz"].includes(snapshot.game) &&
+      ["countdown", "playing"].includes(snapshot.status);
     stateLabel.textContent = player.isHost
       ? "방장"
+      : snapshot.status === "choosing"
+        ? "다음 게임 대기"
       : snapshot.status === "lobby"
         ? player.ready
           ? "준비 완료"
           : "준비 중"
-        : player.score === null
+        : quizInProgress
+          ? "퀴즈 진행 중"
+          : player.score === null
           ? "도전 중"
           : "기록 제출";
     copy.append(name, stateLabel);
@@ -1859,7 +1884,10 @@ function renderOnlineRoomBar(snapshot) {
   elements.onlineRoomBar.hidden = !snapshot;
   elements.onlineRoomBarPlayers.replaceChildren();
   if (!snapshot) return;
-  elements.onlineRoomBarTitle.textContent = `${snapshot.code} · ${OnlineRoom.GAME_RULES[snapshot.game].label}`;
+  const displayGame = snapshot.isHost && snapshot.status === "choosing"
+    ? snapshot.pendingGame
+    : snapshot.game;
+  elements.onlineRoomBarTitle.textContent = `${snapshot.code} · ${OnlineRoom.GAME_RULES[displayGame].label}`;
   elements.onlineRoomBarSummary.textContent = getOnlineRoomStatus(snapshot);
   snapshot.players.slice(0, 5).forEach((player) => {
     const mark = document.createElement("span");
@@ -1874,6 +1902,40 @@ function renderOnlineRoomBar(snapshot) {
   }
 }
 
+function renderOnlineResultDialogState(snapshot) {
+  if (
+    !elements.resultDialog.open ||
+    !state.lastResult?.onlineRoomCode ||
+    state.lastResult.onlineRoomCode !== snapshot.code
+  ) return;
+
+  const completed = ["results", "choosing"].includes(snapshot.status);
+  elements.playAgain.hidden = true;
+  elements.tryAnotherGame.hidden = true;
+  elements.drawMission.hidden = true;
+  elements.changeGame.hidden = false;
+  elements.changeGame.disabled = !completed || !snapshot.isHost;
+  elements.changeGame.textContent = !completed
+    ? "친구 결과 집계 중"
+    : snapshot.isHost
+      ? "다른 게임 고르기"
+      : "방장 선택 대기 중";
+
+  if (!completed) return;
+  const ranking = OnlineRoom.rankPlayers(snapshot.players, snapshot.game);
+  const winners = ranking.filter((player) => player.rank === 1);
+  const winnerNames = winners.map((player) => player.nickname).join(", ");
+  elements.resultLead.textContent = winners.length > 1
+    ? "온라인 대결 공동 1위"
+    : "온라인 대결 승리";
+  elements.resultName.textContent = winnerNames;
+  elements.resultName.classList.toggle("is-list", winners.length > 1);
+  elements.resultStakeLabel.textContent = "최종 기록";
+  elements.resultStake.textContent = winners
+    .map((player) => `${player.nickname} · ${OnlineRoom.formatScore(snapshot.game, player.score)}`)
+    .join(" / ");
+}
+
 function renderOnlineRoom() {
   const snapshot = onlineSnapshot;
   elements.onlineEntryView.hidden = Boolean(snapshot);
@@ -1885,10 +1947,18 @@ function renderOnlineRoom() {
     (player) => player.id === snapshot.localPeerId,
   );
   const lobby = snapshot.status === "lobby";
+  const choosing = snapshot.status === "choosing";
   const results = snapshot.status === "results";
+  const setupEnabled = lobby || choosing;
+  const selectedGame = choosing ? snapshot.pendingGame : snapshot.game;
+  const selectedDifficulty = choosing
+    ? snapshot.pendingDifficulty
+    : snapshot.difficulty;
   elements.onlineLobbyCode.textContent = snapshot.code;
   elements.onlineConnectionState.textContent = results
     ? "대결 완료"
+    : choosing
+      ? "다음 게임 선택"
     : snapshot.status === "playing"
       ? "게임 중"
       : snapshot.status === "countdown"
@@ -1897,36 +1967,38 @@ function renderOnlineRoom() {
   elements.onlinePlayerCount.textContent = `${snapshot.players.length} / ${OnlineRoom.MAX_PLAYERS}`;
   elements.onlineLobbyStatus.textContent = getOnlineRoomStatus(snapshot);
   elements.onlineGameButtons.forEach((button) => {
-    const active = button.dataset.onlineGame === snapshot.game;
+    const active = button.dataset.onlineGame === selectedGame;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.disabled = !snapshot.isHost || !lobby;
+    button.disabled = !snapshot.isHost || !setupEnabled;
   });
   const difficultyRelevant = ["dodge", "runner", "stack", "fruit"].includes(
-    snapshot.game,
+    selectedGame,
   );
-  elements.onlineGameRule.textContent = ONLINE_GAME_DESCRIPTIONS[snapshot.game];
+  elements.onlineGameRule.textContent = ONLINE_GAME_DESCRIPTIONS[selectedGame];
   elements.onlineDifficultyControl.parentElement.classList.toggle(
     "is-disabled",
     !difficultyRelevant,
   );
   elements.onlineDifficultyButtons.forEach((button) => {
-    const active = button.dataset.onlineDifficulty === snapshot.difficulty;
+    const active = button.dataset.onlineDifficulty === selectedDifficulty;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.disabled = !snapshot.isHost || !lobby || !difficultyRelevant;
+    button.disabled = !snapshot.isHost || !setupEnabled || !difficultyRelevant;
   });
   renderOnlinePlayers(snapshot);
 
   elements.toggleOnlineReady.hidden = snapshot.isHost || !lobby;
   elements.toggleOnlineReady.textContent = localPlayer?.ready ? "준비 취소" : "준비하기";
-  elements.startOnlineMatch.hidden = !snapshot.isHost || !lobby;
+  elements.startOnlineMatch.hidden = !snapshot.isHost || !setupEnabled;
+  elements.startOnlineMatch.textContent = choosing ? "선택한 게임 시작" : "대결 시작";
   elements.startOnlineMatch.disabled = !OnlineRoom.canStartRoom(snapshot);
   elements.rematchOnline.hidden = !snapshot.isHost || !results;
   elements.startOnlineMatch.parentElement.classList.toggle(
     "is-single",
     snapshot.isHost || !lobby,
   );
+  renderOnlineResultDialogState(snapshot);
 }
 
 function getOnlinePlayer(snapshot, peerId) {
@@ -1979,33 +2051,57 @@ function renderOnlineQuiz(snapshot) {
   elements.onlineQuizClue.textContent = activity?.clue
     ? `힌트 · ${activity.clue}`
     : "모든 참가자에게 동시에 문제가 공개돼요.";
+  const targetScore = activity?.targetScore || OnlineRoom.QUIZ_TARGET_SCORE || 3;
+  elements.onlineQuizProgress.textContent = `${activity?.questionNumber || 1}번째 문제 · 먼저 ${targetScore}점`;
+  elements.onlineQuizScores.replaceChildren();
+  snapshot.players.forEach((player) => {
+    const chip = document.createElement("span");
+    chip.classList.toggle("is-leading", Number(player.score) === Math.max(
+      ...snapshot.players.map((entry) => Number(entry.score) || 0),
+    ) && Number(player.score) > 0);
+    chip.classList.toggle("is-me", player.id === localId);
+    const name = document.createElement("small");
+    name.textContent = player.nickname;
+    const score = document.createElement("strong");
+    score.textContent = `${Number(player.score) || 0} / ${targetScore}`;
+    chip.append(name, score);
+    elements.onlineQuizScores.append(chip);
+  });
   elements.onlineQuizFeedback.textContent = activity?.message ||
     (snapshot.status === "countdown" ? "카운트다운 뒤 문제가 공개돼요." : "문제 연결 중");
 
-  const canBuzz = snapshot.status === "playing" && activity &&
+  const awaitingQuestion = activity?.phase === "reveal";
+  const finished = ["results", "choosing"].includes(snapshot.status);
+  const canBuzz = snapshot.status === "playing" && activity && !awaitingQuestion &&
     !activity.buzzedBy && !lockedOut;
-  elements.onlineQuizBuzz.hidden = snapshot.status === "results" || myTurn;
+  elements.onlineQuizBuzz.hidden = finished || myTurn;
   elements.onlineQuizBuzz.disabled = !canBuzz;
   elements.onlineQuizBuzz.classList.toggle("is-locked", Boolean(activity?.buzzedBy));
-  elements.onlineQuizBuzz.querySelector("strong").textContent = lockedOut
+  elements.onlineQuizBuzz.querySelector("strong").textContent = awaitingQuestion
+    ? "다음 문제"
+    : lockedOut
     ? "다음 문제 대기"
     : activity?.buzzedBy
       ? `${buzzOwner?.nickname || "친구"} 답변 중`
       : "정답!";
 
   elements.onlineQuizAnswerForm.hidden = !myTurn || snapshot.status !== "playing";
-  if (myTurn && onlineQuizFocusedBuzz !== `${snapshot.round}:${localId}`) {
-    onlineQuizFocusedBuzz = `${snapshot.round}:${localId}`;
+  if (myTurn && onlineQuizFocusedBuzz !== `${activity?.questionId}:${localId}`) {
+    onlineQuizFocusedBuzz = `${activity?.questionId}:${localId}`;
     elements.onlineQuizAnswer.value = "";
     window.requestAnimationFrame(() => elements.onlineQuizAnswer.focus());
   }
   if (!myTurn && activity?.buzzedBy !== localId) onlineQuizFocusedBuzz = "";
 
-  if (snapshot.status === "results") {
-    const winner = getOnlinePlayer(snapshot, activity?.winnerId);
-    elements.onlineActivityStatus.textContent = winner
-      ? `${winner.nickname} 정답 · ${activity.answer}`
-      : `정답 공개 · ${activity?.answer || "-"}`;
+  if (finished) {
+    const winner = getOnlinePlayer(snapshot, activity?.championId || activity?.winnerId);
+    elements.onlineActivityStatus.textContent = snapshot.status === "choosing" && !snapshot.isHost
+      ? `${winner?.nickname || "친구"} 승리 · 방장이 다음 게임을 고르고 있어요.`
+      : winner
+        ? `${winner.nickname} ${targetScore}점 선점 · 최종 승리`
+        : `정답 공개 · ${activity?.answer || "-"}`;
+  } else if (awaitingQuestion) {
+    elements.onlineActivityStatus.textContent = activity?.message || "다음 문제를 준비하고 있어요.";
   } else if (lockedOut) {
     elements.onlineActivityStatus.textContent = `${localPlayer?.nickname || "내"} 답변은 오답 · 관전 중`;
   } else {
@@ -2091,7 +2187,8 @@ function renderOnlineRps(snapshot) {
   elements.onlineQuizPanel.hidden = true;
   elements.onlineRpsPanel.hidden = false;
   elements.onlineRpsStage.textContent = activity ? `ROUND ${activity.stage}` : "BRACKET READY";
-  elements.onlineRpsOpponent.textContent = snapshot.status === "results"
+  const finished = ["results", "choosing"].includes(snapshot.status);
+  elements.onlineRpsOpponent.textContent = finished
     ? `${getOnlinePlayer(snapshot, activity?.championId)?.nickname || "친구"} 최종 우승`
     : opponent
       ? `${opponent.nickname}님과 대결`
@@ -2101,8 +2198,10 @@ function renderOnlineRps(snapshot) {
   elements.onlineRpsFeedback.textContent = activity?.message ||
     (snapshot.status === "countdown" ? "카운트다운 뒤 대진이 공개돼요." : "대진 생성 중");
   const champion = getOnlinePlayer(snapshot, activity?.championId);
-  elements.onlineActivityStatus.textContent = snapshot.status === "results"
-    ? `${champion?.nickname || "친구"} 최종 우승 · 토너먼트 종료`
+  elements.onlineActivityStatus.textContent = finished
+    ? snapshot.status === "choosing" && !snapshot.isHost
+      ? `${champion?.nickname || "친구"} 우승 · 방장이 다음 게임을 고르고 있어요.`
+      : `${champion?.nickname || "친구"} 우승 · 다음 게임 선택 가능`
     : submitted
       ? "선택 완료 · 상대의 선택을 기다리는 중"
       : "선택은 두 참가자가 모두 결정한 뒤 공개돼요.";
@@ -2121,6 +2220,7 @@ function renderOnlineRps(snapshot) {
 function renderOnlineActivity(snapshot) {
   if (!snapshot || !ONLINE_ACTIVITY_GAMES.has(snapshot.game)) return;
   elements.onlineActivityTitle.textContent = OnlineRoom.GAME_RULES[snapshot.game].label;
+  elements.onlineResultActions.hidden = !snapshot.isHost || snapshot.status !== "results";
   if (snapshot.game === "rps") {
     renderOnlineRps(snapshot);
   } else {
@@ -2140,13 +2240,6 @@ function handleOnlineRoomState(snapshot) {
   }
   if (snapshot.status === "countdown") scheduleOnlineMatch(snapshot);
   if (ONLINE_ACTIVITY_GAMES.has(snapshot.game)) renderOnlineActivity(snapshot);
-  if (
-    snapshot.status === "lobby" &&
-    previousStatus === "results" &&
-    ONLINE_ACTIVITY_GAMES.has(snapshot.game)
-  ) {
-    hideOnlineActivityArena();
-  }
   if (snapshot.status === "results" && previousStatus !== "results") {
     triggerHaptic([45, 30, 80]);
     showToast("온라인 대결 결과가 완성됐어요.");
@@ -2337,6 +2430,7 @@ function scheduleOnlineMatch(snapshot) {
   onlineMatchKey = matchKey;
   onlineSubmittedKey = "";
   closeOnlineRoomDialog();
+  if (state.lastResult?.onlineRoomCode && elements.resultDialog.open) closeResult();
   if (elements.gameGuideDialog.open) closeGameGuide();
   setPlayMode("solo");
   if (ONLINE_ACTIVITY_GAMES.has(snapshot.game)) {
@@ -2483,6 +2577,7 @@ function applyEngagementResult(rawResult) {
     saveState();
     return {
       ...rawResult,
+      onlineRoomCode: context.roomCode,
       gameLabel: `온라인 대결 · ${OnlineRoom.GAME_RULES[rawResult.game].label}`,
       lead: "온라인 기록 제출 완료",
       stakeLabel: "방 코드",
@@ -8449,7 +8544,9 @@ function showResult(resultOrName, game) {
   elements.resultParty.hidden = !result.partyMessage;
   elements.resultParty.textContent = result.partyMessage;
   resetResultMission();
-  elements.drawMission.hidden = result.allowMission === false;
+  const onlineResult = Boolean(result.onlineRoomCode);
+  elements.drawMission.hidden = result.allowMission === false || onlineResult;
+  elements.playAgain.hidden = onlineResult;
   elements.playAgain.textContent = result.friendProgress
     ? "다음 참가자"
     : result.friendFinal
@@ -8460,8 +8557,13 @@ function showResult(resultOrName, game) {
           ? "같은 도전 다시"
           : "한 판 더";
   elements.tryAnotherGame.hidden = Boolean(
-    result.friendProgress || result.friendFinal,
+    result.friendProgress || result.friendFinal || onlineResult,
   );
+  elements.changeGame.hidden = false;
+  elements.changeGame.disabled = onlineResult;
+  elements.changeGame.textContent = onlineResult
+    ? "친구 결과 집계 중"
+    : "다른 게임 고르기";
   result.historyId = recordResult(result);
   playFeedbackTone("result");
 
@@ -8470,6 +8572,7 @@ function showResult(resultOrName, game) {
   } else {
     elements.resultDialog.setAttribute("open", "");
   }
+  if (onlineResult && onlineSnapshot) renderOnlineResultDialogState(onlineSnapshot);
   window.requestAnimationFrame(() => elements.closeResult.focus());
 }
 
@@ -8802,7 +8905,17 @@ elements.startOnlineMatch.addEventListener("click", () => {
     showToast("두 명 이상 모두 준비해야 시작할 수 있어요.");
   }
 });
-elements.rematchOnline.addEventListener("click", () => onlineSession?.rematch());
+function chooseNextOnlineGame() {
+  if (!onlineSession?.chooseNextGame()) {
+    showToast("방장만 다음 게임을 선택할 수 있어요.");
+    return;
+  }
+  if (elements.resultDialog.open) closeResult();
+  openOnlineRoomDialog();
+}
+
+elements.rematchOnline.addEventListener("click", chooseNextOnlineGame);
+elements.onlineChooseNextGame.addEventListener("click", chooseNextOnlineGame);
 elements.leaveOnlineRoom.addEventListener("click", leaveOnlineRoom);
 elements.onlineGameButtons.forEach((button) => {
   button.addEventListener("click", () =>
@@ -9093,6 +9206,14 @@ elements.shareResult.addEventListener("click", shareResult);
 elements.saveResultImage.addEventListener("click", saveResultImage);
 elements.copyResult.addEventListener("click", copyResult);
 elements.changeGame.addEventListener("click", () => {
+  if (state.lastResult?.onlineRoomCode && onlineSnapshot) {
+    if (onlineSnapshot.isHost && onlineSnapshot.status === "results") {
+      chooseNextOnlineGame();
+    } else {
+      showToast("방장이 다음 게임을 고를 때까지 기다려 주세요.");
+    }
+    return;
+  }
   closeResult();
   document
     .querySelector(".game-category-control")
@@ -9209,6 +9330,6 @@ PwaManager.setup({
   updateBanner: elements.appUpdateBanner,
   updateButton: elements.applyAppUpdate,
   dismissUpdateButton: elements.dismissAppUpdate,
-  serviceWorkerUrl: "./sw.js?v=39",
+  serviceWorkerUrl: "./sw.js?v=40",
   notify: showToast,
 });

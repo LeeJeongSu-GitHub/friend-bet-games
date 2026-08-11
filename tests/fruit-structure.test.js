@@ -60,7 +60,7 @@ assert.deepEqual(
   "Physics and game logic must load before app.js",
 );
 assert.ok(
-  scripts.slice(-11).every((script) => script.endsWith("?v=39")),
+  scripts.slice(-11).every((script) => script.endsWith("?v=40")),
   "All runtime scripts must share the current cache-busting build number",
 );
 for (const script of scripts) {

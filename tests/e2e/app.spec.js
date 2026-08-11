@@ -98,7 +98,7 @@ async function installFakeOnlinePeer(page) {
           window.setTimeout(() => {
             connection.emit("data", {
               type: "join",
-              version: 2,
+              version: 3,
               nickname: "준호",
             });
             window.setTimeout(() => {
@@ -231,21 +231,31 @@ test("plays a buzzer quiz and an automatic rock-paper-scissors bracket", async (
     "문제를 준비하고 있어요.",
   );
 
-  await page.locator("#onlineQuizBuzz").click();
-  await expect(page.locator("#onlineQuizAnswerForm")).toBeVisible();
-  const answer = await page.evaluate(() => {
-    const prompt = document.querySelector("#onlineQuizPrompt")?.textContent;
-    const questions = Object.values(window.OnlineActivityLogic.QUIZ_BANKS).flat();
-    return questions.find((question) => question.prompt === prompt)?.answers?.[0] || "";
-  });
-  expect(answer).not.toBe("");
-  await page.locator("#onlineQuizAnswer").fill(answer);
-  await page.locator("#onlineQuizAnswerForm button[type='submit']").click();
-  await expect(page.locator("#onlineRoomBarSummary")).toContainText("정답");
-
-  await page.locator("#openOnlineLobby").click();
-  await expect(dialog.locator("#rematchOnline")).toBeVisible();
-  await dialog.locator("#rematchOnline").click();
+  for (let score = 1; score <= 3; score += 1) {
+    const prompt = await page.locator("#onlineQuizPrompt").innerText();
+    await page.locator("#onlineQuizBuzz").click();
+    await expect(page.locator("#onlineQuizAnswerForm")).toBeVisible();
+    const answer = await page.evaluate(() => {
+      const currentPrompt = document.querySelector("#onlineQuizPrompt")?.textContent;
+      for (let offset = 0; offset < window.OnlineActivityLogic.QUIZ_BANKS.initialQuiz.length; offset += 1) {
+        const question = window.OnlineActivityLogic.getQuizQuestion("initialQuiz", 0, offset);
+        if (question.prompt === currentPrompt) return question.answers[0];
+      }
+      return "";
+    });
+    expect(answer).not.toBe("");
+    await page.locator("#onlineQuizAnswer").fill(answer);
+    await page.locator("#onlineQuizAnswerForm button[type='submit']").click();
+    if (score < 3) {
+      await expect(page.locator("#onlineQuizPrompt")).not.toHaveText(prompt, { timeout: 3000 });
+      await expect(page.locator("#onlineQuizBuzz")).toBeEnabled();
+    }
+  }
+  await expect(page.locator("#onlineRoomBarSummary")).toContainText("3점 선점 승리");
+  await expect(page.locator("#onlineChooseNextGame")).toBeVisible();
+  await page.locator("#onlineChooseNextGame").click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator("#rematchOnline")).toBeHidden();
   await expect(dialog.locator("#startOnlineMatch")).toBeEnabled();
   await dialog.locator('[data-online-game="rps"]').click();
   await dialog.locator("#startOnlineMatch").click();
@@ -261,7 +271,7 @@ test("plays a buzzer quiz and an automatic rock-paper-scissors bracket", async (
 
 test("serves the install manifest, PNG icons, and active service worker", async ({ page, request }) => {
   await page.goto("/");
-  const manifest = await (await request.get("/manifest.webmanifest?v=39")).json();
+  const manifest = await (await request.get("/manifest.webmanifest?v=40")).json();
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual([
     "192x192",
     "512x512",
@@ -282,7 +292,7 @@ test("serves the install manifest, PNG icons, and active service worker", async 
         return registration.active?.scriptURL || "";
       }),
     )
-    .toContain("sw.js?v=39");
+    .toContain("sw.js?v=40");
 });
 
 test("reloads the app from the service worker cache while offline", async ({ context, page }) => {

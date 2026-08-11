@@ -17,7 +17,7 @@
       { prompt: "ㅅㅂ", clue: "여름철 대표 과일", answers: ["수박"] },
       { prompt: "ㅇㅎㄱ", clue: "영화를 보는 장소", answers: ["영화관"] },
       { prompt: "ㅇㄱㅇㅂ", clue: "비나 눈이 내릴 가능성을 알려줘요", answers: ["일기예보"] },
-      { prompt: "ㅌㄲㅂ", clue: "한국 전래동화에 자주 등장해요", answers: ["도깨비"] },
+      { prompt: "ㄷㄲㅂ", clue: "한국 전래동화에 자주 등장해요", answers: ["도깨비"] },
       { prompt: "ㅂㅊㅂㄹㅂ", clue: "바닷가에서 하는 공놀이", answers: ["비치발리볼"] },
       { prompt: "ㅋㅍ", clue: "친구와 마시는 대표 음료", answers: ["커피"] },
       { prompt: "ㄱㅇㅇ", clue: "야옹 하고 우는 동물", answers: ["고양이"] },
@@ -45,20 +45,39 @@
   });
 
   const RPS_CHOICES = Object.freeze(["rock", "paper", "scissors"]);
+  const KOREAN_INITIALS = Object.freeze([
+    "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
+    "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
+  ]);
 
   function hashSeed(seed) {
     const value = Number(seed);
     return Number.isFinite(value) ? Math.abs(Math.floor(value)) >>> 0 : 0;
   }
 
-  function getQuizQuestion(game, seed) {
+  function getKoreanInitials(value) {
+    return Array.from(String(value || ""))
+      .map((character) => {
+        const code = character.charCodeAt(0) - 0xac00;
+        return code >= 0 && code <= 11171
+          ? KOREAN_INITIALS[Math.floor(code / 588)]
+          : character;
+      })
+      .join("")
+      .replace(/\s+/g, "");
+  }
+
+  function getQuizQuestion(game, seed, offset = 0) {
     const bank = QUIZ_BANKS[game];
     if (!bank?.length) return null;
     const mixed = Math.imul(hashSeed(seed) ^ (game === "initialQuiz" ? 0x45d9f3b : 0x119de1f3), 2654435761) >>> 0;
-    const question = bank[mixed % bank.length];
+    const index = (mixed + Math.max(0, Math.floor(Number(offset) || 0))) % bank.length;
+    const question = bank[index];
     return {
-      id: `${game}-${mixed % bank.length}`,
-      prompt: question.prompt,
+      id: `${game}-${index}`,
+      prompt: game === "initialQuiz"
+        ? getKoreanInitials(question.answers[0])
+        : question.prompt,
       clue: question.clue,
       answers: [...question.answers],
     };
@@ -122,6 +141,8 @@
   return {
     QUIZ_BANKS,
     RPS_CHOICES,
+    KOREAN_INITIALS,
+    getKoreanInitials,
     getQuizQuestion,
     normalizeAnswer,
     isCorrectAnswer,

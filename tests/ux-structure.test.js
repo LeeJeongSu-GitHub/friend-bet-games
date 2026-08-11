@@ -251,7 +251,7 @@ assert.match(
 );
 assert.match(
   html,
-  /vendor\/peerjs\/peerjs\.min\.js\?v=39/,
+  /vendor\/peerjs\/peerjs\.min\.js\?v=40/,
   "PeerJS must be served locally for online rooms",
 );
 assert.match(

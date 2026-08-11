@@ -11,11 +11,13 @@
 
   if (!ActivityLogic) throw new Error("Online activity logic is required");
 
-  const VERSION = 2;
+  const VERSION = 3;
   const ROOM_PREFIX = "ddak-room-";
   const ROOM_CODE_LENGTH = 6;
   const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const MAX_PLAYERS = 8;
+  const QUIZ_TARGET_SCORE = 3;
+  const QUIZ_REVEAL_DELAY = 1600;
   const GAME_RULES = Object.freeze({
     reaction: {
       label: "반응속도",
@@ -72,7 +74,7 @@
       unit: "정답",
       lowerIsBetter: false,
       minimum: 0,
-      maximum: 1,
+      maximum: QUIZ_TARGET_SCORE,
       activity: "quiz",
     },
     triviaQuiz: {
@@ -80,7 +82,7 @@
       unit: "정답",
       lowerIsBetter: false,
       minimum: 0,
-      maximum: 1,
+      maximum: QUIZ_TARGET_SCORE,
       activity: "quiz",
     },
     rps: {
@@ -170,7 +172,7 @@
     if (game === "stack") return `${Math.round(score)}층`;
     if (game === "tap") return `${Math.round(score)}회`;
     if (["initialQuiz", "triviaQuiz"].includes(game)) {
-      return score >= 1 ? "정답" : "도전 종료";
+      return `${score}/${QUIZ_TARGET_SCORE} 정답`;
     }
     if (game === "rps") {
       return score >= 1000 ? "우승" : `${Math.round(score)}승`;
@@ -199,7 +201,7 @@
 
   function canStartRoom(room) {
     return Boolean(
-      room?.status === "lobby" &&
+      ["lobby", "choosing"].includes(room?.status) &&
         room.players?.length >= 2 &&
         room.players.every((player) => player.ready),
     );
@@ -226,6 +228,7 @@
       this.connectionTimer = null;
       this.activityTimers = new Set();
       this.quizAnswer = null;
+      this.quizQuestionNumber = 0;
       this.rpsChoices = new Map();
       this.rpsWins = new Map();
       this.closed = false;
@@ -492,10 +495,10 @@
         activity?.kind === "quiz" &&
         activity.lockedOut.length >= nextPlayers.length
       ) {
-        this.finishQuiz("");
+        this.finishQuizQuestion("");
         return;
       }
-      this.finishRoundIfReady();
+      if (!activity) this.finishRoundIfReady();
       this.broadcastState();
     }
 
@@ -521,15 +524,23 @@
     }
 
     setGame(game) {
-      if (!this.isHost || this.room?.status !== "lobby") return false;
-      this.room.game = normalizeGame(game);
+      if (!this.isHost || !["lobby", "choosing"].includes(this.room?.status)) return false;
+      if (this.room.status === "choosing") {
+        this.room.pendingGame = normalizeGame(game);
+      } else {
+        this.room.game = normalizeGame(game);
+      }
       this.broadcastState();
       return true;
     }
 
     setDifficulty(difficulty) {
-      if (!this.isHost || this.room?.status !== "lobby") return false;
-      this.room.difficulty = normalizeDifficulty(difficulty);
+      if (!this.isHost || !["lobby", "choosing"].includes(this.room?.status)) return false;
+      if (this.room.status === "choosing") {
+        this.room.pendingDifficulty = normalizeDifficulty(difficulty);
+      } else {
+        this.room.difficulty = normalizeDifficulty(difficulty);
+      }
       this.broadcastState();
       return true;
     }
@@ -546,6 +557,7 @@
       this.activityTimers.forEach((timer) => clearTimeout(timer));
       this.activityTimers.clear();
       this.quizAnswer = null;
+      this.quizQuestionNumber = 0;
       this.rpsChoices.clear();
       this.rpsWins.clear();
       if (this.room) this.room.activity = null;
@@ -554,22 +566,8 @@
     prepareActivity() {
       if (!this.room) return;
       if (["initialQuiz", "triviaQuiz"].includes(this.room.game)) {
-        const question = ActivityLogic.getQuizQuestion(
-          this.room.game,
-          this.room.seed,
-        );
-        this.quizAnswer = question;
-        this.room.activity = {
-          kind: "quiz",
-          questionId: question.id,
-          prompt: question.prompt,
-          clue: question.clue,
-          buzzedBy: "",
-          lockedOut: [],
-          winnerId: "",
-          answer: "",
-          message: "정답을 알겠다면 먼저 버저를 누르세요.",
-        };
+        this.quizQuestionNumber = 0;
+        this.prepareQuizQuestion();
         return;
       }
       if (this.room.game === "rps") {
@@ -612,25 +610,76 @@
       return false;
     }
 
-    finishQuiz(winnerId = "") {
+    prepareQuizQuestion() {
+      if (!this.room || !["initialQuiz", "triviaQuiz"].includes(this.room.game)) return;
+      this.quizQuestionNumber += 1;
+      const question = ActivityLogic.getQuizQuestion(
+        this.room.game,
+        this.room.seed,
+        this.quizQuestionNumber - 1,
+      );
+      this.quizAnswer = question;
+      this.room.activity = {
+        kind: "quiz",
+        phase: "question",
+        questionNumber: this.quizQuestionNumber,
+        targetScore: QUIZ_TARGET_SCORE,
+        questionId: question.id,
+        prompt: question.prompt,
+        clue: question.clue,
+        buzzedBy: "",
+        lockedOut: [],
+        roundWinnerId: "",
+        winnerId: "",
+        championId: "",
+        answer: "",
+        message: `${this.quizQuestionNumber}번째 문제 · 먼저 ${QUIZ_TARGET_SCORE}점을 모으세요.`,
+      };
+    }
+
+    finishQuizQuestion(winnerId = "") {
       if (!this.room || this.room.activity?.kind !== "quiz") return;
+      const activity = this.room.activity;
       const answer = this.quizAnswer?.answers?.[0] || "";
-      this.room.activity.winnerId = winnerId;
-      this.room.activity.answer = answer;
-      this.room.activity.buzzedBy = "";
-      this.room.activity.message = winnerId
-        ? `${this.room.players.find((player) => player.id === winnerId)?.nickname || "친구"} 정답!`
-        : `정답은 ${answer}였어요.`;
-      this.room.players.forEach((player) => {
-        player.score = player.id === winnerId ? 1 : 0;
-        player.detail = player.id === winnerId ? "정답" : "다음 문제에 도전";
-      });
-      this.room.status = "results";
+      const winner = this.room.players.find((player) => player.id === winnerId);
+      activity.phase = "reveal";
+      activity.roundWinnerId = winnerId;
+      activity.answer = answer;
+      activity.buzzedBy = "";
+      if (winner) {
+        winner.score = Math.min(QUIZ_TARGET_SCORE, (Number(winner.score) || 0) + 1);
+        winner.detail = `${winner.score}문제 정답`;
+      }
+      if (winner?.score >= QUIZ_TARGET_SCORE) {
+        activity.winnerId = winnerId;
+        activity.championId = winnerId;
+        activity.message = `${winner.nickname}님이 ${QUIZ_TARGET_SCORE}문제를 먼저 맞혔어요. 다음 게임도 이어서 골라보세요!`;
+        this.room.players.forEach((player) => {
+          if (player.id !== winnerId) player.detail = `${player.score || 0}문제 정답`;
+        });
+        this.room.status = "results";
+        this.broadcastState();
+        return;
+      }
+      activity.message = winner
+        ? `${winner.nickname} 정답! ${winner.score}/${QUIZ_TARGET_SCORE} · 다음 문제를 준비해요.`
+        : `정답은 ${answer}였어요. 다음 문제를 준비해요.`;
       this.broadcastState();
+      const questionNumber = activity.questionNumber;
+      this.scheduleActivity(() => {
+        if (
+          this.room?.status !== "playing" ||
+          this.room.activity?.kind !== "quiz" ||
+          this.room.activity.questionNumber !== questionNumber
+        ) return;
+        this.prepareQuizQuestion();
+        this.broadcastState();
+      }, QUIZ_REVEAL_DELAY);
     }
 
     handleQuizAction(peerId, action, payload) {
       const activity = this.room.activity;
+      if (activity.phase !== "question") return false;
       if (action === "quiz-buzz") {
         if (activity.buzzedBy || activity.lockedOut.includes(peerId)) return false;
         activity.buzzedBy = peerId;
@@ -643,7 +692,7 @@
       const answer = String(payload?.answer || "").slice(0, 40);
       if (!answer.trim()) return false;
       if (ActivityLogic.isCorrectAnswer(this.quizAnswer, answer)) {
-        this.finishQuiz(peerId);
+        this.finishQuizQuestion(peerId);
         return true;
       }
       activity.lockedOut.push(peerId);
@@ -651,7 +700,7 @@
       const player = this.room.players.find((entry) => entry.id === peerId);
       activity.message = `${player?.nickname || "친구"} 오답! 다른 참가자에게 기회가 넘어갔어요.`;
       if (activity.lockedOut.length >= this.room.players.length) {
-        this.finishQuiz("");
+        this.finishQuizQuestion("");
       } else {
         this.broadcastState();
       }
@@ -779,12 +828,18 @@
 
     startRound(delay = 3200) {
       if (!this.isHost || !canStartRoom(this.room)) return false;
+      if (this.room.status === "choosing") {
+        this.room.game = normalizeGame(this.room.pendingGame);
+        this.room.difficulty = normalizeDifficulty(this.room.pendingDifficulty);
+        delete this.room.pendingGame;
+        delete this.room.pendingDifficulty;
+      }
       this.clearActivity();
       this.room.status = "countdown";
       this.room.startsAt = this.now() + Math.max(1500, Math.min(Number(delay) || 3200, 8000));
       this.room.seed = Math.floor(this.random() * 0x100000000) >>> 0;
       this.room.players.forEach((player) => {
-        player.score = null;
+        player.score = ["initialQuiz", "triviaQuiz"].includes(this.room.game) ? 0 : null;
         player.detail = "";
       });
       this.broadcastState();
@@ -825,25 +880,30 @@
 
     finishRoundIfReady() {
       if (!this.room || !this.room.players.length) return;
+      if (!["countdown", "playing"].includes(this.room.status)) return;
+      if (GAME_RULES[this.room.game]?.activity) return;
       if (this.room.players.every((player) => normalizeScore(this.room.game, player.score) !== null)) {
         this.room.status = "results";
       }
     }
 
-    rematch() {
+    chooseNextGame() {
       if (!this.isHost || this.room?.status !== "results") return false;
-      this.clearActivity();
-      this.room.status = "lobby";
+      this.room.status = "choosing";
       this.room.round += 1;
       this.room.startsAt = null;
       this.room.seed = null;
+      this.room.pendingGame = this.room.game;
+      this.room.pendingDifficulty = this.room.difficulty;
       this.room.players.forEach((player) => {
-        player.ready = player.isHost;
-        player.score = null;
-        player.detail = "";
+        player.ready = true;
       });
       this.broadcastState();
       return true;
+    }
+
+    rematch() {
+      return this.chooseNextGame();
     }
 
     leave(notify = true) {
@@ -855,6 +915,7 @@
       this.startTimer = null;
       this.connectionTimer = null;
       this.quizAnswer = null;
+      this.quizQuestionNumber = 0;
       this.rpsChoices.clear();
       this.rpsWins.clear();
       if (notify && this.isHost) {
@@ -881,6 +942,7 @@
     ROOM_CODE_LENGTH,
     ROOM_ALPHABET,
     MAX_PLAYERS,
+    QUIZ_TARGET_SCORE,
     GAME_RULES,
     DIFFICULTIES,
     sanitizeNickname,

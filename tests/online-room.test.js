@@ -108,7 +108,7 @@ function waitFor(predicate, timeout = 1000) {
 }
 
 async function run() {
-  assert.equal(OnlineRoom.VERSION, 2);
+  assert.equal(OnlineRoom.VERSION, 3);
   assert.equal(OnlineRoom.normalizeRoomCode(" ab-01c234 "), "ABC234");
   assert.equal(OnlineRoom.isValidRoomCode("ABC234"), true);
   assert.equal(OnlineRoom.isValidRoomCode("ABC23"), false);
@@ -125,8 +125,8 @@ async function run() {
   assert.equal(OnlineRoom.formatScore("runner", 4230), "4,230점");
   assert.equal(OnlineRoom.formatScore("stack", 17), "17층");
   assert.equal(OnlineRoom.formatScore("fruit", 12800), "12,800점");
-  assert.equal(OnlineRoom.formatScore("initialQuiz", 1), "정답");
-  assert.equal(OnlineRoom.formatScore("triviaQuiz", 0), "도전 종료");
+  assert.equal(OnlineRoom.formatScore("initialQuiz", 1), "1/3 정답");
+  assert.equal(OnlineRoom.formatScore("triviaQuiz", 0), "0/3 정답");
   assert.equal(OnlineRoom.formatScore("rps", 1002), "우승");
   assert.equal(OnlineRoom.normalizeDifficulty("hard"), "hard");
   assert.equal(OnlineRoom.normalizeDifficulty("impossible"), "normal");
@@ -185,14 +185,21 @@ async function run() {
   assert.equal(finalRanking[0].nickname, "준호");
   assert.equal(finalRanking[0].score, 68);
 
-  assert.equal(host.rematch(), true);
-  await waitFor(() => guestState?.status === "lobby" && guestState.round === 2);
-  assert.equal(guestState.players.find((player) => player.nickname === "준호").ready, false);
-
+  assert.equal(host.chooseNextGame(), true);
+  await waitFor(() => guestState?.status === "choosing" && guestState.round === 2);
+  assert.equal(guestState.game, "runner");
+  assert.equal(guestState.pendingGame, "runner");
+  assert.equal(guestState.players.find((player) => player.nickname === "준호").score, 68);
+  assert.equal(guestState.players.every((player) => player.ready), true);
+  assert.equal(guest.setGame?.("initialQuiz") || false, false);
   assert.equal(host.setGame("initialQuiz"), true);
-  guest.setReady(true);
+  await waitFor(
+    () => guestState?.pendingGame === "initialQuiz" && guestState?.game === "runner",
+  );
   await waitFor(() => OnlineRoom.canStartRoom(hostState));
   assert.equal(host.startRound(1500), true);
+  await waitFor(() => guestState?.status === "countdown");
+  assert.equal(guestState.game, "initialQuiz");
   await waitFor(
     () => hostState?.status === "playing" && guestState?.status === "playing",
     2500,
@@ -211,17 +218,48 @@ async function run() {
     guest.submitAction("quiz-answer", { answer: quizQuestion.answers[0] }),
     true,
   );
-  await waitFor(() => hostState?.status === "results" && guestState?.status === "results");
-  assert.equal(hostState.activity.winnerId, guestState.localPeerId);
+  await waitFor(
+    () => hostState?.status === "playing" && hostState?.activity?.questionNumber === 2,
+    2500,
+  );
   assert.equal(
     hostState.players.find((player) => player.id === guestState.localPeerId).score,
     1,
   );
+  for (let questionNumber = 2; questionNumber <= OnlineRoom.QUIZ_TARGET_SCORE; questionNumber += 1) {
+    const currentQuestion = OnlineActivityLogic.getQuizQuestion(
+      "initialQuiz",
+      hostState.seed,
+      questionNumber - 1,
+    );
+    assert.equal(guest.submitAction("quiz-buzz"), true);
+    await waitFor(() => hostState?.activity?.buzzedBy === guestState.localPeerId);
+    assert.equal(
+      guest.submitAction("quiz-answer", { answer: currentQuestion.answers[0] }),
+      true,
+    );
+    if (questionNumber < OnlineRoom.QUIZ_TARGET_SCORE) {
+      await waitFor(
+        () => hostState?.activity?.questionNumber === questionNumber + 1,
+        2500,
+      );
+    }
+  }
+  await waitFor(() => hostState?.status === "results" && guestState?.status === "results");
+  assert.equal(hostState.activity.championId, guestState.localPeerId);
+  assert.equal(
+    hostState.players.find((player) => player.id === guestState.localPeerId).score,
+    OnlineRoom.QUIZ_TARGET_SCORE,
+  );
 
-  assert.equal(host.rematch(), true);
-  await waitFor(() => guestState?.status === "lobby" && guestState.round === 3);
+  assert.equal(host.chooseNextGame(), true);
+  await waitFor(() => guestState?.status === "choosing" && guestState.round === 3);
+  assert.equal(guestState.game, "initialQuiz");
+  assert.equal(guestState.activity.championId, guestState.localPeerId);
   assert.equal(host.setGame("rps"), true);
-  guest.setReady(true);
+  await waitFor(
+    () => guestState?.pendingGame === "rps" && guestState?.game === "initialQuiz",
+  );
   await waitFor(() => OnlineRoom.canStartRoom(hostState));
   assert.equal(host.startRound(1500), true);
   await waitFor(
