@@ -155,8 +155,8 @@ assert.doesNotMatch(
 );
 assert.equal(
   (html.match(/data-online-game="[^"]+"/g) || []).length,
-  10,
-  "All ten online match games must be selectable",
+  12,
+  "All twelve online match games must be selectable",
 );
 assert.equal(
   (html.match(/data-rps-choice="(rock|paper|scissors)"/g) || []).length,
@@ -251,7 +251,7 @@ assert.match(
 );
 assert.match(
   html,
-  /vendor\/peerjs\/peerjs\.min\.js\?v=40/,
+  /vendor\/peerjs\/peerjs\.min\.js\?v=41/,
   "PeerJS must be served locally for online rooms",
 );
 assert.match(

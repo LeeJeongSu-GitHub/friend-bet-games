@@ -45,6 +45,36 @@
   });
 
   const RPS_CHOICES = Object.freeze(["rock", "paper", "scissors"]);
+  const TELEPATHY_ROUNDS = Object.freeze([
+    { prompt: "야식으로 하나만 고른다면?", choices: ["치킨", "피자", "떡볶이", "라면"] },
+    { prompt: "갑자기 하루가 비었다면?", choices: ["집에서 휴식", "맛집 탐방", "근교 여행", "게임 몰입"] },
+    { prompt: "카페에서 가장 먼저 보는 것은?", choices: ["커피", "디저트", "분위기", "가격"] },
+    { prompt: "여름 휴가 장소를 고른다면?", choices: ["바다", "계곡", "도시", "집"] },
+    { prompt: "친구에게 받고 싶은 선물은?", choices: ["간식", "현금", "편지", "깜짝 이벤트"] },
+    { prompt: "영화관에서 꼭 필요한 것은?", choices: ["팝콘", "콜라", "좋은 자리", "조용한 관객"] },
+    { prompt: "스트레스를 풀 때 하는 것은?", choices: ["잠자기", "먹기", "운동", "수다"] },
+    { prompt: "하나만 평생 무료라면?", choices: ["커피", "배달", "여행", "영화"] },
+    { prompt: "친구 모임에서 맡는 역할은?", choices: ["계획", "예약", "분위기", "따라가기"] },
+    { prompt: "비 오는 날 생각나는 것은?", choices: ["파전", "라면", "영화", "낮잠"] },
+  ]);
+  const DRAWING_WORDS = Object.freeze([
+    { answer: "고양이", clue: "동물" },
+    { answer: "우산", clue: "비 오는 날" },
+    { answer: "피자", clue: "음식" },
+    { answer: "비행기", clue: "교통수단" },
+    { answer: "선인장", clue: "식물" },
+    { answer: "눈사람", clue: "겨울" },
+    { answer: "자전거", clue: "두 바퀴" },
+    { answer: "햄버거", clue: "음식" },
+    { answer: "문어", clue: "바다 동물" },
+    { answer: "로봇", clue: "기계" },
+    { answer: "딸기", clue: "과일" },
+    { answer: "기타", clue: "악기" },
+    { answer: "소방차", clue: "자동차" },
+    { answer: "해바라기", clue: "꽃" },
+    { answer: "안경", clue: "생활용품" },
+    { answer: "케이크", clue: "디저트" },
+  ]);
   const KOREAN_INITIALS = Object.freeze([
     "ㄱ", "ㄲ", "ㄴ", "ㄷ", "ㄸ", "ㄹ", "ㅁ", "ㅂ", "ㅃ", "ㅅ",
     "ㅆ", "ㅇ", "ㅈ", "ㅉ", "ㅊ", "ㅋ", "ㅌ", "ㅍ", "ㅎ",
@@ -138,9 +168,65 @@
     };
   }
 
+  function getSeededItem(items, seed, offset = 0, salt = 0) {
+    if (!items?.length) return null;
+    const mixed = Math.imul(hashSeed(seed) ^ salt, 2654435761) >>> 0;
+    const index = (mixed + Math.max(0, Math.floor(Number(offset) || 0))) % items.length;
+    return { index, item: items[index] };
+  }
+
+  function getTelepathyRound(seed, offset = 0) {
+    const selected = getSeededItem(TELEPATHY_ROUNDS, seed, offset, 0x27d4eb2d);
+    return selected
+      ? {
+          id: `telepathy-${selected.index}`,
+          prompt: selected.item.prompt,
+          choices: [...selected.item.choices],
+        }
+      : null;
+  }
+
+  function resolveTelepathyChoices(entries) {
+    const normalized = (entries || [])
+      .map((entry) => ({
+        peerId: String(entry?.peerId || ""),
+        choice: Math.floor(Number(entry?.choice)),
+      }))
+      .filter((entry) => entry.peerId && Number.isInteger(entry.choice) && entry.choice >= 0 && entry.choice < 4);
+    const counts = [0, 0, 0, 0];
+    normalized.forEach((entry) => {
+      counts[entry.choice] += 1;
+    });
+    const matchSize = Math.max(...counts);
+    const matchingChoices = matchSize >= 2
+      ? counts.flatMap((count, choice) => count === matchSize ? [choice] : [])
+      : [];
+    return {
+      counts,
+      matchSize,
+      matchingChoices,
+      scorerIds: normalized
+        .filter((entry) => matchingChoices.includes(entry.choice))
+        .map((entry) => entry.peerId),
+    };
+  }
+
+  function getDrawingWord(seed, offset = 0) {
+    const selected = getSeededItem(DRAWING_WORDS, seed, offset, 0x165667b1);
+    return selected
+      ? {
+          id: `drawing-${selected.index}`,
+          answer: selected.item.answer,
+          clue: selected.item.clue,
+        }
+      : null;
+  }
+
   return {
     QUIZ_BANKS,
     RPS_CHOICES,
+    TELEPATHY_ROUNDS,
+    DRAWING_WORDS,
     KOREAN_INITIALS,
     getKoreanInitials,
     getQuizQuestion,
@@ -149,5 +235,8 @@
     normalizeRpsChoice,
     resolveRps,
     buildRpsStage,
+    getTelepathyRound,
+    resolveTelepathyChoices,
+    getDrawingWord,
   };
 });

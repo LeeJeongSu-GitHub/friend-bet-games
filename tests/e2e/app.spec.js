@@ -39,11 +39,14 @@ async function installFakeOnlinePeer(page) {
         this.open = true;
         this.readyRounds = new Set();
         this.rpsMatches = new Set();
+        this.telepathyRounds = new Set();
+        this.drawingRounds = new Set();
       }
 
       send(message) {
         const room = message?.room;
         if (message?.type !== "state" || !room) return;
+        window.__FAKE_LAST_ROOM__ = room;
         const guest = room.players.find((player) => player.id === this.peer);
         if (
           room.status === "lobby" &&
@@ -56,6 +59,49 @@ async function installFakeOnlinePeer(page) {
             () => this.emit("data", { type: "ready", ready: true }),
             20,
           );
+        }
+        const telepathyKey = `${room.round}:${room.activity?.round || 0}`;
+        if (
+          room.status === "playing" &&
+          room.activity?.kind === "telepathy" &&
+          room.activity.phase === "choosing" &&
+          !room.activity.submittedIds.includes(this.peer) &&
+          !this.telepathyRounds.has(telepathyKey)
+        ) {
+          this.telepathyRounds.add(telepathyKey);
+          window.setTimeout(() => this.emit("data", {
+            type: "action",
+            action: "telepathy-choice",
+            payload: { choice: 0 },
+          }), 30);
+        }
+        const drawingKey = `${room.round}:${room.activity?.round || 0}`;
+        if (
+          room.status === "playing" &&
+          room.activity?.kind === "drawing" &&
+          room.activity.phase === "drawing" &&
+          !this.drawingRounds.has(drawingKey)
+        ) {
+          this.drawingRounds.add(drawingKey);
+          if (room.activity.drawerId === this.peer) {
+            window.setTimeout(() => this.emit("data", {
+              type: "action",
+              action: "drawing-stroke",
+              payload: {
+                color: "#e85d4a",
+                width: 6,
+                points: [{ x: 0.15, y: 0.2 }, { x: 0.75, y: 0.7 }],
+              },
+            }), 80);
+          } else {
+            (window.OnlineActivityLogic?.DRAWING_WORDS || []).forEach((entry, index) => {
+              window.setTimeout(() => this.emit("data", {
+                type: "action",
+                action: "drawing-guess",
+                payload: { guess: entry.answer },
+              }), 800 + index * 10);
+            });
+          }
         }
         const match = room.activity?.matches?.find(
           (entry) =>
@@ -98,7 +144,7 @@ async function installFakeOnlinePeer(page) {
           window.setTimeout(() => {
             connection.emit("data", {
               type: "join",
-              version: 3,
+              version: 4,
               nickname: "준호",
             });
             window.setTimeout(() => {
@@ -188,7 +234,7 @@ test("creates an online room and starts a synchronized match", async ({ page }) 
   await expect(dialog.getByText("준호")).toBeVisible();
   const roomCode = await dialog.locator("#onlineLobbyCode").innerText();
   expect(roomCode).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
-  await expect(dialog.locator("[data-online-game]")).toHaveCount(10);
+  await expect(dialog.locator("[data-online-game]")).toHaveCount(12);
   await dialog.locator('[data-online-game="fruit"]').click();
   await expect(dialog.locator('[data-online-game="fruit"]')).toHaveAttribute(
     "aria-pressed",
@@ -247,6 +293,8 @@ test("plays a buzzer quiz and an automatic rock-paper-scissors bracket", async (
     await page.locator("#onlineQuizAnswer").fill(answer);
     await page.locator("#onlineQuizAnswerForm button[type='submit']").click();
     if (score < 3) {
+      await expect(page.locator("#onlineQuizReveal")).toBeVisible();
+      await expect(page.locator("#onlineQuizRevealAnswer")).toHaveText(answer);
       await expect(page.locator("#onlineQuizPrompt")).not.toHaveText(prompt, { timeout: 3000 });
       await expect(page.locator("#onlineQuizBuzz")).toBeEnabled();
     }
@@ -269,9 +317,63 @@ test("plays a buzzer quiz and an automatic rock-paper-scissors bracket", async (
   );
 });
 
+test("plays telepathy rounds and a private-word drawing match", async ({ page }) => {
+  await installFakeOnlinePeer(page);
+  await page.goto("/");
+  await page.locator("#openOnlineRoom").click();
+  const dialog = page.locator("#onlineRoomDialog");
+  await dialog.locator("#onlineNickname").fill("민지");
+  await dialog.locator("#createOnlineRoom").click();
+  await expect(dialog.locator("#onlinePlayerList li")).toHaveCount(2);
+
+  await dialog.locator('[data-online-game="telepathy"]').click();
+  await dialog.locator("#startOnlineMatch").click();
+  await expect(page.locator("#onlineCountdownOverlay")).toBeHidden({ timeout: 6000 });
+  await expect(page.locator("#onlineTelepathyPanel")).toBeVisible();
+  for (let round = 1; round <= 5; round += 1) {
+    await expect(page.locator("#onlineTelepathyRound")).toContainText(`ROUND ${round}`);
+    await page.locator("#onlineTelepathyChoices button").first().click();
+    if (round < 5) {
+      await expect(page.locator("#onlineTelepathyRound")).toContainText(
+        `ROUND ${round + 1}`,
+        { timeout: 4000 },
+      );
+    }
+  }
+  await expect(page.locator("#onlineRoomBarSummary")).toContainText("1위", { timeout: 4000 });
+  await page.locator("#onlineChooseNextGame").click();
+  await expect(dialog).toBeVisible();
+
+  await dialog.locator('[data-online-game="drawing"]').click();
+  await dialog.locator("#startOnlineMatch").click();
+  await expect(page.locator("#onlineCountdownOverlay")).toBeHidden({ timeout: 6000 });
+  await expect(page.locator("#onlineDrawingPanel")).toBeVisible();
+  await expect(page.locator("#onlineDrawingRole")).toContainText("제시어");
+  const canvas = page.locator("#onlineDrawingCanvas");
+  const box = await canvas.boundingBox();
+  await page.mouse.move(box.x + 40, box.y + 50);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 50, box.y + box.height - 60, { steps: 8 });
+  await page.mouse.up();
+  await expect(page.locator("#onlineDrawingReveal")).toBeVisible({ timeout: 3000 });
+
+  await expect(page.locator("#onlineDrawingRound")).toContainText("ROUND 2", { timeout: 4000 });
+  await expect(page.locator("#onlineDrawingGuessForm")).toBeVisible();
+  const guestWord = await page.evaluate(() => window.__FAKE_LAST_ROOM__?.activity?.secretWord || "");
+  expect(guestWord).not.toBe("");
+  await page.locator("#onlineDrawingGuess").fill(guestWord);
+  await page.locator("#onlineDrawingGuessForm button[type='submit']").click();
+  await expect(page.locator("#onlineDrawingRevealAnswer")).toHaveText(guestWord);
+
+  await expect(page.locator("#onlineDrawingRound")).toContainText("ROUND 3", { timeout: 4000 });
+  await expect(page.locator("#onlineDrawingRole")).toContainText("제시어");
+  await expect(page.locator("#onlineChooseNextGame")).toBeVisible({ timeout: 5000 });
+  await expect(page.locator("#onlineRoomBarSummary")).toContainText("1위");
+});
+
 test("serves the install manifest, PNG icons, and active service worker", async ({ page, request }) => {
   await page.goto("/");
-  const manifest = await (await request.get("/manifest.webmanifest?v=40")).json();
+  const manifest = await (await request.get("/manifest.webmanifest?v=41")).json();
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual([
     "192x192",
     "512x512",
@@ -292,7 +394,7 @@ test("serves the install manifest, PNG icons, and active service worker", async 
         return registration.active?.scriptURL || "";
       }),
     )
-    .toContain("sw.js?v=40");
+    .toContain("sw.js?v=41");
 });
 
 test("reloads the app from the service worker cache while offline", async ({ context, page }) => {

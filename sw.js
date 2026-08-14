@@ -1,25 +1,25 @@
-const CACHE_NAME = "friend-bet-games-v40";
+const CACHE_NAME = "friend-bet-games-v41";
 const CACHE_PREFIX = "friend-bet-games-";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./styles.css?v=40",
-  "./vendor/matter-js/matter.min.js?v=40",
-  "./vendor/peerjs/peerjs.min.js?v=40",
-  "./fruit-logic.js?v=40",
-  "./stack-logic.js?v=40",
-  "./engagement-logic.js?v=40",
-  "./challenge-logic.js?v=40",
-  "./online-activity-logic.js?v=40",
-  "./online-room.js?v=40",
-  "./result-share.js?v=40",
-  "./pwa-manager.js?v=40",
-  "./app.js?v=40",
-  "./manifest.webmanifest?v=40",
-  "./favicon.svg?v=40",
-  "./icons/icon-192.png?v=40",
-  "./icons/icon-512.png?v=40",
-  "./icons/icon-maskable-512.png?v=40",
+  "./styles.css?v=41",
+  "./vendor/matter-js/matter.min.js?v=41",
+  "./vendor/peerjs/peerjs.min.js?v=41",
+  "./fruit-logic.js?v=41",
+  "./stack-logic.js?v=41",
+  "./engagement-logic.js?v=41",
+  "./challenge-logic.js?v=41",
+  "./online-activity-logic.js?v=41",
+  "./online-room.js?v=41",
+  "./result-share.js?v=41",
+  "./pwa-manager.js?v=41",
+  "./app.js?v=41",
+  "./manifest.webmanifest?v=41",
+  "./favicon.svg?v=41",
+  "./icons/icon-192.png?v=41",
+  "./icons/icon-512.png?v=41",
+  "./icons/icon-maskable-512.png?v=41",
 ];
 
 self.addEventListener("install", (event) => {

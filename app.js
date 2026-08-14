@@ -83,6 +83,8 @@ const GAME_LABELS = {
   initialQuiz: "초성 퀴즈",
   triviaQuiz: "상식 퀴즈",
   rps: "가위바위보 토너먼트",
+  telepathy: "텔레파시 일치",
+  drawing: "그림 맞히기",
 };
 const ONLINE_GAME_DESCRIPTIONS = {
   reaction: "신호가 바뀐 뒤 가장 빠르게 누른 기록이 승리해요.",
@@ -95,8 +97,16 @@ const ONLINE_GAME_DESCRIPTIONS = {
   initialQuiz: "버저를 선점해 초성 퀴즈 3문제를 먼저 맞히면 승리해요.",
   triviaQuiz: "버저를 선점해 상식 퀴즈 3문제를 먼저 맞히면 승리해요.",
   rps: "상대에게 보이지 않게 동시에 선택하고 토너먼트 우승자를 가려요.",
+  telepathy: "5라운드 동안 친구와 같은 답을 골라 가장 높은 점수를 얻으세요.",
+  drawing: "돌아가며 그림을 그리고 가장 먼저 정답을 맞혀 점수를 모으세요.",
 };
-const ONLINE_ACTIVITY_GAMES = new Set(["initialQuiz", "triviaQuiz", "rps"]);
+const ONLINE_ACTIVITY_GAMES = new Set([
+  "initialQuiz",
+  "triviaQuiz",
+  "rps",
+  "telepathy",
+  "drawing",
+]);
 const DIFFICULTY_PROFILES = {
   easy: {
     label: "쉬움",
@@ -330,6 +340,8 @@ const elements = {
   onlineQuizType: document.querySelector("#onlineQuizType"),
   onlineQuizPrompt: document.querySelector("#onlineQuizPrompt"),
   onlineQuizClue: document.querySelector("#onlineQuizClue"),
+  onlineQuizReveal: document.querySelector("#onlineQuizReveal"),
+  onlineQuizRevealAnswer: document.querySelector("#onlineQuizRevealAnswer"),
   onlineQuizProgress: document.querySelector("#onlineQuizProgress"),
   onlineQuizScores: document.querySelector("#onlineQuizScores"),
   onlineQuizBuzz: document.querySelector("#onlineQuizBuzz"),
@@ -343,6 +355,27 @@ const elements = {
   onlineRpsChoiceButtons: [...document.querySelectorAll("[data-rps-choice]")],
   onlineRpsBracket: document.querySelector("#onlineRpsBracket"),
   onlineRpsFeedback: document.querySelector("#onlineRpsFeedback"),
+  onlineTelepathyPanel: document.querySelector("#onlineTelepathyPanel"),
+  onlineTelepathyRound: document.querySelector("#onlineTelepathyRound"),
+  onlineTelepathyPrompt: document.querySelector("#onlineTelepathyPrompt"),
+  onlineTelepathyChoices: document.querySelector("#onlineTelepathyChoices"),
+  onlineTelepathyScores: document.querySelector("#onlineTelepathyScores"),
+  onlineTelepathyFeedback: document.querySelector("#onlineTelepathyFeedback"),
+  onlineDrawingPanel: document.querySelector("#onlineDrawingPanel"),
+  onlineDrawingRound: document.querySelector("#onlineDrawingRound"),
+  onlineDrawingRole: document.querySelector("#onlineDrawingRole"),
+  onlineDrawingHint: document.querySelector("#onlineDrawingHint"),
+  onlineDrawingCanvas: document.querySelector("#onlineDrawingCanvas"),
+  onlineDrawingReveal: document.querySelector("#onlineDrawingReveal"),
+  onlineDrawingRevealAnswer: document.querySelector("#onlineDrawingRevealAnswer"),
+  onlineDrawingTools: document.querySelector("#onlineDrawingTools"),
+  onlineDrawingColorButtons: [...document.querySelectorAll("[data-drawing-color]")],
+  onlineDrawingWidthButtons: [...document.querySelectorAll("[data-drawing-width]")],
+  onlineDrawingClear: document.querySelector("#onlineDrawingClear"),
+  onlineDrawingGuessForm: document.querySelector("#onlineDrawingGuessForm"),
+  onlineDrawingGuess: document.querySelector("#onlineDrawingGuess"),
+  onlineDrawingScores: document.querySelector("#onlineDrawingScores"),
+  onlineDrawingFeedback: document.querySelector("#onlineDrawingFeedback"),
   partySession: document.querySelector("#partySession"),
   partySessionStatus: document.querySelector("#party-session-title"),
   partyStartButtons: [...document.querySelectorAll("[data-party-rounds]")],
@@ -603,6 +636,11 @@ let onlineDeadlineTimer = null;
 let onlineQuizFocusedBuzz = "";
 let onlineRpsChoiceMatchKey = "";
 let onlineRpsPendingChoice = "";
+let onlineTelepathyChoiceKey = "";
+let onlineDrawingColor = "#17191d";
+let onlineDrawingWidth = 6;
+let onlineDrawingPointer = null;
+let onlineDrawingRenderKey = "";
 let wheelRotation = 0;
 let wheelSpinning = false;
 let menuWheelRotation = 0;
@@ -1802,6 +1840,12 @@ function getOnlineRoomStatus(snapshot) {
         ? activity.message
         : `${activity?.questionNumber || 1}번째 문제 · 먼저 ${activity?.targetScore || 3}점`;
     }
+    if (snapshot.game === "telepathy") {
+      return `${snapshot.activity?.round || 1}/${snapshot.activity?.totalRounds || 5} 라운드 · ${snapshot.activity?.message || "선택 중"}`;
+    }
+    if (snapshot.game === "drawing") {
+      return `${snapshot.activity?.round || 1}/${snapshot.activity?.totalRounds || 3} 라운드 · ${snapshot.activity?.message || "그림을 준비하고 있어요."}`;
+    }
     return localPlayer?.score === null
       ? "게임 진행 중 · 기록을 완료해 주세요."
       : "기록 제출 완료 · 친구들을 기다리는 중이에요.";
@@ -1852,7 +1896,7 @@ function renderOnlinePlayers(snapshot) {
     name.textContent = `${player.nickname}${player.id === snapshot.localPeerId ? " (나)" : ""}`;
     const stateLabel = document.createElement("small");
     stateLabel.className = "online-player-state";
-    const quizInProgress = ["initialQuiz", "triviaQuiz"].includes(snapshot.game) &&
+    const activityInProgress = ONLINE_ACTIVITY_GAMES.has(snapshot.game) &&
       ["countdown", "playing"].includes(snapshot.status);
     stateLabel.textContent = player.isHost
       ? "방장"
@@ -1862,8 +1906,8 @@ function renderOnlinePlayers(snapshot) {
         ? player.ready
           ? "준비 완료"
           : "준비 중"
-        : quizInProgress
-          ? "퀴즈 진행 중"
+        : activityInProgress
+          ? "게임 진행 중"
           : player.score === null
           ? "도전 중"
           : "기록 제출";
@@ -2029,6 +2073,9 @@ function hideOnlineActivityArena(restoreGame = true) {
   onlineQuizFocusedBuzz = "";
   onlineRpsChoiceMatchKey = "";
   onlineRpsPendingChoice = "";
+  onlineTelepathyChoiceKey = "";
+  onlineDrawingPointer = null;
+  onlineDrawingRenderKey = "";
   if (restoreGame && elements.gameViews[state.currentGame]) {
     elements.gameViews[state.currentGame].hidden = false;
     elements.gameViews[state.currentGame].classList.add("is-active");
@@ -2044,6 +2091,8 @@ function renderOnlineQuiz(snapshot) {
   const buzzOwner = getOnlinePlayer(snapshot, activity?.buzzedBy);
   elements.onlineQuizPanel.hidden = false;
   elements.onlineRpsPanel.hidden = true;
+  elements.onlineTelepathyPanel.hidden = true;
+  elements.onlineDrawingPanel.hidden = true;
   elements.onlineQuizType.textContent = snapshot.game === "initialQuiz"
     ? "INITIAL QUIZ"
     : "TRIVIA QUIZ";
@@ -2071,6 +2120,8 @@ function renderOnlineQuiz(snapshot) {
     (snapshot.status === "countdown" ? "카운트다운 뒤 문제가 공개돼요." : "문제 연결 중");
 
   const awaitingQuestion = activity?.phase === "reveal";
+  elements.onlineQuizReveal.hidden = !awaitingQuestion || !activity?.answer;
+  elements.onlineQuizRevealAnswer.textContent = awaitingQuestion ? activity?.answer || "" : "";
   const finished = ["results", "choosing"].includes(snapshot.status);
   const canBuzz = snapshot.status === "playing" && activity && !awaitingQuestion &&
     !activity.buzzedBy && !lockedOut;
@@ -2186,6 +2237,8 @@ function renderOnlineRps(snapshot) {
 
   elements.onlineQuizPanel.hidden = true;
   elements.onlineRpsPanel.hidden = false;
+  elements.onlineTelepathyPanel.hidden = true;
+  elements.onlineDrawingPanel.hidden = true;
   elements.onlineRpsStage.textContent = activity ? `ROUND ${activity.stage}` : "BRACKET READY";
   const finished = ["results", "choosing"].includes(snapshot.status);
   elements.onlineRpsOpponent.textContent = finished
@@ -2217,12 +2270,177 @@ function renderOnlineRps(snapshot) {
   renderOnlineRpsBracket(snapshot);
 }
 
+function renderOnlineActivityScores(container, snapshot) {
+  container.replaceChildren();
+  const topScore = Math.max(...snapshot.players.map((player) => Number(player.score) || 0));
+  snapshot.players.forEach((player) => {
+    const chip = document.createElement("span");
+    chip.classList.toggle("is-me", player.id === snapshot.localPeerId);
+    chip.classList.toggle("is-leading", topScore > 0 && Number(player.score) === topScore);
+    const name = document.createElement("small");
+    name.textContent = player.nickname;
+    const score = document.createElement("strong");
+    score.textContent = `${Number(player.score) || 0}점`;
+    chip.append(name, score);
+    container.append(chip);
+  });
+}
+
+function renderOnlineTelepathy(snapshot) {
+  const activity = snapshot.activity;
+  const localId = snapshot.localPeerId;
+  const submitted = activity?.submittedIds?.includes(localId);
+  const reveal = activity?.phase === "reveal";
+  const choiceKeyPrefix = `${activity?.questionId}:`;
+  const pendingChoice = onlineTelepathyChoiceKey.startsWith(choiceKeyPrefix)
+    ? Number(onlineTelepathyChoiceKey.slice(choiceKeyPrefix.length))
+    : -1;
+  const localReveal = activity?.revealedChoices?.find((entry) => entry.peerId === localId)?.choice;
+
+  elements.onlineQuizPanel.hidden = true;
+  elements.onlineRpsPanel.hidden = true;
+  elements.onlineTelepathyPanel.hidden = false;
+  elements.onlineDrawingPanel.hidden = true;
+  elements.onlineTelepathyRound.textContent = `ROUND ${activity?.round || 1} / ${activity?.totalRounds || 5}`;
+  elements.onlineTelepathyPrompt.textContent = activity?.prompt || "질문을 준비하고 있어요.";
+  elements.onlineTelepathyChoices.replaceChildren();
+  (activity?.choices || []).forEach((choice, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.disabled = snapshot.status !== "playing" || activity.phase !== "choosing" || submitted;
+    button.classList.toggle("is-selected", index === pendingChoice || index === localReveal);
+    button.classList.toggle("is-match", reveal && activity.matchingChoices.includes(index));
+    const number = document.createElement("span");
+    number.textContent = String(index + 1).padStart(2, "0");
+    const label = document.createElement("strong");
+    label.textContent = choice;
+    button.append(number, label);
+    if (reveal) {
+      const count = document.createElement("small");
+      count.textContent = `${activity.revealedChoices.filter((entry) => entry.choice === index).length}명`;
+      button.append(count);
+    }
+    button.addEventListener("click", () => {
+      if (button.disabled) return;
+      onlineTelepathyChoiceKey = `${activity.questionId}:${index}`;
+      onlineSession?.submitAction("telepathy-choice", { choice: index });
+    });
+    elements.onlineTelepathyChoices.append(button);
+  });
+  renderOnlineActivityScores(elements.onlineTelepathyScores, snapshot);
+  elements.onlineTelepathyFeedback.textContent = activity?.message || "친구와 마음을 맞춰보세요.";
+  elements.onlineActivityStatus.textContent = snapshot.status === "results"
+    ? activity?.message || "텔레파시 대결 완료"
+    : reveal
+      ? "모두의 선택을 공개했어요."
+      : submitted
+        ? "선택 완료 · 다른 친구들을 기다리는 중"
+        : "다른 사람에게 보이지 않게 하나를 고르세요.";
+}
+
+function drawOnlineSharedCanvas(activity) {
+  const canvas = elements.onlineDrawingCanvas;
+  const context = canvas.getContext("2d");
+  const strokes = activity?.strokes || [];
+  const key = `${activity?.wordId || ""}:${strokes.length}:${activity?.phase || ""}`;
+  if (key === onlineDrawingRenderKey) return;
+  onlineDrawingRenderKey = key;
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  strokes.forEach((stroke) => {
+    if (!stroke.points?.length) return;
+    context.beginPath();
+    context.strokeStyle = stroke.color;
+    context.lineWidth = stroke.width;
+    context.moveTo(stroke.points[0].x * canvas.width, stroke.points[0].y * canvas.height);
+    stroke.points.slice(1).forEach((point) => {
+      context.lineTo(point.x * canvas.width, point.y * canvas.height);
+    });
+    context.stroke();
+  });
+}
+
+function renderOnlineDrawing(snapshot) {
+  const activity = snapshot.activity;
+  const localId = snapshot.localPeerId;
+  const drawer = getOnlinePlayer(snapshot, activity?.drawerId);
+  const isDrawer = activity?.drawerId === localId;
+  const drawing = snapshot.status === "playing" && activity?.phase === "drawing";
+  const reveal = activity?.phase === "reveal" || activity?.phase === "finished";
+
+  elements.onlineQuizPanel.hidden = true;
+  elements.onlineRpsPanel.hidden = true;
+  elements.onlineTelepathyPanel.hidden = true;
+  elements.onlineDrawingPanel.hidden = false;
+  elements.onlineDrawingRound.textContent = `ROUND ${activity?.round || 1} / ${activity?.totalRounds || 3}`;
+  elements.onlineDrawingRole.textContent = isDrawer
+    ? `제시어 · ${activity?.secretWord || "확인 중"}`
+    : `${drawer?.nickname || "친구"}님이 그림을 그리고 있어요.`;
+  elements.onlineDrawingHint.textContent = isDrawer
+    ? "말이나 글자 없이 그림으로 표현하세요."
+    : `힌트 · ${activity?.clue || "-"} · ${activity?.wordLength || 0}글자`;
+  elements.onlineDrawingTools.hidden = !isDrawer || !drawing;
+  elements.onlineDrawingGuessForm.hidden = isDrawer || !drawing;
+  elements.onlineDrawingCanvas.classList.toggle("is-drawable", isDrawer && drawing);
+  elements.onlineDrawingReveal.hidden = !reveal || !activity?.answer;
+  elements.onlineDrawingRevealAnswer.textContent = reveal ? activity?.answer || "" : "";
+  drawOnlineSharedCanvas(activity);
+  renderOnlineActivityScores(elements.onlineDrawingScores, snapshot);
+  elements.onlineDrawingFeedback.textContent = activity?.message || "그림을 준비하고 있어요.";
+  elements.onlineActivityStatus.textContent = snapshot.status === "results"
+    ? activity?.message || "그림 맞히기 완료"
+    : reveal
+      ? `정답 공개 · ${activity?.answer || "-"}`
+      : isDrawer
+        ? "그림을 그리면 친구 화면에 바로 표시돼요."
+      : "그림을 보고 정답을 가장 먼저 맞혀보세요.";
+}
+
+function getOnlineDrawingPoint(event) {
+  const bounds = elements.onlineDrawingCanvas.getBoundingClientRect();
+  return {
+    x: Math.max(0, Math.min(1, (event.clientX - bounds.left) / bounds.width)),
+    y: Math.max(0, Math.min(1, (event.clientY - bounds.top) / bounds.height)),
+  };
+}
+
+function drawOnlineDraftSegment(from, to) {
+  const canvas = elements.onlineDrawingCanvas;
+  const context = canvas.getContext("2d");
+  context.beginPath();
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.strokeStyle = onlineDrawingColor;
+  context.lineWidth = onlineDrawingWidth;
+  context.moveTo(from.x * canvas.width, from.y * canvas.height);
+  context.lineTo(to.x * canvas.width, to.y * canvas.height);
+  context.stroke();
+}
+
+function flushOnlineDrawingStroke(keepLastPoint = false) {
+  if (!onlineDrawingPointer?.points?.length || onlineDrawingPointer.points.length < 2) return;
+  const points = onlineDrawingPointer.points;
+  onlineSession?.submitAction("drawing-stroke", {
+    points,
+    color: onlineDrawingColor,
+    width: onlineDrawingWidth,
+  });
+  onlineDrawingPointer.points = keepLastPoint ? [points[points.length - 1]] : [];
+}
+
 function renderOnlineActivity(snapshot) {
   if (!snapshot || !ONLINE_ACTIVITY_GAMES.has(snapshot.game)) return;
   elements.onlineActivityTitle.textContent = OnlineRoom.GAME_RULES[snapshot.game].label;
   elements.onlineResultActions.hidden = !snapshot.isHost || snapshot.status !== "results";
   if (snapshot.game === "rps") {
     renderOnlineRps(snapshot);
+  } else if (snapshot.game === "telepathy") {
+    renderOnlineTelepathy(snapshot);
+  } else if (snapshot.game === "drawing") {
+    renderOnlineDrawing(snapshot);
   } else {
     renderOnlineQuiz(snapshot);
   }
@@ -8954,6 +9172,67 @@ elements.onlineRpsChoiceButtons.forEach((button) => {
     });
   });
 });
+elements.onlineDrawingColorButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    onlineDrawingColor = button.dataset.drawingColor;
+    elements.onlineDrawingColorButtons.forEach((item) => {
+      const active = item === button;
+      item.classList.toggle("is-active", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
+  });
+});
+elements.onlineDrawingWidthButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    onlineDrawingWidth = Number(button.dataset.drawingWidth);
+    elements.onlineDrawingWidthButtons.forEach((item) => {
+      const active = item === button;
+      item.classList.toggle("is-active", active);
+      item.setAttribute("aria-pressed", String(active));
+    });
+  });
+});
+elements.onlineDrawingCanvas.addEventListener("pointerdown", (event) => {
+  if (!elements.onlineDrawingCanvas.classList.contains("is-drawable")) return;
+  event.preventDefault();
+  elements.onlineDrawingCanvas.setPointerCapture(event.pointerId);
+  onlineDrawingPointer = {
+    id: event.pointerId,
+    points: [getOnlineDrawingPoint(event)],
+  };
+});
+elements.onlineDrawingCanvas.addEventListener("pointermove", (event) => {
+  if (onlineDrawingPointer?.id !== event.pointerId) return;
+  event.preventDefault();
+  const point = getOnlineDrawingPoint(event);
+  const previous = onlineDrawingPointer.points[onlineDrawingPointer.points.length - 1];
+  onlineDrawingPointer.points.push(point);
+  drawOnlineDraftSegment(previous, point);
+  if (onlineDrawingPointer.points.length >= 24) flushOnlineDrawingStroke(true);
+});
+const finishOnlineDrawingPointer = (event) => {
+  if (onlineDrawingPointer?.id !== event.pointerId) return;
+  event.preventDefault();
+  flushOnlineDrawingStroke(false);
+  onlineDrawingPointer = null;
+};
+elements.onlineDrawingCanvas.addEventListener("pointerup", finishOnlineDrawingPointer);
+elements.onlineDrawingCanvas.addEventListener("pointercancel", finishOnlineDrawingPointer);
+elements.onlineDrawingClear.addEventListener("click", () => {
+  onlineDrawingRenderKey = "";
+  onlineSession?.submitAction("drawing-clear");
+});
+elements.onlineDrawingGuessForm.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const guess = elements.onlineDrawingGuess.value.trim();
+  if (!guess) {
+    elements.onlineDrawingGuess.focus();
+    return;
+  }
+  onlineSession?.submitAction("drawing-guess", { guess });
+  elements.onlineDrawingGuess.value = "";
+  elements.onlineDrawingGuess.focus();
+});
 elements.startSharedChallenge.addEventListener("click", startSharedChallenge);
 elements.dismissSharedChallenge.addEventListener("click", dismissSharedChallenge);
 elements.closeFriendChallenge.addEventListener("click", closeFriendChallengeDialog);
@@ -9330,6 +9609,6 @@ PwaManager.setup({
   updateBanner: elements.appUpdateBanner,
   updateButton: elements.applyAppUpdate,
   dismissUpdateButton: elements.dismissAppUpdate,
-  serviceWorkerUrl: "./sw.js?v=40",
+  serviceWorkerUrl: "./sw.js?v=41",
   notify: showToast,
 });

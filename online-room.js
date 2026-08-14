@@ -11,13 +11,19 @@
 
   if (!ActivityLogic) throw new Error("Online activity logic is required");
 
-  const VERSION = 3;
+  const VERSION = 4;
   const ROOM_PREFIX = "ddak-room-";
   const ROOM_CODE_LENGTH = 6;
   const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const MAX_PLAYERS = 8;
   const QUIZ_TARGET_SCORE = 3;
-  const QUIZ_REVEAL_DELAY = 1600;
+  const QUIZ_REVEAL_DELAY = 2400;
+  const TELEPATHY_TOTAL_ROUNDS = 5;
+  const DRAWING_TOTAL_ROUNDS = 3;
+  const ACTIVITY_REVEAL_DELAY = 2200;
+  const DRAWING_ROUND_DURATION = 60000;
+  const DRAWING_COLORS = Object.freeze(["#17191d", "#e85d4a", "#4676e8", "#239a8b"]);
+  const DRAWING_WIDTHS = Object.freeze([3, 6, 10]);
   const GAME_RULES = Object.freeze({
     reaction: {
       label: "반응속도",
@@ -93,6 +99,22 @@
       maximum: 1100,
       activity: "rps",
     },
+    telepathy: {
+      label: "텔레파시 일치",
+      unit: "점",
+      lowerIsBetter: false,
+      minimum: 0,
+      maximum: TELEPATHY_TOTAL_ROUNDS,
+      activity: "telepathy",
+    },
+    drawing: {
+      label: "그림 맞히기",
+      unit: "점",
+      lowerIsBetter: false,
+      minimum: 0,
+      maximum: DRAWING_TOTAL_ROUNDS * 2,
+      activity: "drawing",
+    },
   });
   const DIFFICULTIES = Object.freeze(["easy", "normal", "hard"]);
 
@@ -158,7 +180,7 @@
     const score = Number(value);
     if (!rule || !Number.isFinite(score)) return null;
     if (score < rule.minimum || score > rule.maximum) return null;
-    return ["tap", "runner", "stack", "fruit", "initialQuiz", "triviaQuiz", "rps"].includes(game)
+    return ["tap", "runner", "stack", "fruit", "initialQuiz", "triviaQuiz", "rps", "telepathy", "drawing"].includes(game)
       ? Math.round(score)
       : Math.round(score * 100) / 100;
   }
@@ -177,6 +199,7 @@
     if (game === "rps") {
       return score >= 1000 ? "우승" : `${Math.round(score)}승`;
     }
+    if (["telepathy", "drawing"].includes(game)) return `${Math.round(score)}점`;
     return `${Math.round(score).toLocaleString()}점`;
   }
 
@@ -231,13 +254,19 @@
       this.quizQuestionNumber = 0;
       this.rpsChoices = new Map();
       this.rpsWins = new Map();
+      this.telepathyChoices = new Map();
+      this.drawingWord = null;
+      this.drawingSeed = 0;
       this.closed = false;
     }
 
     snapshot() {
       if (!this.room) return null;
+      const room = this.isHost
+        ? this.publicRoom(this.localPeerId)
+        : clone(this.room);
       return {
-        ...clone(this.room),
+        ...room,
         isHost: this.isHost,
         localPeerId: this.localPeerId,
       };
@@ -490,6 +519,27 @@
         }
       }
       this.room.players = nextPlayers;
+      if (this.room.status === "playing" && activity?.kind === "telepathy") {
+        this.telepathyChoices.delete(peerId);
+        activity.submittedIds = activity.submittedIds.filter((id) => id !== peerId);
+        if (
+          activity.phase === "choosing" &&
+          this.telepathyChoices.size >= nextPlayers.length
+        ) {
+          this.revealTelepathyRound();
+          return;
+        }
+      }
+      if (this.room.status === "playing" && activity?.kind === "drawing") {
+        if (activity.drawerId === peerId) {
+          this.finishDrawingRound("");
+          return;
+        }
+        if (nextPlayers.length < 2) {
+          this.finishDrawingGame();
+          return;
+        }
+      }
       if (
         this.room.status === "playing" &&
         activity?.kind === "quiz" &&
@@ -502,9 +552,18 @@
       this.broadcastState();
     }
 
-    publicRoom() {
+    publicRoom(viewerId = "") {
       if (!this.room) return null;
-      return clone(this.room);
+      const room = clone(this.room);
+      if (
+        room.activity?.kind === "drawing" &&
+        room.activity.phase === "drawing" &&
+        room.activity.drawerId === viewerId &&
+        this.drawingWord?.answer
+      ) {
+        room.activity.secretWord = this.drawingWord.answer;
+      }
+      return room;
     }
 
     send(connection, payload) {
@@ -518,8 +577,10 @@
 
     broadcastState() {
       if (!this.isHost || !this.room) return;
-      const payload = { type: "state", room: this.publicRoom() };
-      this.connections.forEach((connection) => this.send(connection, payload));
+      this.connections.forEach((connection) => this.send(connection, {
+        type: "state",
+        room: this.publicRoom(connection.peer),
+      }));
       this.emitState();
     }
 
@@ -560,6 +621,9 @@
       this.quizQuestionNumber = 0;
       this.rpsChoices.clear();
       this.rpsWins.clear();
+      this.telepathyChoices.clear();
+      this.drawingWord = null;
+      this.drawingSeed = 0;
       if (this.room) this.room.activity = null;
     }
 
@@ -582,6 +646,23 @@
           championId: "",
           message: "상대에게 보이지 않게 하나를 선택하세요.",
         };
+        return;
+      }
+      if (this.room.game === "telepathy") {
+        this.room.players.forEach((player) => {
+          player.score = 0;
+          player.detail = "0점";
+        });
+        this.prepareTelepathyRound(1);
+        return;
+      }
+      if (this.room.game === "drawing") {
+        this.drawingSeed = Math.floor(this.random() * 0x100000000) >>> 0;
+        this.room.players.forEach((player) => {
+          player.score = 0;
+          player.detail = "0점";
+        });
+        this.prepareDrawingRound(1);
       }
     }
 
@@ -606,6 +687,12 @@
       }
       if (this.room.activity?.kind === "rps") {
         return this.handleRpsAction(peerId, action, payload);
+      }
+      if (this.room.activity?.kind === "telepathy") {
+        return this.handleTelepathyAction(peerId, action, payload);
+      }
+      if (this.room.activity?.kind === "drawing") {
+        return this.handleDrawingAction(peerId, action, payload);
       }
       return false;
     }
@@ -705,6 +792,225 @@
         this.broadcastState();
       }
       return true;
+    }
+
+    prepareTelepathyRound(round) {
+      if (!this.room || this.room.game !== "telepathy") return;
+      const question = ActivityLogic.getTelepathyRound(this.room.seed, round - 1);
+      this.telepathyChoices.clear();
+      this.room.activity = {
+        kind: "telepathy",
+        phase: "choosing",
+        round,
+        totalRounds: TELEPATHY_TOTAL_ROUNDS,
+        questionId: question.id,
+        prompt: question.prompt,
+        choices: question.choices,
+        submittedIds: [],
+        revealedChoices: [],
+        matchingChoices: [],
+        championIds: [],
+        message: `${round}/${TELEPATHY_TOTAL_ROUNDS} 라운드 · 친구와 같은 답을 골라보세요.`,
+      };
+    }
+
+    handleTelepathyAction(peerId, action, payload) {
+      const activity = this.room.activity;
+      if (action !== "telepathy-choice" || activity.phase !== "choosing") return false;
+      const choice = Math.floor(Number(payload?.choice));
+      if (!Number.isInteger(choice) || choice < 0 || choice >= activity.choices.length) return false;
+      if (this.telepathyChoices.has(peerId)) return false;
+      this.telepathyChoices.set(peerId, choice);
+      activity.submittedIds.push(peerId);
+      activity.message = `${activity.submittedIds.length}/${this.room.players.length}명 선택 완료`;
+      if (this.telepathyChoices.size >= this.room.players.length) {
+        this.revealTelepathyRound();
+      } else {
+        this.broadcastState();
+      }
+      return true;
+    }
+
+    revealTelepathyRound() {
+      const activity = this.room?.activity;
+      if (!activity || activity.kind !== "telepathy" || activity.phase !== "choosing") return;
+      const entries = this.room.players.map((player) => ({
+        peerId: player.id,
+        choice: this.telepathyChoices.get(player.id),
+      }));
+      const result = ActivityLogic.resolveTelepathyChoices(entries);
+      activity.phase = "reveal";
+      activity.revealedChoices = entries;
+      activity.matchingChoices = result.matchingChoices;
+      result.scorerIds.forEach((peerId) => {
+        const player = this.room.players.find((entry) => entry.id === peerId);
+        if (!player) return;
+        player.score = (Number(player.score) || 0) + 1;
+        player.detail = `${player.score}점`;
+      });
+      activity.message = result.scorerIds.length
+        ? `${result.matchSize}명 텔레파시 성공! 일치한 친구에게 1점`
+        : "이번에는 모두 달랐어요. 다음 문제에서 다시 맞춰보세요.";
+      this.broadcastState();
+      const currentRound = activity.round;
+      this.scheduleActivity(() => {
+        if (
+          this.room?.status !== "playing" ||
+          this.room.activity?.kind !== "telepathy" ||
+          this.room.activity.round !== currentRound
+        ) return;
+        if (currentRound >= TELEPATHY_TOTAL_ROUNDS) {
+          this.finishTelepathyGame();
+        } else {
+          this.prepareTelepathyRound(currentRound + 1);
+          this.broadcastState();
+        }
+      }, ACTIVITY_REVEAL_DELAY);
+    }
+
+    finishTelepathyGame() {
+      const activity = this.room?.activity;
+      if (!activity || activity.kind !== "telepathy") return;
+      const topScore = Math.max(...this.room.players.map((player) => Number(player.score) || 0));
+      activity.phase = "finished";
+      activity.championIds = this.room.players
+        .filter((player) => (Number(player.score) || 0) === topScore)
+        .map((player) => player.id);
+      activity.message = activity.championIds.length > 1
+        ? `${topScore}점 공동 우승! 마음이 제대로 통했어요.`
+        : `${this.room.players.find((player) => player.id === activity.championIds[0])?.nickname || "친구"} ${topScore}점 우승!`;
+      this.room.status = "results";
+      this.broadcastState();
+    }
+
+    prepareDrawingRound(round) {
+      if (!this.room || this.room.game !== "drawing" || this.room.players.length < 2) return;
+      const word = ActivityLogic.getDrawingWord(this.drawingSeed, round - 1);
+      const drawer = this.room.players[(round - 1) % this.room.players.length];
+      this.drawingWord = word;
+      this.room.activity = {
+        kind: "drawing",
+        phase: "drawing",
+        round,
+        totalRounds: DRAWING_TOTAL_ROUNDS,
+        drawerId: drawer.id,
+        wordId: `drawing-round-${round}`,
+        clue: word.clue,
+        wordLength: Array.from(word.answer.replace(/\s+/g, "")).length,
+        strokes: [],
+        answer: "",
+        winnerId: "",
+        championIds: [],
+        endsAt: this.now() + DRAWING_ROUND_DURATION,
+        lastGuess: "",
+        message: `${drawer.nickname}님이 그림을 그리고 있어요.`,
+      };
+      const currentRound = round;
+      this.scheduleActivity(() => {
+        if (
+          this.room?.status !== "playing" ||
+          this.room.activity?.kind !== "drawing" ||
+          this.room.activity.phase !== "drawing" ||
+          this.room.activity.round !== currentRound
+        ) return;
+        this.finishDrawingRound("");
+      }, DRAWING_ROUND_DURATION);
+    }
+
+    normalizeDrawingStroke(payload) {
+      const rawPoints = Array.isArray(payload?.points) ? payload.points.slice(0, 32) : [];
+      const points = rawPoints
+        .map((point) => ({
+          x: Math.max(0, Math.min(1, Number(point?.x))),
+          y: Math.max(0, Math.min(1, Number(point?.y))),
+        }))
+        .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+      const color = DRAWING_COLORS.includes(payload?.color) ? payload.color : DRAWING_COLORS[0];
+      const width = DRAWING_WIDTHS.includes(Number(payload?.width)) ? Number(payload.width) : DRAWING_WIDTHS[1];
+      return points.length >= 2 ? { points, color, width } : null;
+    }
+
+    handleDrawingAction(peerId, action, payload) {
+      const activity = this.room.activity;
+      if (activity.phase !== "drawing") return false;
+      if (action === "drawing-stroke") {
+        if (activity.drawerId !== peerId || activity.strokes.length >= 800) return false;
+        const stroke = this.normalizeDrawingStroke(payload);
+        if (!stroke) return false;
+        activity.strokes.push(stroke);
+        this.broadcastState();
+        return true;
+      }
+      if (action === "drawing-clear") {
+        if (activity.drawerId !== peerId) return false;
+        activity.strokes = [];
+        this.broadcastState();
+        return true;
+      }
+      if (action !== "drawing-guess" || activity.drawerId === peerId) return false;
+      const guess = String(payload?.guess || "").trim().slice(0, 30);
+      if (!guess) return false;
+      if (ActivityLogic.isCorrectAnswer({ answers: [this.drawingWord?.answer] }, guess)) {
+        this.finishDrawingRound(peerId);
+        return true;
+      }
+      const player = this.room.players.find((entry) => entry.id === peerId);
+      activity.lastGuess = `${player?.nickname || "친구"}: ${guess}`;
+      activity.message = `${activity.lastGuess} · 아쉬워요!`;
+      this.broadcastState();
+      return true;
+    }
+
+    finishDrawingRound(winnerId = "") {
+      const activity = this.room?.activity;
+      if (!activity || activity.kind !== "drawing" || activity.phase !== "drawing") return;
+      const winner = this.room.players.find((player) => player.id === winnerId);
+      const drawer = this.room.players.find((player) => player.id === activity.drawerId);
+      activity.phase = "reveal";
+      activity.answer = this.drawingWord?.answer || "";
+      activity.winnerId = winnerId;
+      activity.endsAt = null;
+      if (winner) {
+        winner.score = (Number(winner.score) || 0) + 2;
+        winner.detail = `${winner.score}점`;
+        if (drawer) {
+          drawer.score = (Number(drawer.score) || 0) + 1;
+          drawer.detail = `${drawer.score}점`;
+        }
+        activity.message = `${winner.nickname} 정답! 정답은 ${activity.answer}`;
+      } else {
+        activity.message = `시간 종료 · 정답은 ${activity.answer}`;
+      }
+      this.broadcastState();
+      const currentRound = activity.round;
+      this.scheduleActivity(() => {
+        if (
+          this.room?.status !== "playing" ||
+          this.room.activity?.kind !== "drawing" ||
+          this.room.activity.round !== currentRound
+        ) return;
+        if (currentRound >= DRAWING_TOTAL_ROUNDS || this.room.players.length < 2) {
+          this.finishDrawingGame();
+        } else {
+          this.prepareDrawingRound(currentRound + 1);
+          this.broadcastState();
+        }
+      }, ACTIVITY_REVEAL_DELAY);
+    }
+
+    finishDrawingGame() {
+      const activity = this.room?.activity;
+      if (!activity || activity.kind !== "drawing") return;
+      const topScore = Math.max(...this.room.players.map((player) => Number(player.score) || 0));
+      activity.phase = "finished";
+      activity.championIds = this.room.players
+        .filter((player) => (Number(player.score) || 0) === topScore)
+        .map((player) => player.id);
+      activity.message = activity.championIds.length > 1
+        ? `${topScore}점 공동 우승!`
+        : `${this.room.players.find((player) => player.id === activity.championIds[0])?.nickname || "친구"} ${topScore}점 우승!`;
+      this.room.status = "results";
+      this.broadcastState();
     }
 
     handleRpsAction(peerId, action, payload) {
@@ -918,6 +1224,9 @@
       this.quizQuestionNumber = 0;
       this.rpsChoices.clear();
       this.rpsWins.clear();
+      this.telepathyChoices.clear();
+      this.drawingWord = null;
+      this.drawingSeed = 0;
       if (notify && this.isHost) {
         this.connections.forEach((connection) => this.send(connection, { type: "closed" }));
       } else if (notify) {
@@ -943,6 +1252,11 @@
     ROOM_ALPHABET,
     MAX_PLAYERS,
     QUIZ_TARGET_SCORE,
+    TELEPATHY_TOTAL_ROUNDS,
+    DRAWING_TOTAL_ROUNDS,
+    DRAWING_ROUND_DURATION,
+    DRAWING_COLORS,
+    DRAWING_WIDTHS,
     GAME_RULES,
     DIFFICULTIES,
     sanitizeNickname,

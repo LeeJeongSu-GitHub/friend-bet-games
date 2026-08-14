@@ -71,4 +71,39 @@ const threePlayerNext = OnlineActivityLogic.buildRpsStage(
 assert.equal(threePlayerNext.matches.length, 1);
 assert.deepEqual(threePlayerNext.byeIds, ["e"]);
 
+const telepathyRound = OnlineActivityLogic.getTelepathyRound(12345, 0);
+assert.equal(telepathyRound.choices.length, 4);
+assert.notEqual(
+  telepathyRound.id,
+  OnlineActivityLogic.getTelepathyRound(12345, 1).id,
+);
+assert.deepEqual(
+  OnlineActivityLogic.resolveTelepathyChoices([
+    { peerId: "a", choice: 0 },
+    { peerId: "b", choice: 0 },
+    { peerId: "c", choice: 2 },
+  ]),
+  {
+    counts: [2, 0, 1, 0],
+    matchSize: 2,
+    matchingChoices: [0],
+    scorerIds: ["a", "b"],
+  },
+);
+assert.deepEqual(
+  OnlineActivityLogic.resolveTelepathyChoices([
+    { peerId: "a", choice: 0 },
+    { peerId: "b", choice: 1 },
+  ]).scorerIds,
+  [],
+);
+
+const drawingWord = OnlineActivityLogic.getDrawingWord(12345, 0);
+assert.ok(drawingWord.answer);
+assert.ok(drawingWord.clue);
+assert.notEqual(
+  drawingWord.id,
+  OnlineActivityLogic.getDrawingWord(12345, 1).id,
+);
+
 console.log("online activity logic tests passed");

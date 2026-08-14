@@ -5479,7 +5479,9 @@ textarea::placeholder {
 }
 
 .online-quiz-panel,
-.online-rps-panel {
+.online-rps-panel,
+.online-telepathy-panel,
+.online-drawing-panel {
   width: min(760px, 100%);
   margin: 30px auto 0;
 }
@@ -5513,6 +5515,32 @@ textarea::placeholder {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.online-quiz-reveal {
+  min-width: min(320px, 90vw);
+  display: grid;
+  gap: 3px;
+  margin: 8px auto 0;
+  padding: 12px 18px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  background: #bcebdd;
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+.online-quiz-reveal[hidden] {
+  display: none;
+}
+
+.online-quiz-reveal span {
+  color: #34776d;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.online-quiz-reveal strong {
+  font-size: 25px;
 }
 
 .online-quiz-scoreboard {
@@ -5656,6 +5684,298 @@ textarea::placeholder {
 
 .online-result-actions .primary-action {
   width: 100%;
+  margin: 0;
+}
+
+.online-telepathy-heading,
+.online-drawing-heading {
+  display: grid;
+  gap: 7px;
+  padding: 20px 12px;
+  border-top: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+  background: #fff9db;
+  text-align: center;
+}
+
+.online-telepathy-heading > span,
+.online-drawing-heading > span {
+  color: var(--coral-dark);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.online-telepathy-heading > strong,
+.online-drawing-heading > strong {
+  font-size: 23px;
+  line-height: 1.35;
+}
+
+.online-drawing-heading > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.online-telepathy-choices {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin: 20px 0;
+}
+
+.online-telepathy-choices button {
+  min-width: 0;
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  padding: 12px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 3px 3px 0 var(--ink);
+  cursor: pointer;
+  color: var(--ink);
+  text-align: left;
+}
+
+.online-telepathy-choices button:nth-child(2),
+.online-telepathy-choices button:nth-child(3) {
+  background: #eef4ff;
+}
+
+.online-telepathy-choices button > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.online-telepathy-choices button > strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.online-telepathy-choices button > small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.online-telepathy-choices button.is-selected {
+  outline: 4px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.online-telepathy-choices button.is-match {
+  background: #bcebdd;
+}
+
+.online-telepathy-choices button:disabled {
+  cursor: default;
+}
+
+.online-activity-scores {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  margin: 14px 0 0;
+}
+
+.online-activity-scores > span {
+  min-width: 88px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.online-activity-scores > span.is-me {
+  border-color: var(--blue);
+}
+
+.online-activity-scores > span.is-leading {
+  background: #fff3b8;
+}
+
+.online-activity-scores small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.online-activity-scores strong {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.online-drawing-layout {
+  margin-top: 16px;
+}
+
+.online-drawing-board-wrap {
+  aspect-ratio: 3 / 2;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 4px 4px 0 var(--ink);
+}
+
+#onlineDrawingCanvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: #fff;
+  touch-action: none;
+}
+
+#onlineDrawingCanvas.is-drawable {
+  cursor: crosshair;
+}
+
+.online-drawing-reveal {
+  min-width: min(310px, calc(100% - 32px));
+  display: grid;
+  gap: 3px;
+  position: absolute;
+  inset: 50% auto auto 50%;
+  padding: 14px 20px;
+  border: 2px solid var(--ink);
+  border-radius: 7px;
+  background: #fff3b8;
+  box-shadow: 4px 4px 0 var(--ink);
+  text-align: center;
+  transform: translate(-50%, -50%);
+}
+
+.online-drawing-reveal[hidden] {
+  display: none;
+}
+
+.online-drawing-reveal span {
+  color: var(--coral-dark);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.online-drawing-reveal strong {
+  font-size: 27px;
+}
+
+.online-drawing-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  margin-top: 12px;
+}
+
+.online-drawing-tools[hidden] {
+  display: none;
+}
+
+.online-drawing-colors,
+.online-drawing-widths {
+  display: flex;
+  gap: 5px;
+}
+
+.online-drawing-colors button,
+.online-drawing-widths button {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 2px solid var(--ink);
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.online-drawing-colors button::before {
+  width: 21px;
+  height: 21px;
+  border-radius: 50%;
+  background: var(--swatch);
+  content: "";
+}
+
+.online-drawing-colors button[data-drawing-color="#17191d"] { --swatch: #17191d; }
+.online-drawing-colors button[data-drawing-color="#e85d4a"] { --swatch: #e85d4a; }
+.online-drawing-colors button[data-drawing-color="#4676e8"] { --swatch: #4676e8; }
+.online-drawing-colors button[data-drawing-color="#239a8b"] { --swatch: #239a8b; }
+
+.online-drawing-widths button i {
+  width: 23px;
+  height: var(--line-width);
+  display: block;
+  border-radius: 6px;
+  background: var(--ink);
+}
+
+.online-drawing-widths button[data-drawing-width="3"] { --line-width: 3px; }
+.online-drawing-widths button[data-drawing-width="6"] { --line-width: 6px; }
+.online-drawing-widths button[data-drawing-width="10"] { --line-width: 10px; }
+
+.online-drawing-colors button.is-active,
+.online-drawing-widths button.is-active {
+  outline: 3px solid var(--blue);
+  outline-offset: 2px;
+}
+
+.online-drawing-tools .secondary-action {
+  min-height: 38px;
+  margin-left: auto;
+}
+
+.online-drawing-guess {
+  max-width: 560px;
+  margin: 14px auto 0;
+}
+
+.online-drawing-guess[hidden] {
+  display: none;
+}
+
+.online-drawing-guess > label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.online-drawing-guess > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px;
+  gap: 7px;
+}
+
+.online-drawing-guess input {
+  min-width: 0;
+  min-height: 46px;
+  padding: 0 12px;
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.online-drawing-guess .primary-action {
+  min-width: 0;
+  min-height: 46px;
   margin: 0;
 }
 
@@ -7233,7 +7553,9 @@ footer strong {
   }
 
   .online-quiz-panel,
-  .online-rps-panel {
+  .online-rps-panel,
+  .online-telepathy-panel,
+  .online-drawing-panel {
     margin-top: 18px;
   }
 
@@ -7278,6 +7600,31 @@ footer strong {
 
   .online-rps-bracket {
     grid-template-columns: 1fr;
+  }
+
+  .online-telepathy-choices {
+    gap: 7px;
+  }
+
+  .online-telepathy-choices button {
+    min-height: 84px;
+    grid-template-columns: 23px minmax(0, 1fr);
+    gap: 6px;
+    padding: 9px;
+  }
+
+  .online-telepathy-choices button > small {
+    grid-column: 2;
+  }
+
+  .online-drawing-board-wrap {
+    min-height: 280px;
+    aspect-ratio: 4 / 3;
+  }
+
+  .online-drawing-tools .secondary-action {
+    width: 100%;
+    margin-left: 0;
   }
 }
 

@@ -108,7 +108,7 @@ function waitFor(predicate, timeout = 1000) {
 }
 
 async function run() {
-  assert.equal(OnlineRoom.VERSION, 3);
+  assert.equal(OnlineRoom.VERSION, 4);
   assert.equal(OnlineRoom.normalizeRoomCode(" ab-01c234 "), "ABC234");
   assert.equal(OnlineRoom.isValidRoomCode("ABC234"), true);
   assert.equal(OnlineRoom.isValidRoomCode("ABC23"), false);
@@ -128,6 +128,8 @@ async function run() {
   assert.equal(OnlineRoom.formatScore("initialQuiz", 1), "1/3 정답");
   assert.equal(OnlineRoom.formatScore("triviaQuiz", 0), "0/3 정답");
   assert.equal(OnlineRoom.formatScore("rps", 1002), "우승");
+  assert.equal(OnlineRoom.formatScore("telepathy", 4), "4점");
+  assert.equal(OnlineRoom.formatScore("drawing", 5), "5점");
   assert.equal(OnlineRoom.normalizeDifficulty("hard"), "hard");
   assert.equal(OnlineRoom.normalizeDifficulty("impossible"), "normal");
 
@@ -275,6 +277,74 @@ async function run() {
   assert.ok(
     hostState.players.find((player) => player.id === hostState.localPeerId).score >= 1000,
   );
+
+  assert.equal(host.chooseNextGame(), true);
+  await waitFor(() => guestState?.status === "choosing" && guestState.round === 4);
+  assert.equal(host.setGame("telepathy"), true);
+  assert.equal(host.startRound(1500), true);
+  await waitFor(
+    () => hostState?.status === "playing" && hostState?.activity?.kind === "telepathy",
+    2500,
+  );
+  for (let round = 1; round <= OnlineRoom.TELEPATHY_TOTAL_ROUNDS; round += 1) {
+    assert.equal(host.submitAction("telepathy-choice", { choice: 0 }), true);
+    assert.equal(guest.submitAction("telepathy-choice", { choice: 0 }), true);
+    if (round < OnlineRoom.TELEPATHY_TOTAL_ROUNDS) {
+      await waitFor(() => hostState?.activity?.round === round + 1, 3500);
+    }
+  }
+  await waitFor(() => hostState?.status === "results", 3500);
+  assert.deepEqual(
+    hostState.players.map((player) => player.score),
+    [OnlineRoom.TELEPATHY_TOTAL_ROUNDS, OnlineRoom.TELEPATHY_TOTAL_ROUNDS],
+  );
+  assert.equal(hostState.activity.championIds.length, 2);
+
+  assert.equal(host.chooseNextGame(), true);
+  await waitFor(() => guestState?.status === "choosing" && guestState.round === 5);
+  assert.equal(host.setGame("drawing"), true);
+  assert.equal(host.startRound(1500), true);
+  await waitFor(
+    () => hostState?.status === "playing" && hostState?.activity?.kind === "drawing",
+    2500,
+  );
+  assert.equal(hostState.activity.drawerId, hostState.localPeerId);
+  assert.ok(hostState.activity.secretWord);
+  assert.equal(guestState.activity.secretWord, undefined);
+  assert.equal(
+    host.submitAction("drawing-stroke", {
+      color: "#4676e8",
+      width: 6,
+      points: [{ x: 0.1, y: 0.2 }, { x: 0.8, y: 0.7 }],
+    }),
+    true,
+  );
+  await waitFor(() => guestState?.activity?.strokes?.length === 1);
+  assert.equal(guest.submitAction("drawing-clear"), true);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(hostState.activity.strokes.length, 1);
+  assert.equal(
+    guest.submitAction("drawing-guess", { guess: hostState.activity.secretWord }),
+    true,
+  );
+  await waitFor(() => hostState?.activity?.round === 2, 3500);
+  assert.equal(guestState.activity.drawerId, guestState.localPeerId);
+  assert.ok(guestState.activity.secretWord);
+  assert.equal(hostState.activity.secretWord, undefined);
+  assert.equal(
+    host.submitAction("drawing-guess", { guess: guestState.activity.secretWord }),
+    true,
+  );
+  await waitFor(() => hostState?.activity?.round === 3, 3500);
+  assert.ok(hostState.activity.secretWord);
+  assert.equal(
+    guest.submitAction("drawing-guess", { guess: hostState.activity.secretWord }),
+    true,
+  );
+  await waitFor(() => hostState?.status === "results", 3500);
+  assert.equal(hostState.activity.answer.length > 0, true);
+  assert.equal(hostState.activity.championIds[0], guestState.localPeerId);
+  assert.deepEqual(hostState.players.map((player) => player.score), [4, 5]);
 
   host.leave();
   await waitFor(() => guestState === null);
