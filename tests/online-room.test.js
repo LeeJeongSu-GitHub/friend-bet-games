@@ -109,9 +109,11 @@ function waitFor(predicate, timeout = 1000) {
 }
 
 async function run() {
-  assert.equal(OnlineRoom.VERSION, 4);
+  assert.equal(OnlineRoom.VERSION, 5);
   assert.equal(OnlineRoom.ERROR_CODES.VERSION_MISMATCH, "version-mismatch");
   assert.equal(OnlineRoom.ERROR_CODES.ROOM_UNAVAILABLE, "room-unavailable");
+  assert.equal(OnlineRoom.ERROR_CODES.ROOM_STARTED, "room-started");
+  assert.equal(OnlineRoom.ERROR_CODES.ROOM_FULL, "room-full");
   assert.equal(OnlineRoom.normalizeRoomCode(" ab-01c234 "), "ABC234");
   assert.equal(OnlineRoom.isValidRoomCode("ABC234"), true);
   assert.equal(OnlineRoom.isValidRoomCode("ABC23"), false);
@@ -146,10 +148,34 @@ async function run() {
   );
   assert.deepEqual(ranked.map((player) => player.id), ["b", "a", "c"]);
   assert.deepEqual(ranked.map((player) => player.rank), [1, 2, null]);
+  const successorRoom = {
+    version: OnlineRoom.VERSION,
+    code: "ABC234",
+    game: "tap",
+    difficulty: "normal",
+    status: "playing",
+    round: 2,
+    players: [
+      { id: "host", nickname: "방장", isHost: true, connected: true },
+      { id: "guest-b", nickname: "둘", isHost: false, connected: true },
+      { id: "guest-a", nickname: "하나", isHost: false, connected: true },
+    ],
+    series: { standings: [], rounds: [], finished: false },
+  };
+  assert.equal(OnlineRoom.electHostSuccessor(successorRoom), "guest-a");
+  const transferred = OnlineRoom.prepareHostTransferRoom(successorRoom);
+  assert.equal(transferred.status, "choosing");
+  assert.equal(transferred.players.some((player) => player.id === "host"), false);
+  assert.equal(transferred.players.find((player) => player.id === "guest-a").isHost, true);
 
   let hostState = null;
   let guestState = null;
   const guestEvents = [];
+  const guestStorageValues = new Map();
+  const guestStorage = {
+    getItem: (key) => guestStorageValues.get(key) || null,
+    setItem: (key, value) => guestStorageValues.set(key, value),
+  };
   const host = OnlineRoom.createSession({
     PeerCtor: FakePeer,
     random: () => 0.25,
@@ -157,8 +183,9 @@ async function run() {
       hostState = snapshot;
     },
   });
-  const guest = OnlineRoom.createSession({
+  let guest = OnlineRoom.createSession({
     PeerCtor: FakePeer,
+    storage: guestStorage,
     onState: (snapshot) => {
       guestState = snapshot;
     },
@@ -175,9 +202,49 @@ async function run() {
   );
   assert.equal(hostState.players[0].nickname, "민지");
   assert.equal(hostState.players[1].nickname, "준호");
+  assert.equal(hostState.players[1].connected, true);
+
+  guest.hostConnection.close();
+  await waitFor(() => hostState.players[1].connected === false);
+  assert.equal(OnlineRoom.canStartRoom(hostState), false);
+  await waitFor(() => hostState.players[1].connected === true, 3500);
+  await waitFor(() => guestEvents.includes("reconnected"));
+  assert.ok(guestEvents.includes("reconnecting"));
+  assert.ok(guestEvents.includes("reconnected"));
+
+  const stableGuestId = guestState.localPeerId;
+  guest.leave(false);
+  await waitFor(() => hostState.players[1].connected === false);
+  guest = OnlineRoom.createSession({
+    PeerCtor: FakePeer,
+    storage: guestStorage,
+    onState: (snapshot) => {
+      guestState = snapshot;
+    },
+    onEvent: (event) => guestEvents.push(event.type),
+  });
+  await guest.join({ nickname: "준호", code: "ABC234" });
+  await waitFor(() => hostState.players[1].connected === true);
+  assert.equal(guestState.localPeerId, stableGuestId);
+
+  const extraGuests = [];
+  for (let index = 0; index < 6; index += 1) {
+    const extraGuest = OnlineRoom.createSession({ PeerCtor: FakePeer });
+    await extraGuest.join({ nickname: `친구${index + 1}`, code: "ABC234" });
+    extraGuests.push(extraGuest);
+  }
+  await waitFor(() => hostState.players.length === OnlineRoom.MAX_PLAYERS);
+  const overflowGuest = OnlineRoom.createSession({ PeerCtor: FakePeer });
+  await assert.rejects(
+    () => overflowGuest.join({ nickname: "아홉번째", code: "ABC234" }),
+    (error) => error.code === OnlineRoom.ERROR_CODES.ROOM_FULL,
+  );
+  extraGuests.forEach((extraGuest) => extraGuest.leave(true));
+  await waitFor(() => hostState.players.length === 2);
 
   guest.setReady(true);
   await waitFor(() => hostState.players.every((player) => player.ready));
+  assert.equal(host.setSeriesMode("bestOf3", "커피 사기"), true);
   assert.equal(host.setGame("runner"), true);
   assert.equal(host.setDifficulty("hard"), true);
   await waitFor(
@@ -194,6 +261,9 @@ async function run() {
   const finalRanking = OnlineRoom.rankPlayers(hostState.players, "runner");
   assert.equal(finalRanking[0].nickname, "준호");
   assert.equal(finalRanking[0].score, 68);
+  assert.equal(hostState.series.mode, "bestOf3");
+  assert.equal(hostState.series.currentRound, 2);
+  assert.equal(hostState.series.finished, false);
 
   assert.equal(host.chooseNextGame(), true);
   await waitFor(() => guestState?.status === "choosing" && guestState.round === 2);
@@ -217,6 +287,8 @@ async function run() {
   const quizQuestion = OnlineActivityLogic.getQuizQuestion(
     "initialQuiz",
     hostState.seed,
+    0,
+    "hard",
   );
   assert.equal(host.submitAction("quiz-buzz"), true);
   await waitFor(() => guestState?.activity?.buzzedBy === hostState.localPeerId);
@@ -241,6 +313,7 @@ async function run() {
       "initialQuiz",
       hostState.seed,
       questionNumber - 1,
+      "hard",
     );
     assert.equal(guest.submitAction("quiz-buzz"), true);
     await waitFor(() => hostState?.activity?.buzzedBy === guestState.localPeerId);
@@ -260,6 +333,15 @@ async function run() {
   assert.equal(
     hostState.players.find((player) => player.id === guestState.localPeerId).score,
     OnlineRoom.QUIZ_TARGET_SCORE,
+  );
+  assert.equal(hostState.series.finished, true);
+  assert.deepEqual(hostState.series.championIds, [guestState.localPeerId]);
+  assert.equal(hostState.series.penalty, "커피 사기");
+  assert.equal(hostState.recentQuizIds.length, OnlineRoom.QUIZ_TARGET_SCORE);
+  assert.equal(
+    new Set(hostState.recentQuizIds).size,
+    hostState.recentQuizIds.length,
+    "최근 퀴즈는 같은 방에서 연속으로 반복되면 안 됩니다.",
   );
 
   assert.equal(host.chooseNextGame(), true);
@@ -375,10 +457,18 @@ async function run() {
   assert.equal(hostState.activity.answer.length > 0, true);
   assert.equal(hostState.activity.championIds[0], guestState.localPeerId);
   assert.deepEqual(hostState.players.map((player) => player.score), [4, 5]);
+  assert.equal(hostState.recentDrawingIds.length, OnlineRoom.DRAWING_TOTAL_ROUNDS);
+  assert.equal(
+    new Set(hostState.recentDrawingIds).size,
+    hostState.recentDrawingIds.length,
+    "최근 그림 문제는 같은 방에서 연속으로 반복되면 안 됩니다.",
+  );
 
   host.leave();
-  await waitFor(() => guestState === null);
-  assert.ok(guestEvents.includes("host-left"));
+  await waitFor(() => guestState?.isHost === true, 3500);
+  assert.equal(guestState.code, "ABC234");
+  assert.equal(guestState.players.length, 1);
+  assert.ok(guestEvents.includes("host-promoted"));
   guest.leave();
   console.log("online room logic tests passed");
 }

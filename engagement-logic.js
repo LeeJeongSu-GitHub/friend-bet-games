@@ -25,12 +25,44 @@
   function getDailyChallenge(key = dateKey()) {
     const seed = hashString(`friend-bet-games:${key}`);
     return {
+      id: `${key}:0`,
+      slot: 0,
       date: key,
       seed,
       game: DAILY_GAMES[seed % DAILY_GAMES.length],
       difficulty:
         DIFFICULTIES[Math.floor(seed / DAILY_GAMES.length) % DIFFICULTIES.length],
     };
+  }
+
+  function getDailyChallenges(key = dateKey(), count = 3) {
+    const first = getDailyChallenge(key);
+    const games = [first.game, ...DAILY_GAMES.filter((game) => game !== first.game)];
+    const random = createSeededRandom(first.seed ^ 0x9e3779b9);
+    for (let index = games.length - 1; index > 1; index -= 1) {
+      const target = 1 + Math.floor(random() * index);
+      [games[index], games[target]] = [games[target], games[index]];
+    }
+    return games.slice(0, Math.max(1, Math.min(Number(count) || 3, games.length)))
+      .map((game, slot) => ({
+        id: `${key}:${slot}`,
+        slot,
+        date: key,
+        seed: slot === 0 ? first.seed : hashString(`friend-bet-games:${key}:${slot}:${game}`),
+        game,
+        difficulty: slot === 0
+          ? first.difficulty
+          : DIFFICULTIES[hashString(`${key}:${slot}`) % DIFFICULTIES.length],
+      }));
+  }
+
+  function recentDateKeys(endDate = dateKey(), count = 7) {
+    const end = dayNumber(endDate);
+    if (end === null) return [];
+    return Array.from({ length: Math.max(1, Number(count) || 7) }, (_, index) => {
+      const date = new Date((end - index) * 86400000);
+      return date.toISOString().slice(0, 10);
+    }).reverse();
   }
 
   function createSeededRandom(seed) {
@@ -86,6 +118,8 @@
     dateKey,
     hashString,
     getDailyChallenge,
+    getDailyChallenges,
+    recentDateKeys,
     createSeededRandom,
     updateStreak,
     rankScores,

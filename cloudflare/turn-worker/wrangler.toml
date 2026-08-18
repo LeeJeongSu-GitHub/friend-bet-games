@@ -1,0 +1,6 @@
+name = "friend-bet-turn"
+main = "src/index.js"
+compatibility_date = "2026-08-18"
+
+[vars]
+ALLOWED_ORIGIN = "https://leejeongsu-github.github.io"

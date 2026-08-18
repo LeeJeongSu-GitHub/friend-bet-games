@@ -144,7 +144,7 @@ async function installFakeOnlinePeer(page) {
           window.setTimeout(() => {
             connection.emit("data", {
               type: "join",
-              version: 4,
+              version: 5,
               nickname: "준호",
             });
             window.setTimeout(() => {
@@ -205,6 +205,16 @@ test("opens a seeded friend challenge and shares the next challenge link", async
   expect(download.suggestedFilename()).toMatch(/^ddak-result-\d+\.png$/);
 });
 
+test("offers three deterministic daily challenges", async ({ page }) => {
+  await page.goto("/");
+  const choices = page.locator("#dailyChallengeChoices button");
+  await expect(choices).toHaveCount(3);
+  await expect(choices.first()).toHaveAttribute("aria-pressed", "true");
+  await choices.nth(1).click();
+  await expect(choices.nth(1)).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator("#dailyChallengeTitle")).toContainText("오늘의 도전");
+});
+
 test("shows and completes the custom install prompt", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => {
@@ -231,10 +241,12 @@ test("creates an online room and starts a synchronized match", async ({ page }) 
   await dialog.getByRole("button", { name: "새 방 만들기" }).click();
 
   await expect(dialog.getByText("민지 (나)")).toBeVisible();
-  await expect(dialog.getByText("준호")).toBeVisible();
+  await expect(dialog.locator("#onlinePlayerList").getByText("준호", { exact: true })).toBeVisible();
   const roomCode = await dialog.locator("#onlineLobbyCode").innerText();
   expect(roomCode).toMatch(/^[A-HJ-NP-Z2-9]{6}$/);
   await expect(dialog.locator("[data-online-game]")).toHaveCount(12);
+  await expect(dialog.locator("[data-online-series]")).toHaveCount(4);
+  await expect(dialog.locator("#onlineInviteQr")).toHaveAttribute("src", /^data:image\/gif;base64,/);
   await dialog.locator('[data-online-game="fruit"]').click();
   await expect(dialog.locator('[data-online-game="fruit"]')).toHaveAttribute(
     "aria-pressed",
@@ -373,7 +385,7 @@ test("plays telepathy rounds and a private-word drawing match", async ({ page })
 
 test("serves the install manifest, PNG icons, and active service worker", async ({ page, request }) => {
   await page.goto("/");
-  const manifest = await (await request.get("/manifest.webmanifest?v=42")).json();
+  const manifest = await (await request.get("/manifest.webmanifest?v=44")).json();
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual([
     "192x192",
     "512x512",
@@ -394,7 +406,7 @@ test("serves the install manifest, PNG icons, and active service worker", async 
         return registration.active?.scriptURL || "";
       }),
     )
-    .toContain("sw.js?v=42");
+    .toContain("sw.js?v=44");
 });
 
 test("reloads the app from the service worker cache while offline", async ({ context, page }) => {

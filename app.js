@@ -184,6 +184,9 @@ const ACHIEVEMENT_DEFINITIONS = [
   { id: "first-game", mark: "01", title: "첫 도전", detail: "기록 게임 1회 완료" },
   { id: "all-rounder", mark: "ALL", title: "올라운더", detail: "기록 게임 4종 완료" },
   { id: "daily-first", mark: "D1", title: "오늘도 도전", detail: "오늘의 도전 첫 완료" },
+  { id: "daily-triple", mark: "3X", title: "오늘의 삼종", detail: "하루 미니게임 3종 완료" },
+  { id: "weekly-5", mark: "W5", title: "주간 단골", detail: "최근 7일 중 5일 참여" },
+  { id: "personal-best", mark: "PB", title: "기록 경신", detail: "개인 최고 기록 달성" },
   { id: "streak-3", mark: "3D", title: "사흘 연속", detail: "오늘의 도전 3일 연속" },
   { id: "streak-7", mark: "7D", title: "일주일 루틴", detail: "오늘의 도전 7일 연속" },
   { id: "dodge-10", mark: "10s", title: "생존 감각", detail: "피하기 10초 생존" },
@@ -275,6 +278,7 @@ const elements = {
   dailyChallengeMeta: document.querySelector("#dailyChallengeMeta"),
   dailyStreak: document.querySelector("#dailyStreak"),
   dailyBest: document.querySelector("#dailyBest"),
+  dailyChallengeChoices: document.querySelector("#dailyChallengeChoices"),
   startDailyChallenge: document.querySelector("#startDailyChallenge"),
   openFriendChallenge: document.querySelector("#openFriendChallenge"),
   openOnlineRoom: document.querySelector("#openOnlineRoom"),
@@ -305,6 +309,8 @@ const elements = {
   onlineEntryView: document.querySelector("#onlineEntryView"),
   onlineLobbyView: document.querySelector("#onlineLobbyView"),
   onlineNickname: document.querySelector("#onlineNickname"),
+  onlineRecentNicknames: document.querySelector("#onlineRecentNicknames"),
+  onlineRecentFriends: document.querySelector("#onlineRecentFriends"),
   createOnlineRoom: document.querySelector("#createOnlineRoom"),
   joinOnlineRoomForm: document.querySelector("#joinOnlineRoomForm"),
   joinOnlineRoom: document.querySelector("#joinOnlineRoom"),
@@ -314,6 +320,11 @@ const elements = {
   onlineConnectionState: document.querySelector("#onlineConnectionState"),
   copyOnlineCode: document.querySelector("#copyOnlineCode"),
   shareOnlineInvite: document.querySelector("#shareOnlineInvite"),
+  onlineInviteQr: document.querySelector("#onlineInviteQr"),
+  onlineSeriesProgress: document.querySelector("#onlineSeriesProgress"),
+  onlineSeriesControl: document.querySelector("#onlineSeriesControl"),
+  onlineSeriesButtons: [...document.querySelectorAll("[data-online-series]")],
+  onlineSeriesStandings: document.querySelector("#onlineSeriesStandings"),
   onlineGameControl: document.querySelector("#onlineGameControl"),
   onlineGameButtons: [...document.querySelectorAll("[data-online-game]")],
   onlineGameRule: document.querySelector("#onlineGameRule"),
@@ -564,6 +575,11 @@ const elements = {
   resultStakeLabel: document.querySelector("#resultStakeLabel"),
   resultStake: document.querySelector("#resultStake"),
   resultParty: document.querySelector("#resultParty"),
+  resultSeriesSummary: document.querySelector("#resultSeriesSummary"),
+  resultSeriesTitle: document.querySelector("#resultSeriesTitle"),
+  resultSeriesMeta: document.querySelector("#resultSeriesMeta"),
+  resultSeriesStandings: document.querySelector("#resultSeriesStandings"),
+  resultSeriesRounds: document.querySelector("#resultSeriesRounds"),
   resultMission: document.querySelector("#resultMission"),
   resultMissionText: document.querySelector("#resultMissionText"),
   drawMission: document.querySelector("#drawMission"),
@@ -625,10 +641,16 @@ let activeGuideStarter = null;
 let activeRunContext = null;
 let specialRandom = null;
 let selectedFriendGame = "dodge";
+let selectedDailyChallengeIndex = 0;
 let incomingSharedChallenge = ChallengeLogic.parseUrl(window.location.href);
 let incomingOnlineRoomCode = OnlineRoom.parseInviteUrl(window.location.href);
 let onlineSession = null;
 let onlineSnapshot = null;
+const ONLINE_HOST_RECOVERY_KEY = "ddak-online-host-recovery-v1";
+const ONLINE_GUEST_RECOVERY_KEY = "ddak-online-guest-recovery-v1";
+const ONLINE_HOST_RECOVERY_TTL = 10 * 60 * 1000;
+const ONLINE_RECENT_NICKNAMES_KEY = "ddak-online-recent-nicknames";
+const ONLINE_RECENT_FRIENDS_KEY = "ddak-online-recent-friends";
 let onlineMatchKey = "";
 let onlineSubmittedKey = "";
 let onlineCountdownFrame = null;
@@ -641,6 +663,8 @@ let onlineDrawingColor = "#17191d";
 let onlineDrawingWidth = 6;
 let onlineDrawingPointer = null;
 let onlineDrawingRenderKey = "";
+let onlinePeerOptionsPromise = null;
+let onlineTransportSource = "stun";
 let wheelRotation = 0;
 let wheelSpinning = false;
 let menuWheelRotation = 0;
@@ -949,12 +973,16 @@ function loadState() {
       !Array.isArray(parsed.dailyProgress)
     ) {
       Object.entries(parsed.dailyProgress)
-        .filter(([date, entry]) => /^\d{4}-\d{2}-\d{2}$/.test(date) && entry)
+        .filter(([key, entry]) => /^\d{4}-\d{2}-\d{2}(?::[0-2])?$/.test(key) && entry)
         .sort(([left], [right]) => right.localeCompare(left))
-        .slice(0, 14)
-        .forEach(([date, entry]) => {
-          const challenge = EngagementLogic.getDailyChallenge(date);
-          dailyProgress[date] = {
+        .slice(0, 28)
+        .forEach(([key, entry]) => {
+          const [date, slotText] = key.split(":");
+          const slot = Math.min(2, Math.max(0, Number(slotText) || 0));
+          const challenge = EngagementLogic.getDailyChallenges(date, 3)[slot];
+          dailyProgress[key] = {
+            date,
+            slot,
             game: challenge.game,
             difficulty: challenge.difficulty,
             attempts: Math.min(999, Math.max(0, Math.round(Number(entry.attempts) || 0))),
@@ -1406,6 +1434,24 @@ function renderRecords() {
   );
   elements.recordsGrid.append(personal);
 
+  const weekly = document.createElement("section");
+  weekly.className = "record-card record-card-wide";
+  const weeklyHeading = document.createElement("h3");
+  weeklyHeading.textContent = "최근 7일 도전 기록";
+  weekly.append(weeklyHeading);
+  EngagementLogic.recentDateKeys(EngagementLogic.dateKey(), 7).forEach((date) => {
+    const entries = Object.entries(state.dailyProgress)
+      .filter(([key, entry]) =>
+        entry?.completed && (entry.date === date || key === date || key.startsWith(`${date}:`)),
+      )
+      .map(([, entry]) => entry);
+    const summary = entries.length
+      ? `${entries.length}/3 완료 · ${entries.map((entry) => entry.bestText).filter(Boolean).join(" / ")}`
+      : "도전 전";
+    weekly.append(createRecordRow(formatChallengeDate(date), summary));
+  });
+  elements.recordsGrid.append(weekly);
+
   const achievementSection = document.createElement("section");
   achievementSection.className = "achievement-records record-card-wide";
   const achievementHeading = document.createElement("h3");
@@ -1506,7 +1552,17 @@ function startGuideGame() {
 }
 
 function getTodayChallenge() {
-  return EngagementLogic.getDailyChallenge(EngagementLogic.dateKey());
+  const challenges = getTodayChallenges();
+  return challenges[selectedDailyChallengeIndex] || challenges[0];
+}
+
+function getTodayChallenges() {
+  return EngagementLogic.getDailyChallenges(EngagementLogic.dateKey(), 3);
+}
+
+function getDailyProgress(challenge) {
+  return state.dailyProgress[challenge.id] ||
+    (challenge.slot === 0 ? state.dailyProgress[challenge.date] : null);
 }
 
 function getGameStartControl(game) {
@@ -1525,7 +1581,7 @@ function formatChallengeDate(date) {
 
 function renderEngagementHub() {
   const challenge = getTodayChallenge();
-  const progress = state.dailyProgress[challenge.date];
+  const progress = getDailyProgress(challenge);
   const completed = Boolean(progress?.completed);
   elements.dailyChallengeDate.textContent = formatChallengeDate(challenge.date);
   elements.dailyChallengeTitle.textContent = `오늘의 도전 · ${getGameShortLabel(challenge.game)}`;
@@ -1535,6 +1591,26 @@ function renderEngagementHub() {
   elements.dailyStreak.textContent = `${state.dailyStreak}일`;
   elements.dailyBest.textContent = progress?.bestText || "--";
   elements.startDailyChallenge.textContent = completed ? "기록 갱신" : "오늘 도전";
+  elements.dailyChallengeChoices.replaceChildren();
+  getTodayChallenges().forEach((entry, index) => {
+    const entryProgress = getDailyProgress(entry);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.classList.toggle("is-active", index === selectedDailyChallengeIndex);
+    button.setAttribute("aria-pressed", String(index === selectedDailyChallengeIndex));
+    const number = document.createElement("span");
+    number.textContent = `${index + 1}`;
+    const copy = document.createElement("strong");
+    copy.textContent = getGameShortLabel(entry.game);
+    const status = document.createElement("small");
+    status.textContent = entryProgress?.completed ? entryProgress.bestText : "도전 전";
+    button.append(number, copy, status);
+    button.addEventListener("click", () => {
+      selectedDailyChallengeIndex = index;
+      renderEngagementHub();
+    });
+    elements.dailyChallengeChoices.append(button);
+  });
 }
 
 function formatChallengeScore(game, score) {
@@ -1749,25 +1825,229 @@ function getSavedOnlineNickname() {
   }
 }
 
+function readStoredNameList(key) {
+  try {
+    const names = JSON.parse(localStorage.getItem(key) || "[]");
+    return Array.isArray(names)
+      ? names.map(OnlineRoom.sanitizeNickname).filter(Boolean).slice(0, 8)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberStoredName(key, name, limit = 8) {
+  const normalized = OnlineRoom.sanitizeNickname(name);
+  const names = [normalized, ...readStoredNameList(key).filter((entry) => entry !== normalized)]
+    .slice(0, limit);
+  try {
+    localStorage.setItem(key, JSON.stringify(names));
+  } catch {
+    // Recent-name shortcuts are optional.
+  }
+  return names;
+}
+
+function renderOnlineRecentNames() {
+  const ownNames = readStoredNameList(ONLINE_RECENT_NICKNAMES_KEY);
+  elements.onlineRecentNicknames.replaceChildren();
+  elements.onlineRecentNicknames.hidden = ownNames.length === 0;
+  if (ownNames.length) {
+    const label = document.createElement("span");
+    label.textContent = "최근 닉네임";
+    elements.onlineRecentNicknames.append(label);
+    ownNames.forEach((nickname) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = nickname;
+      button.addEventListener("click", () => {
+        elements.onlineNickname.value = nickname;
+        elements.onlineNickname.focus();
+      });
+      elements.onlineRecentNicknames.append(button);
+    });
+  }
+
+  const friends = readStoredNameList(ONLINE_RECENT_FRIENDS_KEY);
+  elements.onlineRecentFriends.replaceChildren();
+  elements.onlineRecentFriends.hidden = friends.length === 0;
+  if (friends.length) {
+    const label = document.createElement("span");
+    label.textContent = "최근 함께한 친구";
+    elements.onlineRecentFriends.append(label);
+    friends.forEach((nickname) => {
+      const name = document.createElement("small");
+      name.textContent = nickname;
+      elements.onlineRecentFriends.append(name);
+    });
+  }
+}
+
 function readOnlineNickname() {
   const nickname = OnlineRoom.sanitizeNickname(elements.onlineNickname.value);
   elements.onlineNickname.value = nickname;
   try {
     localStorage.setItem("ddak-online-nickname", nickname);
+    rememberStoredName(ONLINE_RECENT_NICKNAMES_KEY, nickname, 5);
   } catch {
     // Private browsing can block local storage without affecting the room.
   }
   return nickname;
 }
 
-function createOnlineSession() {
+async function loadOnlinePeerOptions() {
+  if (!onlinePeerOptionsPromise) {
+    const endpoint = document.querySelector('meta[name="turn-credentials-url"]')?.content?.trim() || "";
+    onlinePeerOptionsPromise = TurnConfig.load({
+      endpoint,
+      storage: window.sessionStorage,
+    }).then((result) => {
+      onlineTransportSource = result.source;
+      return result.iceServers.length
+        ? { config: { iceServers: result.iceServers } }
+        : {};
+    });
+  }
+  return onlinePeerOptionsPromise;
+}
+
+async function createOnlineSession() {
   onlineSession?.leave(false);
+  const peerOptions = await loadOnlinePeerOptions();
   onlineSession = OnlineRoom.createSession({
     PeerCtor: window.__DDACK_PEER_CTOR__ || window.Peer,
     onState: handleOnlineRoomState,
     onEvent: handleOnlineRoomEvent,
+    storage: window.sessionStorage,
+    peerOptions,
   });
   return onlineSession;
+}
+
+function saveOnlineHostRecovery(snapshot) {
+  if (!snapshot?.isHost) return;
+  try {
+    localStorage.setItem(ONLINE_HOST_RECOVERY_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      room: {
+        version: OnlineRoom.VERSION,
+        code: snapshot.code,
+        game: snapshot.game,
+        difficulty: snapshot.difficulty,
+        round: snapshot.round,
+        series: snapshot.series || null,
+        recentQuizIds: snapshot.recentQuizIds || [],
+        recentDrawingIds: snapshot.recentDrawingIds || [],
+        players: snapshot.players,
+      },
+    }));
+  } catch {
+    // The room still works when private browsing blocks recovery storage.
+  }
+}
+
+function saveOnlineGuestRecovery(snapshot) {
+  if (!snapshot || snapshot.isHost) return;
+  const localPlayer = snapshot.players.find((player) => player.id === snapshot.localPeerId);
+  try {
+    sessionStorage.setItem(ONLINE_GUEST_RECOVERY_KEY, JSON.stringify({
+      savedAt: Date.now(),
+      code: snapshot.code,
+      nickname: localPlayer?.nickname || getSavedOnlineNickname(),
+    }));
+  } catch {
+    // Guest reload recovery is optional when storage is unavailable.
+  }
+}
+
+function clearOnlineGuestRecovery() {
+  try {
+    sessionStorage.removeItem(ONLINE_GUEST_RECOVERY_KEY);
+  } catch {
+    // Ignore storage restrictions.
+  }
+}
+
+function readOnlineGuestRecovery(roomCode = "") {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(ONLINE_GUEST_RECOVERY_KEY) || "null");
+    if (
+      !saved ||
+      Date.now() - Number(saved.savedAt || 0) > OnlineRoom.RECONNECT_GRACE_MS ||
+      !OnlineRoom.isValidRoomCode(saved.code) ||
+      (roomCode && saved.code !== roomCode)
+    ) {
+      clearOnlineGuestRecovery();
+      return null;
+    }
+    return saved;
+  } catch {
+    clearOnlineGuestRecovery();
+    return null;
+  }
+}
+
+async function restoreOnlineGuestRoom(roomCode = "") {
+  const recovery = readOnlineGuestRecovery(roomCode);
+  if (!recovery) return false;
+  elements.onlineNickname.value = recovery.nickname;
+  elements.onlineRoomCode.value = recovery.code;
+  openOnlineRoomDialog();
+  setOnlineEntryStatus(`${recovery.code} 방에 다시 연결하고 있어요.`);
+  await joinOnlineRoom();
+  return Boolean(onlineSnapshot);
+}
+
+function clearOnlineHostRecovery() {
+  try {
+    localStorage.removeItem(ONLINE_HOST_RECOVERY_KEY);
+  } catch {
+    // Ignore storage restrictions.
+  }
+}
+
+function readOnlineHostRecovery() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(ONLINE_HOST_RECOVERY_KEY) || "null");
+    if (
+      !saved?.room ||
+      saved.room.version !== OnlineRoom.VERSION ||
+      Date.now() - Number(saved.savedAt || 0) > ONLINE_HOST_RECOVERY_TTL ||
+      !OnlineRoom.isValidRoomCode(saved.room.code)
+    ) {
+      clearOnlineHostRecovery();
+      return null;
+    }
+    return saved.room;
+  } catch {
+    clearOnlineHostRecovery();
+    return null;
+  }
+}
+
+async function restoreOnlineHostRoom() {
+  if (incomingOnlineRoomCode || onlineSnapshot) return false;
+  const recoveryRoom = readOnlineHostRecovery();
+  if (!recoveryRoom) return false;
+  const host = recoveryRoom.players?.find((player) => player.isHost);
+  const deadline = Date.now() + OnlineRoom.RECONNECT_GRACE_MS;
+  while (Date.now() < deadline) {
+    try {
+      const session = await createOnlineSession();
+      await session.create({
+        nickname: host?.nickname || getSavedOnlineNickname(),
+        code: recoveryRoom.code,
+        recoveryRoom,
+      });
+      openOnlineRoomDialog();
+      return true;
+    } catch {
+      onlineSession = null;
+      await new Promise((resolve) => window.setTimeout(resolve, 1500));
+    }
+  }
+  clearOnlineHostRecovery();
+  return false;
 }
 
 function openOnlineRoomDialog() {
@@ -1779,6 +2059,7 @@ function openOnlineRoomDialog() {
   if (incomingOnlineRoomCode && !onlineSnapshot) {
     elements.onlineRoomCode.value = incomingOnlineRoomCode;
   }
+  renderOnlineRecentNames();
   renderOnlineRoom();
   if (typeof elements.onlineRoomDialog.showModal === "function") {
     if (!elements.onlineRoomDialog.open) elements.onlineRoomDialog.showModal();
@@ -1807,11 +2088,33 @@ function closeOnlineRoomDialog() {
 function handleOnlineRoomEvent(event) {
   if (event.type === "created") {
     showToast(`온라인 방 ${event.code}을 만들었어요.`);
+  } else if (event.type === "restored") {
+    showToast(`온라인 방 ${event.code}을 복구했어요. 친구가 다시 연결되고 있어요.`);
+  } else if (event.type === "host-promoted") {
+    clearOnlineGuestRecovery();
+    showToast("방장이 나가 이 기기가 새 방장이 됐어요.");
   } else if (event.type === "joined") {
     showToast(`온라인 방 ${event.code}에 참가했어요.`);
+  } else if (event.type === "reconnecting") {
+    elements.onlineConnectionState.textContent = "재연결 중";
+    elements.onlineLobbyStatus.textContent = "연결을 복구하고 있어요. 30초 동안 방을 유지합니다.";
+  } else if (event.type === "reconnected") {
+    showToast("같은 방에 다시 연결됐어요.");
+  } else if (event.type === "guest-reconnecting") {
+    showToast(`${event.nickname || "친구"} 연결을 30초 동안 기다려요.`);
+  } else if (event.type === "host-transfer-start") {
+    elements.onlineConnectionState.textContent = "방장 승계 중";
+    elements.onlineLobbyStatus.textContent = "이 기기에서 방을 이어 열고 있어요.";
+  } else if (event.type === "host-transfer-waiting") {
+    elements.onlineConnectionState.textContent = "새 방장 연결 중";
+    elements.onlineLobbyStatus.textContent = "새 방장이 같은 방을 여는 동안 잠시 기다려 주세요.";
   } else if (event.type === "host-left") {
+    clearOnlineGuestRecovery();
     stopOnlineGame(onlineSnapshot?.game);
-    setOnlineEntryStatus("방장이 나가서 방이 종료됐어요.", true);
+    setOnlineEntryStatus(
+      event.message || "30초 동안 다시 연결하지 못해 방에서 나왔어요.",
+      true,
+    );
     onlineSession = null;
     openOnlineRoomDialog();
   } else if (event.type === "network-lost") {
@@ -1900,7 +2203,9 @@ function renderOnlinePlayers(snapshot) {
     stateLabel.className = "online-player-state";
     const activityInProgress = ONLINE_ACTIVITY_GAMES.has(snapshot.game) &&
       ["countdown", "playing"].includes(snapshot.status);
-    stateLabel.textContent = player.isHost
+    stateLabel.textContent = player.connected === false
+      ? "재연결 대기 · 30초"
+      : player.isHost
       ? "방장"
       : snapshot.status === "choosing"
         ? "다음 게임 대기"
@@ -1916,13 +2221,80 @@ function renderOnlinePlayers(snapshot) {
     copy.append(name, stateLabel);
     const score = document.createElement("span");
     score.className = "online-player-score";
-    score.textContent = snapshot.status === "lobby"
+    score.textContent = player.connected === false
+      ? "OFFLINE"
+      : snapshot.status === "lobby"
       ? player.ready
         ? "READY"
         : "WAIT"
       : OnlineRoom.formatScore(snapshot.game, player.score);
     item.append(rank, copy, score);
     elements.onlinePlayerList.append(item);
+  });
+}
+
+function rememberOnlineFriends(snapshot) {
+  if (!snapshot?.players?.length) return;
+  const current = snapshot.players
+    .filter((player) => player.id !== snapshot.localPeerId)
+    .map((player) => OnlineRoom.sanitizeNickname(player.nickname));
+  const names = [...new Set([...current, ...readStoredNameList(ONLINE_RECENT_FRIENDS_KEY)])]
+    .slice(0, 8);
+  try {
+    const serialized = JSON.stringify(names);
+    if (localStorage.getItem(ONLINE_RECENT_FRIENDS_KEY) !== serialized) {
+      localStorage.setItem(ONLINE_RECENT_FRIENDS_KEY, serialized);
+    }
+  } catch {
+    // Friend shortcuts are optional.
+  }
+}
+
+function renderOnlineInviteQr(snapshot) {
+  if (!elements.onlineInviteQr || typeof window.qrcode !== "function") return;
+  const url = OnlineRoom.buildInviteUrl(window.location.href, snapshot.code);
+  if (elements.onlineInviteQr.dataset.url === url && elements.onlineInviteQr.src) return;
+  try {
+    const qr = window.qrcode(0, "M");
+    qr.addData(url);
+    qr.make();
+    elements.onlineInviteQr.src = qr.createDataURL(5, 4);
+    elements.onlineInviteQr.dataset.url = url;
+  } catch {
+    elements.onlineInviteQr.removeAttribute("src");
+  }
+}
+
+function renderOnlineSeries(snapshot) {
+  const series = snapshot.series;
+  if (!series) return;
+  const modeRule = OnlineSessionLogic.MODES[series.mode] || OnlineSessionLogic.MODES.single;
+  elements.onlineSeriesProgress.textContent = series.finished
+    ? `${modeRule.label} 종료`
+    : series.mode === "bestOf3"
+      ? `${series.currentRound}경기 · 먼저 ${series.targetWins}승`
+      : `${Math.min(series.currentRound, series.totalRounds)}/${series.totalRounds} 게임`;
+  elements.onlineSeriesButtons.forEach((button) => {
+    const active = button.dataset.onlineSeries === series.mode;
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-pressed", String(active));
+    button.disabled = !snapshot.isHost || !["lobby", "choosing"].includes(snapshot.status) || series.rounds.length > 0;
+  });
+  const standings = OnlineSessionLogic.sortedStandings(series);
+  elements.onlineSeriesStandings.hidden = series.mode === "single" || standings.length < 2;
+  elements.onlineSeriesStandings.replaceChildren();
+  standings.forEach((entry, index) => {
+    const item = document.createElement("li");
+    const rank = document.createElement("strong");
+    rank.textContent = `${index + 1}`;
+    const name = document.createElement("span");
+    name.textContent = entry.nickname;
+    const score = document.createElement("small");
+    score.textContent = series.mode === "bestOf3"
+      ? `${entry.wins}승`
+      : `${entry.points}점`;
+    item.append(rank, name, score);
+    elements.onlineSeriesStandings.append(item);
   });
 }
 
@@ -1948,6 +2320,45 @@ function renderOnlineRoomBar(snapshot) {
   }
 }
 
+function renderOnlineSeriesResult(snapshot) {
+  const series = snapshot?.series;
+  const visible = Boolean(series && series.mode !== "single" && series.rounds?.length);
+  elements.resultSeriesSummary.hidden = !visible;
+  if (!visible) {
+    elements.resultSeriesStandings.replaceChildren();
+    elements.resultSeriesRounds.replaceChildren();
+    return;
+  }
+  const rule = OnlineSessionLogic.MODES[series.mode] || OnlineSessionLogic.MODES.single;
+  elements.resultSeriesTitle.textContent = series.finished ? "파티 최종 순위" : "현재 종합 순위";
+  elements.resultSeriesMeta.textContent = `${rule.label} · ${series.rounds.length}게임 완료`;
+  elements.resultSeriesStandings.replaceChildren();
+  OnlineSessionLogic.sortedStandings(series).forEach((entry, index) => {
+    const item = document.createElement("li");
+    const rank = document.createElement("strong");
+    rank.textContent = String(index + 1);
+    const name = document.createElement("span");
+    name.textContent = entry.nickname;
+    const score = document.createElement("small");
+    score.textContent = series.mode === "bestOf3" ? `${entry.wins}승` : `${entry.points}점`;
+    item.append(rank, name, score);
+    elements.resultSeriesStandings.append(item);
+  });
+  elements.resultSeriesRounds.replaceChildren();
+  series.rounds.forEach((round) => {
+    const item = document.createElement("li");
+    const game = document.createElement("span");
+    game.textContent = `${round.number}. ${OnlineRoom.GAME_RULES[round.game]?.label || "미니게임"}`;
+    const winners = document.createElement("strong");
+    winners.textContent = round.winnerIds
+      .map((id) => (round.ranking || []).find((entry) => entry.id === id)?.nickname)
+      .filter(Boolean)
+      .join(", ") || "공동 기록";
+    item.append(game, winners);
+    elements.resultSeriesRounds.append(item);
+  });
+}
+
 function renderOnlineResultDialogState(snapshot) {
   if (
     !elements.resultDialog.open ||
@@ -1969,17 +2380,35 @@ function renderOnlineResultDialogState(snapshot) {
 
   if (!completed) return;
   const ranking = OnlineRoom.rankPlayers(snapshot.players, snapshot.game);
-  const winners = ranking.filter((player) => player.rank === 1);
+  const seriesFinished = Boolean(snapshot.series?.finished && snapshot.series.mode !== "single");
+  const seriesStandings = OnlineSessionLogic.sortedStandings(snapshot.series);
+  const winners = seriesFinished
+    ? snapshot.series.championIds
+      .map((id) => getOnlinePlayer(snapshot, id) || seriesStandings.find((entry) => entry.id === id))
+      .filter(Boolean)
+    : ranking.filter((player) => player.rank === 1);
   const winnerNames = winners.map((player) => player.nickname).join(", ");
-  elements.resultLead.textContent = winners.length > 1
-    ? "온라인 대결 공동 1위"
-    : "온라인 대결 승리";
+  elements.resultLead.textContent = seriesFinished
+    ? winners.length > 1 ? "파티 종합 공동 우승" : "파티 종합 우승"
+    : winners.length > 1 ? "온라인 대결 공동 1위" : "온라인 대결 승리";
   elements.resultName.textContent = winnerNames;
   elements.resultName.classList.toggle("is-list", winners.length > 1);
   elements.resultStakeLabel.textContent = "최종 기록";
   elements.resultStake.textContent = winners
     .map((player) => `${player.nickname} · ${OnlineRoom.formatScore(snapshot.game, player.score)}`)
     .join(" / ");
+  renderOnlineSeriesResult(snapshot);
+  if (snapshot.series?.finished && snapshot.series.mode !== "single") {
+    const lastNames = snapshot.series.lastPlaceIds
+      .map((id) => (
+        getOnlinePlayer(snapshot, id) || seriesStandings.find((entry) => entry.id === id)
+      )?.nickname)
+      .filter(Boolean)
+      .join(", ");
+    elements.resultStakeLabel.textContent = "파티 최종 벌칙";
+    elements.resultStake.textContent = `${lastNames || "꼴찌"} · ${snapshot.series.penalty}`;
+    elements.changeGame.textContent = snapshot.isHost ? "새 파티 시작" : "방장 선택 대기 중";
+  }
 }
 
 function renderOnlineRoom() {
@@ -2001,6 +2430,8 @@ function renderOnlineRoom() {
     ? snapshot.pendingDifficulty
     : snapshot.difficulty;
   elements.onlineLobbyCode.textContent = snapshot.code;
+  renderOnlineInviteQr(snapshot);
+  renderOnlineSeries(snapshot);
   elements.onlineConnectionState.textContent = results
     ? "대결 완료"
     : choosing
@@ -2010,18 +2441,34 @@ function renderOnlineRoom() {
       : snapshot.status === "countdown"
         ? "시작 준비"
         : "연결됨";
+  elements.onlineConnectionState.title = onlineTransportSource.startsWith("turn")
+    ? "TURN 릴레이 사용 가능"
+    : "STUN 직접 연결 · TURN 미설정 시 일부 네트워크에서 제한될 수 있음";
   elements.onlinePlayerCount.textContent = `${snapshot.players.length} / ${OnlineRoom.MAX_PLAYERS}`;
   elements.onlineLobbyStatus.textContent = getOnlineRoomStatus(snapshot);
   elements.onlineGameButtons.forEach((button) => {
     const active = button.dataset.onlineGame === selectedGame;
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-pressed", String(active));
-    button.disabled = !snapshot.isHost || !setupEnabled;
+    button.disabled = !snapshot.isHost || !setupEnabled || snapshot.series?.mode === "random";
   });
-  const difficultyRelevant = ["dodge", "runner", "stack", "fruit"].includes(
+  const difficultyRelevant = [
+    "dodge",
+    "runner",
+    "stack",
+    "fruit",
+    "initialQuiz",
+    "triviaQuiz",
+    "drawing",
+  ].includes(
     selectedGame,
   );
-  elements.onlineGameRule.textContent = ONLINE_GAME_DESCRIPTIONS[selectedGame];
+  const questionDifficultyRelevant = ["initialQuiz", "triviaQuiz", "drawing"].includes(
+    selectedGame,
+  );
+  elements.onlineGameRule.textContent = questionDifficultyRelevant
+    ? `${ONLINE_GAME_DESCRIPTIONS[selectedGame]} ${DIFFICULTY_PROFILES[selectedDifficulty].label} 문제로 출제돼요.`
+    : ONLINE_GAME_DESCRIPTIONS[selectedGame];
   elements.onlineDifficultyControl.parentElement.classList.toggle(
     "is-disabled",
     !difficultyRelevant,
@@ -2452,6 +2899,9 @@ function handleOnlineRoomState(snapshot) {
   const previousStatus = onlineSnapshot?.status;
   const previousGame = onlineSnapshot?.game;
   onlineSnapshot = snapshot;
+  if (snapshot?.isHost) saveOnlineHostRecovery(snapshot);
+  if (snapshot && !snapshot.isHost) saveOnlineGuestRecovery(snapshot);
+  if (snapshot) rememberOnlineFriends(snapshot);
   renderOnlineRoom();
   if (!snapshot) {
     clearOnlineCountdown();
@@ -2459,6 +2909,14 @@ function handleOnlineRoomState(snapshot) {
     return;
   }
   if (snapshot.status === "countdown") scheduleOnlineMatch(snapshot);
+  if (
+    snapshot.status === "playing" &&
+    !ONLINE_ACTIVITY_GAMES.has(snapshot.game) &&
+    onlineMatchKey !== `${snapshot.code}:${snapshot.round}:${snapshot.startsAt}`
+  ) {
+    onlineMatchKey = `${snapshot.code}:${snapshot.round}:${snapshot.startsAt}`;
+    startOnlineGame(snapshot.game, onlineMatchKey);
+  }
   if (ONLINE_ACTIVITY_GAMES.has(snapshot.game)) renderOnlineActivity(snapshot);
   if (snapshot.status === "results" && previousStatus !== "results") {
     triggerHaptic([45, 30, 80]);
@@ -2471,7 +2929,9 @@ async function createOnlineRoom() {
   setOnlineEntryBusy(true);
   setOnlineEntryStatus("새 방을 연결하고 있어요.");
   try {
-    await createOnlineSession().create({
+    clearOnlineHostRecovery();
+    const session = await createOnlineSession();
+    await session.create({
       nickname,
       game: "reaction",
       difficulty: state.difficulty,
@@ -2500,7 +2960,8 @@ async function joinOnlineRoom(event) {
   setOnlineEntryBusy(true);
   setOnlineEntryStatus(`${code} 방을 찾고 있어요.`);
   try {
-    await createOnlineSession().join({ nickname, code });
+    const session = await createOnlineSession();
+    await session.join({ nickname, code });
     incomingOnlineRoomCode = "";
     setOnlineEntryStatus("방장은 대결이 끝날 때까지 페이지를 열어 두세요.");
   } catch (error) {
@@ -2518,7 +2979,16 @@ async function joinOnlineRoom(event) {
         );
       }
     } else {
-      setOnlineEntryStatus(error.message || "방에 참가하지 못했어요.", true);
+      const errorMessages = {
+        [OnlineRoom.ERROR_CODES.ROOM_UNAVAILABLE]: "방 코드를 다시 확인해 주세요. 없거나 이미 종료된 방이에요.",
+        [OnlineRoom.ERROR_CODES.ROOM_CLOSED]: "방장이 종료한 방이에요. 새 방 코드를 받아 주세요.",
+        [OnlineRoom.ERROR_CODES.ROOM_STARTED]: "이미 게임 중인 방이에요. 다음 게임 선택 때 다시 참가해 주세요.",
+        [OnlineRoom.ERROR_CODES.ROOM_FULL]: "참가자가 8명이라 방이 가득 찼어요.",
+      };
+      setOnlineEntryStatus(
+        errorMessages[error?.code] || error.message || "방에 참가하지 못했어요.",
+        true,
+      );
     }
   } finally {
     setOnlineEntryBusy(false);
@@ -2714,6 +3184,8 @@ function submitOnlineScore(game, score, detail) {
 function leaveOnlineRoom() {
   const wasHost = onlineSnapshot?.isHost;
   stopOnlineGame(onlineSnapshot?.game);
+  if (onlineSnapshot?.isHost) clearOnlineHostRecovery();
+  else clearOnlineGuestRecovery();
   onlineSession?.leave(true);
   onlineSession = null;
   onlineSnapshot = null;
@@ -2743,12 +3215,34 @@ function getUnlockedAchievementIds() {
   const completedDailyCount = Object.values(state.dailyProgress).filter(
     (entry) => entry.completed,
   ).length;
+  const completedDailyDates = new Set(
+    Object.entries(state.dailyProgress)
+      .filter(([, entry]) => entry?.completed)
+      .map(([key, entry]) => entry.date || key.split(":")[0]),
+  );
+  const today = EngagementLogic.dateKey();
+  const todayCompleted = Object.entries(state.dailyProgress).filter(([key, entry]) =>
+    entry?.completed && (entry.date === today || key === today || key.startsWith(`${today}:`)),
+  ).length;
+  const weeklyDays = EngagementLogic.recentDateKeys(today, 7)
+    .filter((date) => completedDailyDates.has(date)).length;
   const unlocked = [];
   if (state.achievementStats.totalGames >= 1) unlocked.push("first-game");
   if (playedGames.length >= EngagementLogic.DAILY_GAMES.length) {
     unlocked.push("all-rounder");
   }
   if (completedDailyCount >= 1) unlocked.push("daily-first");
+  if (todayCompleted >= 3) unlocked.push("daily-triple");
+  if (weeklyDays >= 5) unlocked.push("weekly-5");
+  if (
+    state.reactionSoloBest !== null ||
+    state.timerSoloBest !== null ||
+    state.tapBest > 0 ||
+    getMaximumRecord("dodgeBest") > 0 ||
+    getMaximumRecord("runnerBest") > 0 ||
+    getMaximumRecord("stackBest") > 0 ||
+    getMaximumRecord("fruitBest") > 0
+  ) unlocked.push("personal-best");
   if (state.dailyStreak >= 3) unlocked.push("streak-3");
   if (state.dailyStreak >= 7) unlocked.push("streak-7");
   if (getMaximumRecord("dodgeBest") >= 10000) unlocked.push("dodge-10");
@@ -2828,14 +3322,21 @@ function applyEngagementResult(rawResult) {
   );
 
   if (context.type === "daily") {
-    const previous = state.dailyProgress[context.date];
-    const firstCompletion = !previous?.completed;
+    const progressKey = context.id || `${context.date}:${context.slot || 0}`;
+    const previous = state.dailyProgress[progressKey] ||
+      (context.slot === 0 ? state.dailyProgress[context.date] : null);
+    const firstDateCompletion = !Object.entries(state.dailyProgress).some(([key, entry]) =>
+      entry?.completed && (key === context.date || key.startsWith(`${context.date}:`)),
+    );
+    const newBest = !previous?.completed || rawResult.scoreValue > (previous?.bestScore || 0);
     const bestScore = Math.max(previous?.bestScore || 0, rawResult.scoreValue);
     const bestText =
-      rawResult.scoreValue >= (previous?.bestScore || 0)
+      newBest
         ? rawResult.scoreText
         : previous.bestText;
-    state.dailyProgress[context.date] = {
+    state.dailyProgress[progressKey] = {
+      date: context.date,
+      slot: context.slot || 0,
       game: context.game,
       difficulty: context.difficulty,
       attempts: (previous?.attempts || 0) + 1,
@@ -2843,7 +3344,7 @@ function applyEngagementResult(rawResult) {
       bestText,
       completed: true,
     };
-    if (firstCompletion) {
+    if (firstDateCompletion) {
       state.dailyStreak = EngagementLogic.updateStreak(
         state.lastDailyDate,
         context.date,
@@ -2856,13 +3357,14 @@ function applyEngagementResult(rawResult) {
     return {
       ...rawResult,
       gameLabel: `오늘의 도전 · ${getGameShortLabel(rawResult.game)}`,
-      lead: rawResult.scoreValue >= (previous?.bestScore || 0)
+      lead: newBest
         ? "오늘의 최고 기록"
         : "오늘의 도전 완료",
       stakeLabel: "오늘 최고",
       stake: bestText,
       copyText: `${rawResult.copyText}\n오늘의 도전 ${context.date} · 최고 ${bestText}`,
       dailyChallenge: true,
+      newBest,
     };
   }
 
@@ -5320,6 +5822,7 @@ function handleReactionSoloTap() {
     showResult({
       game: "reaction",
       gameLabel: "개인 반응속도",
+      newBest,
       lead: newBest ? "새로운 최고 기록" : "이번 반응 기록",
       displayText: `${record}ms`,
       stakeLabel: "개인 최고",
@@ -5533,7 +6036,7 @@ function resetTimerSolo() {
   timerSoloAnimationFrame = null;
   timerSoloRunning = false;
   timerSoloStartedAt = 0;
-  timerSoloRound = { attempts: [], complete: false };
+  timerSoloRound = { attempts: [], complete: false, newBest: false };
   elements.timerSoloBoard.dataset.phase = "idle";
   elements.timerSoloDisplay.textContent = "0.00";
   elements.timerSoloRoundLabel.textContent = "ROUND 1 / 3";
@@ -5592,6 +6095,7 @@ function finishTimerSoloTurn(forcedElapsed = null) {
     state.timerSoloBest === null || attempt.difference < state.timerSoloBest;
   if (newBest) {
     state.timerSoloBest = attempt.difference;
+    timerSoloRound.newBest = true;
     saveState();
   }
 
@@ -5631,6 +6135,7 @@ function finishTimerSoloTurn(forcedElapsed = null) {
     showResult({
       game: "timer",
       gameLabel: "개인 5초 기록",
+      newBest: timerSoloRound.newBest,
       lead: "세 번의 평균 오차",
       displayText: `${(averageDifference / 1000).toFixed(2)}초`,
       stakeLabel: "개인 최고 오차",
@@ -6038,6 +6543,7 @@ function finishDodge() {
     showResult({
       game: "dodge",
       scoreValue: record,
+      newBest,
       scoreText: `${formatDodgeTime(record)}초`,
       lead: newBest ? "새로운 최고 기록" : "이번 생존 기록",
       displayText: `${formatDodgeTime(record)}초`,
@@ -6309,6 +6815,7 @@ function finishTap() {
     showResult({
       game: "tap",
       gameLabel: "10초 연타",
+      newBest,
       lead: newBest ? "새로운 최고 기록" : "이번 연타 기록",
       displayText: `${tapCount}회`,
       stakeLabel: "평균 속도",
@@ -7048,6 +7555,7 @@ function finishRunner() {
     showResult({
       game: "runner",
       scoreValue: runnerScoreValue,
+      newBest: newScoreBest,
       scoreText: runnerScoreValue.toLocaleString() + "점",
       lead: newScoreBest ? "새로운 최고 기록!" : "이번 달리기 기록",
       displayText: runnerScoreValue.toLocaleString() + "점",
@@ -7556,6 +8064,7 @@ function finishStack() {
     showResult({
       game: "stack",
       scoreValue: stackScoreValue,
+      newBest,
       scoreText: `${stackScoreValue}층`,
       lead: newBest ? "새로운 최고 기록" : "이번에 쌓은 높이",
       displayText: `${stackScoreValue}층`,
@@ -8369,6 +8878,7 @@ function finishFruit(completed) {
     showResult({
       game: "fruit",
       scoreValue: fruitScoreValue,
+      newBest,
       scoreText: `${fruitScoreValue.toLocaleString()}점`,
       lead: completed
         ? "과일 왕관을 완성했어요!"
@@ -8775,8 +9285,12 @@ function showResult(resultOrName, game) {
   elements.resultName.classList.toggle("is-list", Boolean(result.list));
   elements.resultStakeLabel.textContent = result.stakeLabel;
   elements.resultStake.textContent = result.stake;
+  elements.resultDialog.classList.toggle("is-new-best", Boolean(result.newBest));
   elements.resultParty.hidden = !result.partyMessage;
   elements.resultParty.textContent = result.partyMessage;
+  elements.resultSeriesSummary.hidden = true;
+  elements.resultSeriesStandings.replaceChildren();
+  elements.resultSeriesRounds.replaceChildren();
   resetResultMission();
   const onlineResult = Boolean(result.onlineRoomCode);
   elements.drawMission.hidden = result.allowMission === false || onlineResult;
@@ -8811,6 +9325,7 @@ function showResult(resultOrName, game) {
 }
 
 function closeResult() {
+  elements.resultDialog.classList.remove("is-new-best");
   if (typeof elements.resultDialog.close === "function") {
     elements.resultDialog.close();
   } else {
@@ -9128,6 +9643,13 @@ elements.onlineRoomCode.addEventListener("input", () => {
 });
 elements.copyOnlineCode.addEventListener("click", copyOnlineRoomCode);
 elements.shareOnlineInvite.addEventListener("click", shareOnlineRoomInvite);
+elements.onlineSeriesButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!onlineSession?.setSeriesMode(button.dataset.onlineSeries, state.stake)) {
+      showToast("파티 진행 방식은 방장이 첫 게임 전에 정할 수 있어요.");
+    }
+  });
+});
 elements.toggleOnlineReady.addEventListener("click", () => {
   const localPlayer = onlineSnapshot?.players.find(
     (player) => player.id === onlineSnapshot.localPeerId,
@@ -9540,7 +10062,7 @@ window.addEventListener("beforeunload", () => {
   window.clearTimeout(fruitCompletionTimer);
 });
 
-function handleStartupAction() {
+async function handleStartupAction() {
   if (incomingSharedChallenge) {
     setDifficulty(incomingSharedChallenge.difficulty, false);
     setPlayMode("solo");
@@ -9554,10 +10076,15 @@ function handleStartupAction() {
   }
 
   if (incomingOnlineRoomCode) {
+    if (await restoreOnlineGuestRoom(incomingOnlineRoomCode)) return;
     elements.onlineRoomCode.value = incomingOnlineRoomCode;
     openOnlineRoomDialog();
     return;
   }
+
+  if (await restoreOnlineGuestRoom()) return;
+
+  if (await restoreOnlineHostRoom()) return;
 
   const url = new URL(window.location.href);
   const shortcut = url.searchParams.get("shortcut");
@@ -9625,6 +10152,6 @@ PwaManager.setup({
   updateBanner: elements.appUpdateBanner,
   updateButton: elements.applyAppUpdate,
   dismissUpdateButton: elements.dismissAppUpdate,
-  serviceWorkerUrl: "./sw.js?v=42",
+  serviceWorkerUrl: "./sw.js?v=44",
   notify: showToast,
 });

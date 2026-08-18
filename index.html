@@ -8,6 +8,7 @@
       content="친구와 함께하는 내기 게임부터 개인 반응속도, 장애물 피하기, 간식 재료 러너까지 즐기는 무료 미니게임"
     />
     <meta name="theme-color" content="#ff5d4c" />
+    <meta name="turn-credentials-url" content="" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="딱! 정해 - 같이 하는 게임과 혼자 하는 기록 도전" />
     <meta
@@ -15,10 +16,10 @@
       content="같이 하기와 혼자 도전을 골라 빠른 결정, 대결, 장애물 피하기와 간식 재료 러너를 즐겨 보세요."
     />
     <title>딱! 정해 - 룰렛·파티 세션·기록 도전 미니게임</title>
-    <link rel="icon" href="./favicon.svg?v=42" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./icons/icon-192.png?v=42" />
-    <link rel="manifest" href="./manifest.webmanifest?v=42" />
-    <link rel="stylesheet" href="./styles.css?v=42" />
+    <link rel="icon" href="./favicon.svg?v=44" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png?v=44" />
+    <link rel="manifest" href="./manifest.webmanifest?v=44" />
+    <link rel="stylesheet" href="./styles.css?v=44" />
   </head>
   <body>
     <header class="topbar">
@@ -242,6 +243,7 @@
             <span><small>연속</small><strong id="dailyStreak">0일</strong></span>
             <span><small>오늘 최고</small><strong id="dailyBest">--</strong></span>
           </div>
+          <div id="dailyChallengeChoices" class="daily-challenge-choices" role="group" aria-label="오늘의 미니게임 3종"></div>
           <div class="engagement-actions">
             <button id="openOnlineRoom" class="secondary-action online-entry-button" type="button">온라인 방</button>
             <button id="openFriendChallenge" class="secondary-action" type="button">친구 기록 대결</button>
@@ -1583,6 +1585,14 @@
         <strong id="resultStake"></strong>
       </div>
       <div id="resultParty" class="result-party" hidden></div>
+      <section id="resultSeriesSummary" class="result-series-summary" aria-labelledby="resultSeriesTitle" hidden>
+        <div>
+          <strong id="resultSeriesTitle">파티 종합 순위</strong>
+          <span id="resultSeriesMeta"></span>
+        </div>
+        <ol id="resultSeriesStandings" aria-label="파티 최종 순위"></ol>
+        <ul id="resultSeriesRounds" aria-label="게임별 승자"></ul>
+      </section>
       <div id="resultMission" class="result-mission" hidden>
         <span>MISSION CARD</span>
         <strong id="resultMissionText"></strong>
@@ -1684,6 +1694,8 @@
           <span>내 닉네임</span>
           <input id="onlineNickname" maxlength="12" autocomplete="nickname" placeholder="이름 입력" />
         </label>
+        <div id="onlineRecentNicknames" class="online-recent-list" aria-label="최근 닉네임" hidden></div>
+        <div id="onlineRecentFriends" class="online-recent-list is-friends" aria-label="최근 함께한 친구" hidden></div>
         <button id="createOnlineRoom" class="primary-action blue" type="button">새 방 만들기</button>
         <div class="online-entry-divider"><span>또는</span></div>
         <form id="joinOnlineRoomForm" class="online-join-form">
@@ -1718,6 +1730,27 @@
           <button id="copyOnlineCode" class="secondary-action" type="button">코드 복사</button>
           <button id="shareOnlineInvite" class="secondary-action" type="button">초대 링크</button>
         </div>
+        <div class="online-qr-wrap">
+          <img id="onlineInviteQr" alt="이 방에 참가하는 QR 코드" width="148" height="148" />
+          <div>
+            <strong>카메라로 바로 참가</strong>
+            <span>QR을 찍으면 방 코드가 자동으로 입력돼요.</span>
+          </div>
+        </div>
+
+        <div class="online-series-setting">
+          <div>
+            <strong>파티 진행 방식</strong>
+            <span id="onlineSeriesProgress">한 게임</span>
+          </div>
+          <div id="onlineSeriesControl" class="online-series-control" role="group" aria-label="온라인 파티 진행 방식">
+            <button class="is-active" type="button" data-online-series="single" aria-pressed="true">한 게임</button>
+            <button type="button" data-online-series="bestOf3" aria-pressed="false">3판 2선승</button>
+            <button type="button" data-online-series="five" aria-pressed="false">5게임</button>
+            <button type="button" data-online-series="random" aria-pressed="false">랜덤전</button>
+          </div>
+        </div>
+        <ol id="onlineSeriesStandings" class="online-series-standings" aria-label="파티 누적 순위" hidden></ol>
 
         <div id="onlineGameControl" class="online-game-control" role="group" aria-label="온라인 대결 게임 선택">
           <button class="is-active" type="button" data-online-game="reaction" aria-pressed="true">반응속도</button>
@@ -1823,16 +1856,19 @@
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
-    <script src="./vendor/matter-js/matter.min.js?v=42"></script>
-    <script src="./vendor/peerjs/peerjs.min.js?v=42"></script>
-    <script src="./fruit-logic.js?v=42"></script>
-    <script src="./stack-logic.js?v=42"></script>
-    <script src="./engagement-logic.js?v=42"></script>
-    <script src="./challenge-logic.js?v=42"></script>
-    <script src="./online-activity-logic.js?v=42"></script>
-    <script src="./online-room.js?v=42"></script>
-    <script src="./result-share.js?v=42"></script>
-    <script src="./pwa-manager.js?v=42"></script>
-    <script src="./app.js?v=42"></script>
+    <script src="./vendor/matter-js/matter.min.js?v=44"></script>
+    <script src="./vendor/peerjs/peerjs.min.js?v=44"></script>
+    <script src="./vendor/qrcode-generator/qrcode.js?v=44"></script>
+    <script src="./fruit-logic.js?v=44"></script>
+    <script src="./stack-logic.js?v=44"></script>
+    <script src="./engagement-logic.js?v=44"></script>
+    <script src="./challenge-logic.js?v=44"></script>
+    <script src="./online-activity-logic.js?v=44"></script>
+    <script src="./online-session-logic.js?v=44"></script>
+    <script src="./turn-config.js?v=44"></script>
+    <script src="./online-room.js?v=44"></script>
+    <script src="./result-share.js?v=44"></script>
+    <script src="./pwa-manager.js?v=44"></script>
+    <script src="./app.js?v=44"></script>
   </body>
 </html>

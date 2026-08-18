@@ -140,6 +140,9 @@ assert.doesNotMatch(
   "soundToggle",
   "vibrationToggle",
   "tryAnotherGame",
+  "resultSeriesSummary",
+  "resultSeriesStandings",
+  "resultSeriesRounds",
 ].forEach((id) => {
   assert.match(html, new RegExp(`id="${id}"`), `${id} must exist`);
 });
@@ -204,6 +207,7 @@ assert.match(app, /function createOnlineRoom\(\)/);
 assert.match(app, /function scheduleOnlineMatch\(snapshot\)/);
 assert.match(app, /function renderOnlineQuiz\(snapshot\)/);
 assert.match(app, /function renderOnlineRps\(snapshot\)/);
+assert.match(app, /"initialQuiz",\s*"triviaQuiz",\s*"drawing"/);
 assert.match(app, /submitOnlineScore\("reaction", record/);
 assert.match(app, /submitOnlineScore\(\s*"timer",\s*averageDifference/);
 assert.match(app, /submitOnlineScore\("tap", tapCount/);
@@ -220,6 +224,16 @@ assert.match(challengeLogic, /function parseUrl\(urlValue\)/);
 assert.match(onlineRoom, /class RoomSession/);
 assert.match(onlineRoom, /function buildInviteUrl\(baseUrl, roomCode\)/);
 assert.match(onlineRoom, /function rankPlayers\(players, game\)/);
+assert.match(onlineRoom, /RECONNECT_GRACE_MS = 30000/);
+assert.match(onlineRoom, /function electHostSuccessor\(room\)/);
+assert.match(onlineRoom, /function prepareHostTransferRoom\(room,/);
+assert.match(onlineRoom, /getQuizQuestionAvoiding/);
+assert.match(onlineRoom, /getDrawingWordAvoiding/);
+assert.match(app, /function restoreOnlineHostRoom\(\)/);
+assert.match(app, /function restoreOnlineGuestRoom\(roomCode = ""\)/);
+assert.match(html, /id="onlineInviteQr"/);
+assert.match(html, /data-online-series="bestOf3"/);
+assert.match(html, /id="dailyChallengeChoices"/);
 assert.match(resultShare, /function createCanvas\(result, options = \{\}\)/);
 assert.match(pwaManager, /beforeinstallprompt/);
 assert.match(pwaManager, /registration\.waiting\.postMessage/);
@@ -251,7 +265,7 @@ assert.match(
 );
 assert.match(
   html,
-  /vendor\/peerjs\/peerjs\.min\.js\?v=42/,
+  /vendor\/peerjs\/peerjs\.min\.js\?v=44/,
   "PeerJS must be served locally for online rooms",
 );
 assert.match(

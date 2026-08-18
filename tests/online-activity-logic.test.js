@@ -7,19 +7,58 @@ assert.deepEqual(initialQuestion, sameInitialQuestion);
 assert.ok(initialQuestion.prompt);
 assert.ok(initialQuestion.clue);
 assert.ok(initialQuestion.answers.length > 0);
+assert.ok(OnlineActivityLogic.QUIZ_BANKS.initialQuiz.length >= 32);
+assert.ok(OnlineActivityLogic.QUIZ_BANKS.triviaQuiz.length >= 32);
 assert.equal(OnlineActivityLogic.getKoreanInitials("도깨비"), "ㄷㄲㅂ");
 assert.equal(OnlineActivityLogic.getKoreanInitials("아이스크림"), "ㅇㅇㅅㅋㄹ");
-for (let offset = 0; offset < OnlineActivityLogic.QUIZ_BANKS.initialQuiz.length; offset += 1) {
-  const question = OnlineActivityLogic.getQuizQuestion("initialQuiz", 12345, offset);
-  assert.equal(
-    question.prompt,
-    OnlineActivityLogic.getKoreanInitials(question.answers[0]),
-    `${question.answers[0]}의 초성이 정답과 일치해야 합니다.`,
-  );
-}
+OnlineActivityLogic.ACTIVITY_DIFFICULTIES.forEach((difficulty) => {
+  const initialIds = new Set();
+  const triviaIds = new Set();
+  const drawingIds = new Set();
+  for (let offset = 0; offset < 16; offset += 1) {
+    const question = OnlineActivityLogic.getQuizQuestion(
+      "initialQuiz",
+      12345,
+      offset,
+      difficulty,
+    );
+    assert.equal(question.difficulty, difficulty);
+    assert.equal(
+      question.prompt,
+      OnlineActivityLogic.getKoreanInitials(question.answers[0]),
+      `${question.answers[0]}의 초성이 정답과 일치해야 합니다.`,
+    );
+    initialIds.add(question.id);
+
+    const trivia = OnlineActivityLogic.getQuizQuestion(
+      "triviaQuiz",
+      12345,
+      offset,
+      difficulty,
+    );
+    assert.equal(trivia.difficulty, difficulty);
+    triviaIds.add(trivia.id);
+
+    const drawing = OnlineActivityLogic.getDrawingWord(12345, offset, difficulty);
+    assert.equal(drawing.difficulty, difficulty);
+    drawingIds.add(drawing.id);
+  }
+  assert.equal(initialIds.size, 16, `${difficulty} 초성 문제는 16개여야 합니다.`);
+  assert.equal(triviaIds.size, 16, `${difficulty} 상식 문제는 16개여야 합니다.`);
+  assert.equal(drawingIds.size, 16, `${difficulty} 그림 문제는 16개여야 합니다.`);
+});
 assert.notEqual(
   OnlineActivityLogic.getQuizQuestion("initialQuiz", 12345, 0).id,
   OnlineActivityLogic.getQuizQuestion("initialQuiz", 12345, 1).id,
+);
+assert.notEqual(
+  OnlineActivityLogic.getQuizQuestionAvoiding(
+    "initialQuiz",
+    12345,
+    0,
+    [initialQuestion.id],
+  ).id,
+  initialQuestion.id,
 );
 assert.equal(
   OnlineActivityLogic.isCorrectAnswer(
@@ -99,11 +138,24 @@ assert.deepEqual(
 );
 
 const drawingWord = OnlineActivityLogic.getDrawingWord(12345, 0);
+assert.ok(OnlineActivityLogic.DRAWING_WORDS.length >= 32);
 assert.ok(drawingWord.answer);
 assert.ok(drawingWord.clue);
 assert.notEqual(
   drawingWord.id,
   OnlineActivityLogic.getDrawingWord(12345, 1).id,
+);
+assert.notEqual(
+  OnlineActivityLogic.getDrawingWordAvoiding(12345, 0, [drawingWord.id]).id,
+  drawingWord.id,
+);
+assert.equal(
+  OnlineActivityLogic.getQuizQuestion("triviaQuiz", 12345, 0, "hard").difficulty,
+  "hard",
+);
+assert.equal(
+  OnlineActivityLogic.getDrawingWord(12345, 0, "hard").difficulty,
+  "hard",
 );
 
 console.log("online activity logic tests passed");

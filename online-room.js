@@ -3,19 +3,27 @@
     (typeof module === "object" && module.exports
       ? require("./online-activity-logic.js")
       : null);
-  const api = factory(activityLogic);
+  const sessionLogic = root?.OnlineSessionLogic ||
+    (typeof module === "object" && module.exports
+      ? require("./online-session-logic.js")
+      : null);
+  const api = factory(activityLogic, sessionLogic);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.OnlineRoom = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createOnlineRoomApi(ActivityLogic) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createOnlineRoomApi(ActivityLogic, SessionLogic) {
   "use strict";
 
   if (!ActivityLogic) throw new Error("Online activity logic is required");
+  if (!SessionLogic) throw new Error("Online session logic is required");
 
-  const VERSION = 4;
+  const VERSION = 5;
   const ROOM_PREFIX = "ddak-room-";
   const ROOM_CODE_LENGTH = 6;
   const ROOM_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   const MAX_PLAYERS = 8;
+  const RECONNECT_GRACE_MS = 30000;
+  const RECONNECT_RETRY_MS = 1800;
+  const HOST_TAKEOVER_RETRY_MS = 10000;
   const QUIZ_TARGET_SCORE = 3;
   const QUIZ_REVEAL_DELAY = 2400;
   const TELEPATHY_TOTAL_ROUNDS = 5;
@@ -27,6 +35,9 @@
   const ERROR_CODES = Object.freeze({
     VERSION_MISMATCH: "version-mismatch",
     ROOM_UNAVAILABLE: "room-unavailable",
+    ROOM_STARTED: "room-started",
+    ROOM_FULL: "room-full",
+    ROOM_CLOSED: "room-closed",
     NETWORK: "network",
     BROWSER_INCOMPATIBLE: "browser-incompatible",
   });
@@ -232,12 +243,68 @@
     return Boolean(
       ["lobby", "choosing"].includes(room?.status) &&
         room.players?.length >= 2 &&
-        room.players.every((player) => player.ready),
+        room.players.every((player) => player.ready && player.connected !== false),
     );
   }
 
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function electHostSuccessor(room) {
+    return [...(room?.players || [])]
+      .filter((player) => !player.isHost && player.connected !== false && player.id)
+      .sort((left, right) => String(left.id).localeCompare(String(right.id)))[0]?.id || "";
+  }
+
+  function replaceRoomPlayerId(room, previousId, nextId) {
+    if (!room || !previousId || !nextId || previousId === nextId) return room;
+    room.players?.forEach((player) => {
+      if (player.id === previousId) player.id = nextId;
+    });
+    const series = room.series;
+    series?.standings?.forEach((entry) => {
+      if (entry.id === previousId) entry.id = nextId;
+    });
+    ["championIds", "lastPlaceIds"].forEach((field) => {
+      if (Array.isArray(series?.[field])) {
+        series[field] = series[field].map((id) => id === previousId ? nextId : id);
+      }
+    });
+    series?.rounds?.forEach((round) => {
+      round.winnerIds = (round.winnerIds || []).map((id) => id === previousId ? nextId : id);
+      round.ranking?.forEach((entry) => {
+        if (entry.id === previousId) entry.id = nextId;
+      });
+    });
+    return room;
+  }
+
+  function prepareHostTransferRoom(room, successorId = electHostSuccessor(room)) {
+    if (!room || !successorId) return null;
+    const next = clone(room);
+    const outgoingHost = next.players.find((player) => player.isHost);
+    next.players = next.players.filter((player) => player.id !== outgoingHost?.id);
+    const successor = next.players.find((player) => player.id === successorId);
+    if (!successor) return null;
+    next.players.forEach((player) => {
+      player.isHost = player.id === successorId;
+      player.ready = true;
+    });
+    successor.connected = true;
+    successor.disconnectedAt = null;
+    next.status = next.series?.finished ? "results" : "choosing";
+    next.startsAt = null;
+    next.seed = null;
+    next.activity = null;
+    if (next.status === "choosing") {
+      next.pendingGame = next.game;
+      next.pendingDifficulty = next.difficulty;
+    }
+    if (!next.series?.finished) {
+      SessionLogic.syncPlayers(next.series, next.players);
+    }
+    return next;
   }
 
   function createRoomError(message, code = "") {
@@ -276,12 +343,22 @@
   }
 
   class RoomSession {
-    constructor({ PeerCtor, now = () => Date.now(), random = Math.random, onState, onEvent } = {}) {
+    constructor({
+      PeerCtor,
+      now = () => Date.now(),
+      random = Math.random,
+      onState,
+      onEvent,
+      peerOptions = {},
+      storage = null,
+    } = {}) {
       this.PeerCtor = PeerCtor;
       this.now = now;
       this.random = random;
       this.onState = typeof onState === "function" ? onState : () => {};
       this.onEvent = typeof onEvent === "function" ? onEvent : () => {};
+      this.peerOptions = peerOptions && typeof peerOptions === "object" ? peerOptions : {};
+      this.storage = storage;
       this.peer = null;
       this.hostConnection = null;
       this.connections = new Map();
@@ -290,6 +367,17 @@
       this.isHost = false;
       this.startTimer = null;
       this.connectionTimer = null;
+      this.reconnectTimer = null;
+      this.reconnectDeadline = 0;
+      this.takeoverTimer = null;
+      this.takeoverAttempted = false;
+      this.pendingSuccessorId = "";
+      this.guestRoomCode = "";
+      this.guestNickname = "";
+      this.guestJoinSettled = false;
+      this.guestResolve = null;
+      this.guestReject = null;
+      this.guestRemovalTimers = new Map();
       this.activityTimers = new Set();
       this.quizAnswer = null;
       this.quizQuestionNumber = 0;
@@ -326,11 +414,14 @@
         throw new Error("이 브라우저에서는 온라인 연결을 시작할 수 없어요.");
       }
       return new this.PeerCtor(peerId, {
+        ...this.peerOptions,
         debug: 1,
         config: {
+          ...(this.peerOptions.config || {}),
           iceServers: [
             { urls: "stun:stun.l.google.com:19302" },
             { urls: "stun:stun.cloudflare.com:3478" },
+            ...((this.peerOptions.config?.iceServers || []).filter(Boolean)),
           ],
           iceCandidatePoolSize: 4,
           sdpSemantics: "unified-plan",
@@ -338,7 +429,7 @@
       });
     }
 
-    create({ nickname, game = "reaction", difficulty = "normal", code } = {}) {
+    create({ nickname, game = "reaction", difficulty = "normal", code, recoveryRoom = null, takeover = false } = {}) {
       this.leave(false);
       this.closed = false;
       this.isHost = true;
@@ -365,17 +456,53 @@
 
         this.peer.on("open", (openedId) => {
           this.localPeerId = String(openedId || peerId);
+          const recoveredPlayers = Array.isArray(recoveryRoom?.players)
+            ? recoveryRoom.players.slice(0, MAX_PLAYERS).map((player) => ({
+              id: String(player.id || ""),
+              nickname: sanitizeNickname(player.nickname),
+              ready: true,
+              score: normalizeScore(normalizeGame(recoveryRoom.game), player.score),
+              detail: String(player.detail || "").slice(0, 40),
+              isHost: Boolean(player.isHost),
+              connected: false,
+              disconnectedAt: this.now(),
+            })).filter((player) => player.id)
+            : [];
+          const recoveredHost = recoveredPlayers.find((player) => player.isHost);
+          const recoveredHostId = recoveredHost?.id || "";
+          if (recoveredHost) {
+            recoveredHost.id = this.localPeerId;
+            recoveredHost.nickname = sanitizeNickname(nickname || recoveredHost.nickname);
+            recoveredHost.connected = true;
+            recoveredHost.disconnectedAt = null;
+          }
           this.room = {
             version: VERSION,
             code: roomCode,
-            game: normalizeGame(game),
-            difficulty: normalizeDifficulty(difficulty),
-            status: "lobby",
-            round: 1,
+            game: normalizeGame(recoveryRoom?.game || game),
+            difficulty: normalizeDifficulty(recoveryRoom?.difficulty || difficulty),
+            status: recoveryRoom
+              ? recoveryRoom.series?.finished ? "results" : "choosing"
+              : "lobby",
+            round: Math.max(1, Number(recoveryRoom?.round) || 1),
             startsAt: null,
             seed: null,
             activity: null,
-            players: [
+            series: recoveryRoom?.series
+              ? clone(recoveryRoom.series)
+              : SessionLogic.createSeries({
+                mode: "single",
+                players: recoveredPlayers,
+                games: Object.keys(GAME_RULES),
+                random: this.random,
+              }),
+            recentQuizIds: Array.isArray(recoveryRoom?.recentQuizIds)
+              ? recoveryRoom.recentQuizIds.map(String).slice(-10)
+              : [],
+            recentDrawingIds: Array.isArray(recoveryRoom?.recentDrawingIds)
+              ? recoveryRoom.recentDrawingIds.map(String).slice(-10)
+              : [],
+            players: recoveredPlayers.length ? recoveredPlayers : [
               {
                 id: this.localPeerId,
                 nickname: sanitizeNickname(nickname),
@@ -383,16 +510,38 @@
                 score: null,
                 detail: "",
                 isHost: true,
+                connected: true,
+                disconnectedAt: null,
               },
             ],
           };
+          replaceRoomPlayerId(this.room, recoveredHostId, this.localPeerId);
+          if (recoveryRoom && this.room.status === "choosing") {
+            this.room.pendingGame = this.room.game;
+            this.room.pendingDifficulty = this.room.difficulty;
+          }
+          if (!this.room.series?.finished) {
+            SessionLogic.syncPlayers(this.room.series, this.room.players);
+          }
           this.emitState();
-          this.emitEvent("created", { code: roomCode });
+          this.emitEvent(takeover ? "host-promoted" : recoveryRoom ? "restored" : "created", { code: roomCode });
           resolve(this.snapshot());
         });
         this.peer.on("connection", (connection) => this.acceptConnection(connection));
         this.peer.on("error", fail);
-        this.peer.on("disconnected", () => this.emitEvent("network-lost"));
+        this.peer.on("disconnected", () => {
+          if (this.closed) return;
+          this.emitEvent("network-lost");
+          setTimeout(() => {
+            if (!this.closed && this.peer?.disconnected && !this.peer.destroyed) {
+              try {
+                this.peer.reconnect?.();
+              } catch {
+                // Guests can still reconnect when the host peer ID becomes available.
+              }
+            }
+          }, 700);
+        });
       });
     }
 
@@ -402,22 +551,39 @@
       this.isHost = false;
       const roomCode = normalizeRoomCode(code);
       if (!isValidRoomCode(roomCode)) return Promise.reject(new Error("6자리 방 코드를 확인해 주세요."));
+      this.guestRoomCode = roomCode;
+      this.guestNickname = sanitizeNickname(nickname);
+      this.guestJoinSettled = false;
 
       return new Promise((resolve, reject) => {
-        let settled = false;
+        this.guestResolve = resolve;
+        this.guestReject = reject;
         const rejectOnce = (error) => {
           const roomError = normalizePeerError(error, "방에 참가하지 못했어요.");
-          if (settled) {
+          if (this.guestJoinSettled) {
             this.emitEvent("error", { code: roomError.code, message: roomError.message });
+            this.beginGuestReconnect();
             return;
           }
-          settled = true;
+          this.guestJoinSettled = true;
           this.leave(false);
           reject(roomError);
         };
 
         try {
-          this.peer = this.makePeer();
+          const storageKey = `ddak-online-peer-${roomCode}`;
+          let guestPeerId = "";
+          try {
+            guestPeerId = String(this.storage?.getItem(storageKey) || "");
+            if (!guestPeerId) {
+              const token = Math.floor(this.random() * 0x100000000).toString(36);
+              guestPeerId = `ddak-guest-${roomCode.toLowerCase()}-${token}`;
+              this.storage?.setItem(storageKey, guestPeerId);
+            }
+          } catch {
+            guestPeerId = "";
+          }
+          this.peer = this.makePeer(guestPeerId || undefined);
         } catch (error) {
           rejectOnce(error);
           return;
@@ -432,57 +598,203 @@
 
         this.peer.on("open", (openedId) => {
           this.localPeerId = String(openedId || "");
-          const hostId = `${ROOM_PREFIX}${roomCode.toLowerCase()}`;
-          const connection = this.peer.connect(hostId, { reliable: true });
-          this.hostConnection = connection;
-          connection.on("open", () => {
-            connection.send({
-              type: "join",
-              version: VERSION,
-              nickname: sanitizeNickname(nickname),
-            });
-          });
-          connection.on("data", (message) => {
-            if (message?.type === "reject") {
-              rejectOnce(createRoomError(
-                String(message.message || "방에 참가할 수 없어요."),
-                String(message.code || ""),
-              ));
-              return;
-            }
-            if (message?.type === "closed") {
-              this.emitEvent("host-left");
-              this.leave(false);
-              return;
-            }
-            if (message?.type !== "state" || !message.room) return;
-            if (message.room.version !== VERSION) {
-              rejectOnce(createRoomError(
-                "게임 버전이 달라요. 최신 버전으로 다시 연결할게요.",
-                ERROR_CODES.VERSION_MISMATCH,
-              ));
-              return;
-            }
-            this.room = message.room;
-            this.emitState();
-            if (!settled) {
-              settled = true;
-              clearTimeout(this.connectionTimer);
-              this.connectionTimer = null;
-              this.emitEvent("joined", { code: roomCode });
-              resolve(this.snapshot());
-            }
-          });
-          connection.on("close", () => {
-            if (this.closed) return;
-            this.emitEvent("host-left");
-            this.leave(false);
-          });
-          connection.on("error", rejectOnce);
+          this.connectGuestToHost(rejectOnce);
         });
         this.peer.on("error", rejectOnce);
-        this.peer.on("disconnected", () => this.emitEvent("network-lost"));
+        this.peer.on("disconnected", () => {
+          if (this.closed) return;
+          this.emitEvent("network-lost");
+          this.beginGuestReconnect();
+        });
       });
+    }
+
+    connectGuestToHost(rejectInitial = null) {
+      if (this.closed || !this.peer || !this.guestRoomCode) return;
+      const hostId = `${ROOM_PREFIX}${this.guestRoomCode.toLowerCase()}`;
+      const connection = this.peer.connect(hostId, { reliable: true });
+      this.hostConnection = connection;
+      let receivedState = false;
+      connection.on("open", () => {
+        connection.send({
+          type: "join",
+          version: VERSION,
+          nickname: this.guestNickname,
+          reconnecting: this.guestJoinSettled,
+        });
+      });
+      connection.on("data", (message) => {
+        if (message?.type === "host-transfer") {
+          this.handleHostTransfer(message);
+          return;
+        }
+        if (message?.type === "reject") {
+          const roomError = createRoomError(
+            String(message.message || "방에 참가할 수 없어요."),
+            String(message.code || ""),
+          );
+          if (!this.guestJoinSettled && rejectInitial) rejectInitial(roomError);
+          else this.finishGuestReconnect(false, roomError);
+          return;
+        }
+        if (message?.type === "closed") {
+          this.finishGuestReconnect(false, createRoomError(
+            "방장이 방을 종료했어요.",
+            ERROR_CODES.ROOM_CLOSED,
+          ));
+          return;
+        }
+        if (message?.type !== "state" || !message.room) return;
+        if (message.room.version !== VERSION) {
+          const versionError = createRoomError(
+            "게임 버전이 달라요. 페이지를 새로고침해 주세요.",
+            ERROR_CODES.VERSION_MISMATCH,
+          );
+          if (!this.guestJoinSettled && rejectInitial) rejectInitial(versionError);
+          else this.finishGuestReconnect(false, versionError);
+          return;
+        }
+        receivedState = true;
+        this.room = message.room;
+        this.pendingSuccessorId = "";
+        this.takeoverAttempted = false;
+        clearTimeout(this.connectionTimer);
+        this.connectionTimer = null;
+        this.emitState();
+        if (!this.guestJoinSettled) {
+          this.guestJoinSettled = true;
+          this.guestResolve?.(this.snapshot());
+          this.emitEvent("joined", { code: this.guestRoomCode });
+        } else if (this.reconnectDeadline) {
+          this.finishGuestReconnect(true);
+        }
+      });
+      const handleDisconnect = () => {
+        if (this.closed || receivedState && this.hostConnection !== connection) return;
+        this.beginGuestReconnect();
+      };
+      connection.on("close", handleDisconnect);
+      connection.on("error", (error) => {
+        if (!this.guestJoinSettled && rejectInitial) rejectInitial(error);
+        else handleDisconnect();
+      });
+    }
+
+    beginGuestReconnect() {
+      if (this.closed || this.isHost || !this.guestJoinSettled) return;
+      if (!this.reconnectDeadline) {
+        this.reconnectDeadline = this.now() + RECONNECT_GRACE_MS;
+        this.emitEvent("reconnecting", { remainingMs: RECONNECT_GRACE_MS });
+      }
+      clearTimeout(this.reconnectTimer);
+      if (this.now() >= this.reconnectDeadline) {
+        this.finishGuestReconnect(false, createRoomError(
+          "30초 동안 방에 다시 연결하지 못했어요.",
+          ERROR_CODES.ROOM_UNAVAILABLE,
+        ));
+        return;
+      }
+      this.reconnectTimer = setTimeout(() => {
+        if (this.peer?.disconnected && !this.peer.destroyed) {
+          try {
+            this.peer.reconnect?.();
+          } catch {
+            // A fresh data connection below still works when signaling is available.
+          }
+        }
+        this.connectGuestToHost();
+      }, RECONNECT_RETRY_MS);
+    }
+
+    finishGuestReconnect(success, error = null) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+      this.reconnectDeadline = 0;
+      if (success) {
+        this.emitEvent("reconnected");
+        return;
+      }
+      if (
+        !this.takeoverAttempted &&
+        this.room &&
+        (error?.code || ERROR_CODES.ROOM_UNAVAILABLE) === ERROR_CODES.ROOM_UNAVAILABLE
+      ) {
+        const successorId = electHostSuccessor(this.room);
+        const transferRoom = prepareHostTransferRoom(this.room, successorId);
+        if (transferRoom) {
+          this.takeoverAttempted = true;
+          this.pendingSuccessorId = successorId;
+          if (successorId === this.localPeerId) {
+            this.promoteToHost(transferRoom);
+          } else {
+            this.reconnectDeadline = this.now() + HOST_TAKEOVER_RETRY_MS;
+            this.emitEvent("host-transfer-waiting", { successorId });
+            this.beginGuestReconnect();
+          }
+          return;
+        }
+      }
+      this.emitEvent("host-left", {
+        code: error?.code || ERROR_CODES.ROOM_UNAVAILABLE,
+        message: error?.message || "방 연결이 종료됐어요.",
+      });
+      this.leave(false);
+    }
+
+    handleHostTransfer(message) {
+      const room = message?.room;
+      const successorId = String(message?.successorId || "");
+      if (
+        this.closed ||
+        !room ||
+        room.version !== VERSION ||
+        normalizeRoomCode(room.code) !== this.guestRoomCode ||
+        !room.players?.some((player) => player.id === successorId && player.isHost)
+      ) return false;
+      this.room = clone(room);
+      this.pendingSuccessorId = successorId;
+      this.takeoverAttempted = true;
+      this.reconnectDeadline = this.now() + RECONNECT_GRACE_MS;
+      this.emitState();
+      if (successorId === this.localPeerId) {
+        this.emitEvent("host-transfer-start", { successorId });
+        clearTimeout(this.takeoverTimer);
+        this.takeoverTimer = setTimeout(() => this.promoteToHost(this.room), 220);
+      } else {
+        this.emitEvent("host-transfer-waiting", { successorId });
+      }
+      return true;
+    }
+
+    promoteToHost(recoveryRoom) {
+      if (!recoveryRoom || !this.localPeerId) return false;
+      const localPlayer = recoveryRoom.players.find((player) => player.id === this.localPeerId);
+      if (!localPlayer) return false;
+      const nickname = localPlayer.nickname;
+      const code = recoveryRoom.code;
+      const deadline = this.now() + HOST_TAKEOVER_RETRY_MS;
+      const attempt = () => {
+        this.takeoverTimer = null;
+        this.create({ nickname, code, recoveryRoom, takeover: true }).catch(() => {
+          if (this.now() >= deadline) {
+            this.emitEvent("host-left", {
+              code: ERROR_CODES.ROOM_UNAVAILABLE,
+              message: "새 방장 연결에 실패해 방이 종료됐어요.",
+            });
+            return;
+          }
+          this.takeoverTimer = setTimeout(attempt, 900);
+        });
+      };
+      attempt();
+      return true;
+    }
+
+    createHostTransfer() {
+      if (!this.isHost || !this.room) return null;
+      const successorId = electHostSuccessor(this.room);
+      const room = prepareHostTransferRoom(this.room, successorId);
+      return room ? { successorId, room } : null;
     }
 
     acceptConnection(connection) {
@@ -490,10 +802,12 @@
         connection.close();
         return;
       }
+      const previous = this.connections.get(connection.peer);
+      if (previous && previous !== connection) previous.close?.();
       this.connections.set(connection.peer, connection);
       connection.on("data", (message) => this.handleHostMessage(connection, message));
-      connection.on("close", () => this.removeGuest(connection.peer));
-      connection.on("error", () => this.removeGuest(connection.peer));
+      connection.on("close", () => this.markGuestDisconnected(connection.peer, connection));
+      connection.on("error", () => this.markGuestDisconnected(connection.peer, connection));
     }
 
     handleHostMessage(connection, message) {
@@ -509,18 +823,32 @@
           connection.close();
           return;
         }
-        if (this.room.status !== "lobby") {
-          connection.send({ type: "reject", message: "이미 대결이 시작된 방이에요." });
-          connection.close();
-          return;
-        }
-        if (this.room.players.length >= MAX_PLAYERS) {
-          connection.send({ type: "reject", message: "방이 가득 찼어요. 최대 8명까지 참가할 수 있어요." });
-          connection.close();
-          return;
-        }
         const existing = this.room.players.find((player) => player.id === connection.peer);
-        if (!existing) {
+        if (!existing && !["lobby", "choosing"].includes(this.room.status)) {
+          connection.send({
+            type: "reject",
+            code: ERROR_CODES.ROOM_STARTED,
+            message: "이미 대결이 시작된 방이에요. 다음 게임 선택 때 참가해 주세요.",
+          });
+          connection.close();
+          return;
+        }
+        if (!existing && this.room.players.length >= MAX_PLAYERS) {
+          connection.send({
+            type: "reject",
+            code: ERROR_CODES.ROOM_FULL,
+            message: "방이 가득 찼어요. 최대 8명까지 참가할 수 있어요.",
+          });
+          connection.close();
+          return;
+        }
+        clearTimeout(this.guestRemovalTimers.get(connection.peer));
+        this.guestRemovalTimers.delete(connection.peer);
+        if (existing) {
+          existing.nickname = sanitizeNickname(message.nickname || existing.nickname);
+          existing.connected = true;
+          existing.disconnectedAt = null;
+        } else {
           this.room.players.push({
             id: connection.peer,
             nickname: sanitizeNickname(message.nickname),
@@ -528,8 +856,11 @@
             score: null,
             detail: "",
             isHost: false,
+            connected: true,
+            disconnectedAt: null,
           });
         }
+        SessionLogic.syncPlayers(this.room.series, this.room.players);
         this.broadcastState();
         return;
       }
@@ -549,11 +880,35 @@
           message.payload,
         );
       }
-      if (message.type === "leave") this.removeGuest(connection.peer);
+      if (message.type === "leave") this.removeGuest(connection.peer, true);
     }
 
-    removeGuest(peerId) {
+    markGuestDisconnected(peerId, connection = null) {
+      if (this.closed || !this.isHost || !this.room) return;
+      if (connection && this.connections.get(peerId) !== connection) return;
+      const player = this.room.players.find((entry) => entry.id === peerId);
+      if (!player || player.isHost || player.connected === false) return;
+      this.connections.delete(peerId);
+      player.connected = false;
+      player.disconnectedAt = this.now();
+      player.ready = false;
+      clearTimeout(this.guestRemovalTimers.get(peerId));
+      this.guestRemovalTimers.set(peerId, setTimeout(() => {
+        this.guestRemovalTimers.delete(peerId);
+        this.removeGuest(peerId, true);
+      }, RECONNECT_GRACE_MS));
+      this.emitEvent("guest-reconnecting", { peerId, nickname: player.nickname });
+      this.broadcastState();
+    }
+
+    removeGuest(peerId, immediate = false) {
       if (!this.isHost || !this.room) return;
+      if (!immediate) {
+        this.markGuestDisconnected(peerId);
+        return;
+      }
+      clearTimeout(this.guestRemovalTimers.get(peerId));
+      this.guestRemovalTimers.delete(peerId);
       const nextPlayers = this.room.players.filter((player) => player.id !== peerId);
       this.connections.delete(peerId);
       if (nextPlayers.length === this.room.players.length) return;
@@ -583,6 +938,7 @@
         }
       }
       this.room.players = nextPlayers;
+      SessionLogic.syncPlayers(this.room.series, this.room.players);
       if (this.room.status === "playing" && activity?.kind === "telepathy") {
         this.telepathyChoices.delete(peerId);
         activity.submittedIds = activity.submittedIds.filter((id) => id !== peerId);
@@ -667,6 +1023,41 @@
         this.room.difficulty = normalizeDifficulty(difficulty);
       }
       this.broadcastState();
+      return true;
+    }
+
+    setSeriesMode(mode, penalty = "") {
+      if (!this.isHost || !["lobby", "choosing"].includes(this.room?.status)) return false;
+      const normalizedMode = SessionLogic.normalizeMode(mode);
+      this.room.series = SessionLogic.createSeries({
+        mode: normalizedMode,
+        players: this.room.players,
+        games: Object.keys(GAME_RULES),
+        random: this.random,
+        penalty,
+      });
+      if (normalizedMode === "random" && this.room.series.gameOrder[0]) {
+        if (this.room.status === "choosing") this.room.pendingGame = this.room.series.gameOrder[0];
+        else this.room.game = this.room.series.gameOrder[0];
+      }
+      this.broadcastState();
+      return true;
+    }
+
+    completeCurrentRound() {
+      if (!this.room || this.room.status === "results") return false;
+      const ranking = rankPlayers(this.room.players, this.room.game);
+      if (!ranking.length || ranking.some((player) => player.rank === null)) return false;
+      if (!this.room.series) {
+        this.room.series = SessionLogic.createSeries({
+          mode: "single",
+          players: this.room.players,
+          games: Object.keys(GAME_RULES),
+          random: this.random,
+        });
+      }
+      SessionLogic.completeRound(this.room.series, ranking, this.room.game, this.random);
+      this.room.status = "results";
       return true;
     }
 
@@ -764,14 +1155,21 @@
     prepareQuizQuestion() {
       if (!this.room || !["initialQuiz", "triviaQuiz"].includes(this.room.game)) return;
       this.quizQuestionNumber += 1;
-      const question = ActivityLogic.getQuizQuestion(
+      const question = ActivityLogic.getQuizQuestionAvoiding(
         this.room.game,
         this.room.seed,
         this.quizQuestionNumber - 1,
+        this.room.recentQuizIds,
+        this.room.difficulty,
       );
+      this.room.recentQuizIds = [
+        ...(this.room.recentQuizIds || []),
+        question.id,
+      ].slice(-10);
       this.quizAnswer = question;
       this.room.activity = {
         kind: "quiz",
+        difficulty: question.difficulty,
         phase: "question",
         questionNumber: this.quizQuestionNumber,
         targetScore: QUIZ_TARGET_SCORE,
@@ -808,7 +1206,7 @@
         this.room.players.forEach((player) => {
           if (player.id !== winnerId) player.detail = `${player.score || 0}문제 정답`;
         });
-        this.room.status = "results";
+        this.completeCurrentRound();
         this.broadcastState();
         return;
       }
@@ -943,17 +1341,27 @@
       activity.message = activity.championIds.length > 1
         ? `${topScore}점 공동 우승! 마음이 제대로 통했어요.`
         : `${this.room.players.find((player) => player.id === activity.championIds[0])?.nickname || "친구"} ${topScore}점 우승!`;
-      this.room.status = "results";
+      this.completeCurrentRound();
       this.broadcastState();
     }
 
     prepareDrawingRound(round) {
       if (!this.room || this.room.game !== "drawing" || this.room.players.length < 2) return;
-      const word = ActivityLogic.getDrawingWord(this.drawingSeed, round - 1);
+      const word = ActivityLogic.getDrawingWordAvoiding(
+        this.drawingSeed,
+        round - 1,
+        this.room.recentDrawingIds,
+        this.room.difficulty,
+      );
+      this.room.recentDrawingIds = [
+        ...(this.room.recentDrawingIds || []),
+        word.id,
+      ].slice(-10);
       const drawer = this.room.players[(round - 1) % this.room.players.length];
       this.drawingWord = word;
       this.room.activity = {
         kind: "drawing",
+        difficulty: word.difficulty,
         phase: "drawing",
         round,
         totalRounds: DRAWING_TOTAL_ROUNDS,
@@ -1073,7 +1481,7 @@
       activity.message = activity.championIds.length > 1
         ? `${topScore}점 공동 우승!`
         : `${this.room.players.find((player) => player.id === activity.championIds[0])?.nickname || "친구"} ${topScore}점 우승!`;
-      this.room.status = "results";
+      this.completeCurrentRound();
       this.broadcastState();
     }
 
@@ -1171,7 +1579,7 @@
           player.score = player.id === championId ? 1000 + wins : wins;
           player.detail = player.id === championId ? "토너먼트 우승" : `${wins}승`;
         });
-        this.room.status = "results";
+        this.completeCurrentRound();
         this.broadcastState();
         return;
       }
@@ -1253,18 +1661,34 @@
       if (!["countdown", "playing"].includes(this.room.status)) return;
       if (GAME_RULES[this.room.game]?.activity) return;
       if (this.room.players.every((player) => normalizeScore(this.room.game, player.score) !== null)) {
-        this.room.status = "results";
+        this.completeCurrentRound();
       }
     }
 
     chooseNextGame() {
       if (!this.isHost || this.room?.status !== "results") return false;
+      const finishedSeries = Boolean(this.room.series?.finished);
+      const previousMode = this.room.series?.mode || "single";
+      const previousPenalty = this.room.series?.penalty || "";
+      if (finishedSeries) {
+        this.room.series = SessionLogic.createSeries({
+          mode: previousMode,
+          players: this.room.players,
+          games: Object.keys(GAME_RULES),
+          random: this.random,
+          penalty: previousPenalty,
+        });
+      }
       this.room.status = "choosing";
       this.room.round += 1;
       this.room.startsAt = null;
       this.room.seed = null;
       this.room.pendingGame = this.room.game;
       this.room.pendingDifficulty = this.room.difficulty;
+      if (this.room.series?.mode === "random") {
+        const randomGame = this.room.series.gameOrder[this.room.series.currentRound - 1];
+        if (randomGame) this.room.pendingGame = randomGame;
+      }
       this.room.players.forEach((player) => {
         player.ready = true;
       });
@@ -1277,13 +1701,21 @@
     }
 
     leave(notify = true) {
+      const hostTransfer = notify && this.isHost ? this.createHostTransfer() : null;
       this.closed = true;
       clearTimeout(this.startTimer);
       clearTimeout(this.connectionTimer);
+      clearTimeout(this.reconnectTimer);
+      clearTimeout(this.takeoverTimer);
+      this.guestRemovalTimers.forEach((timer) => clearTimeout(timer));
+      this.guestRemovalTimers.clear();
       this.activityTimers.forEach((timer) => clearTimeout(timer));
       this.activityTimers.clear();
       this.startTimer = null;
       this.connectionTimer = null;
+      this.reconnectTimer = null;
+      this.takeoverTimer = null;
+      this.reconnectDeadline = 0;
       this.quizAnswer = null;
       this.quizQuestionNumber = 0;
       this.rpsChoices.clear();
@@ -1292,7 +1724,14 @@
       this.drawingWord = null;
       this.drawingSeed = 0;
       if (notify && this.isHost) {
-        this.connections.forEach((connection) => this.send(connection, { type: "closed" }));
+        this.connections.forEach((connection) => this.send(connection, hostTransfer
+          ? {
+            type: "host-transfer",
+            version: VERSION,
+            successorId: hostTransfer.successorId,
+            room: hostTransfer.room,
+          }
+          : { type: "closed" }));
       } else if (notify) {
         this.send(this.hostConnection, { type: "leave" });
       }
@@ -1304,6 +1743,13 @@
       this.peer = null;
       this.room = null;
       this.localPeerId = "";
+      this.guestRoomCode = "";
+      this.guestNickname = "";
+      this.guestResolve = null;
+      this.guestReject = null;
+      this.guestJoinSettled = false;
+      this.takeoverAttempted = false;
+      this.pendingSuccessorId = "";
       this.isHost = false;
       this.emitState();
     }
@@ -1316,6 +1762,9 @@
     ROOM_CODE_LENGTH,
     ROOM_ALPHABET,
     MAX_PLAYERS,
+    RECONNECT_GRACE_MS,
+    RECONNECT_RETRY_MS,
+    HOST_TAKEOVER_RETRY_MS,
     QUIZ_TARGET_SCORE,
     TELEPATHY_TOTAL_ROUNDS,
     DRAWING_TOTAL_ROUNDS,
@@ -1336,6 +1785,9 @@
     formatScore,
     rankPlayers,
     canStartRoom,
+    electHostSuccessor,
+    prepareHostTransferRoom,
+    replaceRoomPlayerId,
     createSession: (options) => new RoomSession(options),
   };
 });
