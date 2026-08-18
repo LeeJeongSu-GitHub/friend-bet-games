@@ -5,6 +5,34 @@
 })(typeof globalThis !== "undefined" ? globalThis : this, function createPwaManager() {
   "use strict";
 
+  const VERSION_REFRESH_KEY = "ddack-version-refresh-at";
+
+  async function refreshForVersionMismatch() {
+    let lastRefreshAt = 0;
+    try {
+      lastRefreshAt = Number(sessionStorage.getItem(VERSION_REFRESH_KEY)) || 0;
+      if (Date.now() - lastRefreshAt < 30000) return false;
+      sessionStorage.setItem(VERSION_REFRESH_KEY, String(Date.now()));
+    } catch {
+      // A blocked session store must not prevent recovery.
+    }
+
+    if ("serviceWorker" in navigator) {
+      try {
+        const registration = await navigator.serviceWorker.getRegistration();
+        await registration?.update();
+        registration?.waiting?.postMessage({ type: "SKIP_WAITING" });
+      } catch {
+        // A network-first reload below can still recover without service worker access.
+      }
+    }
+
+    const url = new URL(location.href);
+    url.searchParams.set("refresh", String(Date.now()));
+    location.replace(url.toString());
+    return true;
+  }
+
   function setup(options = {}) {
     const installButton = options.installButton;
     const updateBanner = options.updateBanner;
@@ -98,5 +126,5 @@
     return { getRegistration: () => registration };
   }
 
-  return { setup };
+  return { refreshForVersionMismatch, setup };
 });

@@ -60,7 +60,7 @@ assert.deepEqual(
   "Physics and game logic must load before app.js",
 );
 assert.ok(
-  scripts.slice(-11).every((script) => script.endsWith("?v=41")),
+  scripts.slice(-11).every((script) => script.endsWith("?v=42")),
   "All runtime scripts must share the current cache-busting build number",
 );
 for (const script of scripts) {
@@ -83,6 +83,16 @@ assert.match(
   pwaManager,
   /serviceWorker\.addEventListener\("controllerchange"/,
   "A newly activated worker must refresh the page through controllerchange",
+);
+assert.match(
+  pwaManager,
+  /async function refreshForVersionMismatch\(\)/,
+  "Version mismatches must provide an automatic mobile cache recovery path",
+);
+assert.match(
+  app,
+  /PwaManager\.refreshForVersionMismatch\(\)/,
+  "Online room joins must trigger cache recovery after a version mismatch",
 );
 assert.match(
   serviceWorker,

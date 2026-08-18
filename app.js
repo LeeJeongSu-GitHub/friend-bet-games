@@ -1817,6 +1817,8 @@ function handleOnlineRoomEvent(event) {
   } else if (event.type === "network-lost") {
     elements.onlineConnectionState.textContent = "연결 확인 중";
     elements.onlineLobbyStatus.textContent = "네트워크 연결을 확인해 주세요.";
+  } else if (event.type === "version-mismatch") {
+    showToast("참가자의 게임 버전이 달라요. 참가자 화면을 새로고침해 주세요.");
   } else if (event.type === "error") {
     showToast(event.message || "온라인 연결을 확인해 주세요.");
   }
@@ -2503,7 +2505,21 @@ async function joinOnlineRoom(event) {
     setOnlineEntryStatus("방장은 대결이 끝날 때까지 페이지를 열어 두세요.");
   } catch (error) {
     onlineSession = null;
-    setOnlineEntryStatus(error.message || "방에 참가하지 못했어요.", true);
+    const versionMismatch =
+      error?.code === OnlineRoom.ERROR_CODES.VERSION_MISMATCH ||
+      String(error?.message || "").includes("버전이 달라요");
+    if (versionMismatch) {
+      setOnlineEntryStatus("새 버전을 확인했어요. 최신 화면으로 다시 열고 있어요.");
+      const refreshing = await PwaManager.refreshForVersionMismatch();
+      if (!refreshing) {
+        setOnlineEntryStatus(
+          "방장과 참가자 화면을 모두 완전히 닫았다가 다시 열어 주세요.",
+          true,
+        );
+      }
+    } else {
+      setOnlineEntryStatus(error.message || "방에 참가하지 못했어요.", true);
+    }
   } finally {
     setOnlineEntryBusy(false);
     renderOnlineRoom();
@@ -9609,6 +9625,6 @@ PwaManager.setup({
   updateBanner: elements.appUpdateBanner,
   updateButton: elements.applyAppUpdate,
   dismissUpdateButton: elements.dismissAppUpdate,
-  serviceWorkerUrl: "./sw.js?v=41",
+  serviceWorkerUrl: "./sw.js?v=42",
   notify: showToast,
 });

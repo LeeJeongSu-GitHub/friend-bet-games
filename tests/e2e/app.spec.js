@@ -373,7 +373,7 @@ test("plays telepathy rounds and a private-word drawing match", async ({ page })
 
 test("serves the install manifest, PNG icons, and active service worker", async ({ page, request }) => {
   await page.goto("/");
-  const manifest = await (await request.get("/manifest.webmanifest?v=41")).json();
+  const manifest = await (await request.get("/manifest.webmanifest?v=42")).json();
   expect(manifest.icons.map((icon) => icon.sizes)).toEqual([
     "192x192",
     "512x512",
@@ -394,7 +394,7 @@ test("serves the install manifest, PNG icons, and active service worker", async 
         return registration.active?.scriptURL || "";
       }),
     )
-    .toContain("sw.js?v=41");
+    .toContain("sw.js?v=42");
 });
 
 test("reloads the app from the service worker cache while offline", async ({ context, page }) => {

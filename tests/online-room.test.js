@@ -51,9 +51,10 @@ class FakePeer extends Emitter {
   static peers = new Map();
   static sequence = 0;
 
-  constructor(id) {
+  constructor(id, options = {}) {
     super();
     this.id = id || `guest-${++FakePeer.sequence}`;
+    this.options = options;
     this.destroyed = false;
     if (FakePeer.peers.has(this.id)) {
       setTimeout(() => this.emit("error", new Error("ID is already taken")), 0);
@@ -109,6 +110,8 @@ function waitFor(predicate, timeout = 1000) {
 
 async function run() {
   assert.equal(OnlineRoom.VERSION, 4);
+  assert.equal(OnlineRoom.ERROR_CODES.VERSION_MISMATCH, "version-mismatch");
+  assert.equal(OnlineRoom.ERROR_CODES.ROOM_UNAVAILABLE, "room-unavailable");
   assert.equal(OnlineRoom.normalizeRoomCode(" ab-01c234 "), "ABC234");
   assert.equal(OnlineRoom.isValidRoomCode("ABC234"), true);
   assert.equal(OnlineRoom.isValidRoomCode("ABC23"), false);
@@ -165,6 +168,11 @@ async function run() {
   await host.create({ nickname: "민지", game: "tap", code: "ABC234" });
   await guest.join({ nickname: "준호", code: "abc234" });
   await waitFor(() => hostState?.players.length === 2 && guestState?.players.length === 2);
+  assert.equal(host.peer.options.config.iceServers.length, 2);
+  assert.equal(
+    host.peer.options.config.iceServers[1].urls,
+    "stun:stun.cloudflare.com:3478",
+  );
   assert.equal(hostState.players[0].nickname, "민지");
   assert.equal(hostState.players[1].nickname, "준호");
 
@@ -283,17 +291,29 @@ async function run() {
   assert.equal(host.setGame("telepathy"), true);
   assert.equal(host.startRound(1500), true);
   await waitFor(
-    () => hostState?.status === "playing" && hostState?.activity?.kind === "telepathy",
+    () =>
+      hostState?.status === "playing" &&
+      hostState?.activity?.kind === "telepathy" &&
+      guestState?.status === "playing" &&
+      guestState?.activity?.kind === "telepathy",
     2500,
   );
   for (let round = 1; round <= OnlineRoom.TELEPATHY_TOTAL_ROUNDS; round += 1) {
     assert.equal(host.submitAction("telepathy-choice", { choice: 0 }), true);
     assert.equal(guest.submitAction("telepathy-choice", { choice: 0 }), true);
     if (round < OnlineRoom.TELEPATHY_TOTAL_ROUNDS) {
-      await waitFor(() => hostState?.activity?.round === round + 1, 3500);
+      await waitFor(
+        () =>
+          hostState?.activity?.round === round + 1 &&
+          guestState?.activity?.round === round + 1,
+        3500,
+      );
     }
   }
-  await waitFor(() => hostState?.status === "results", 3500);
+  await waitFor(
+    () => hostState?.status === "results" && guestState?.status === "results",
+    3500,
+  );
   assert.deepEqual(
     hostState.players.map((player) => player.score),
     [OnlineRoom.TELEPATHY_TOTAL_ROUNDS, OnlineRoom.TELEPATHY_TOTAL_ROUNDS],
@@ -305,7 +325,11 @@ async function run() {
   assert.equal(host.setGame("drawing"), true);
   assert.equal(host.startRound(1500), true);
   await waitFor(
-    () => hostState?.status === "playing" && hostState?.activity?.kind === "drawing",
+    () =>
+      hostState?.status === "playing" &&
+      hostState?.activity?.kind === "drawing" &&
+      guestState?.status === "playing" &&
+      guestState?.activity?.kind === "drawing",
     2500,
   );
   assert.equal(hostState.activity.drawerId, hostState.localPeerId);
@@ -327,7 +351,10 @@ async function run() {
     guest.submitAction("drawing-guess", { guess: hostState.activity.secretWord }),
     true,
   );
-  await waitFor(() => hostState?.activity?.round === 2, 3500);
+  await waitFor(
+    () => hostState?.activity?.round === 2 && guestState?.activity?.round === 2,
+    3500,
+  );
   assert.equal(guestState.activity.drawerId, guestState.localPeerId);
   assert.ok(guestState.activity.secretWord);
   assert.equal(hostState.activity.secretWord, undefined);
@@ -335,7 +362,10 @@ async function run() {
     host.submitAction("drawing-guess", { guess: guestState.activity.secretWord }),
     true,
   );
-  await waitFor(() => hostState?.activity?.round === 3, 3500);
+  await waitFor(
+    () => hostState?.activity?.round === 3 && guestState?.activity?.round === 3,
+    3500,
+  );
   assert.ok(hostState.activity.secretWord);
   assert.equal(
     guest.submitAction("drawing-guess", { guess: hostState.activity.secretWord }),

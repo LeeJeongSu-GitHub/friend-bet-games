@@ -24,6 +24,12 @@
   const DRAWING_ROUND_DURATION = 60000;
   const DRAWING_COLORS = Object.freeze(["#17191d", "#e85d4a", "#4676e8", "#239a8b"]);
   const DRAWING_WIDTHS = Object.freeze([3, 6, 10]);
+  const ERROR_CODES = Object.freeze({
+    VERSION_MISMATCH: "version-mismatch",
+    ROOM_UNAVAILABLE: "room-unavailable",
+    NETWORK: "network",
+    BROWSER_INCOMPATIBLE: "browser-incompatible",
+  });
   const GAME_RULES = Object.freeze({
     reaction: {
       label: "반응속도",
@@ -234,6 +240,41 @@
     return JSON.parse(JSON.stringify(value));
   }
 
+  function createRoomError(message, code = "") {
+    const error = new Error(message);
+    if (code) error.code = code;
+    return error;
+  }
+
+  function normalizePeerError(error, fallbackMessage = "온라인 연결이 끊겼어요.") {
+    const type = String(error?.type || error?.code || "").toLowerCase();
+    if (type.includes("peer-unavailable")) {
+      return createRoomError(
+        "방을 찾지 못했어요. 방장 화면이 열려 있는지와 방 코드를 확인해 주세요.",
+        ERROR_CODES.ROOM_UNAVAILABLE,
+      );
+    }
+    if (type.includes("browser-incompatible")) {
+      return createRoomError(
+        "이 브라우저는 실시간 연결을 지원하지 않아요. 삼성 인터넷이나 Chrome을 최신 버전으로 업데이트해 주세요.",
+        ERROR_CODES.BROWSER_INCOMPATIBLE,
+      );
+    }
+    if (
+      type.includes("network") ||
+      type.includes("socket") ||
+      type.includes("server-error") ||
+      type.includes("webrtc")
+    ) {
+      return createRoomError(
+        "실시간 연결에 실패했어요. Wi-Fi와 모바일 데이터를 바꿔 다시 시도해 주세요.",
+        ERROR_CODES.NETWORK,
+      );
+    }
+    if (error instanceof Error) return error;
+    return createRoomError(fallbackMessage, ERROR_CODES.NETWORK);
+  }
+
   class RoomSession {
     constructor({ PeerCtor, now = () => Date.now(), random = Math.random, onState, onEvent } = {}) {
       this.PeerCtor = PeerCtor;
@@ -284,7 +325,17 @@
       if (typeof this.PeerCtor !== "function") {
         throw new Error("이 브라우저에서는 온라인 연결을 시작할 수 없어요.");
       }
-      return new this.PeerCtor(peerId, { debug: 1 });
+      return new this.PeerCtor(peerId, {
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun.cloudflare.com:3478" },
+          ],
+          iceCandidatePoolSize: 4,
+          sdpSemantics: "unified-plan",
+        },
+      });
     }
 
     create({ nickname, game = "reaction", difficulty = "normal", code } = {}) {
@@ -303,12 +354,13 @@
         }
 
         const fail = (error) => {
+          const roomError = normalizePeerError(error, "방을 만들지 못했어요.");
           if (this.room) {
-            this.emitEvent("error", { message: error?.message || "온라인 연결이 끊겼어요." });
+            this.emitEvent("error", { code: roomError.code, message: roomError.message });
             return;
           }
           this.leave(false);
-          reject(error instanceof Error ? error : new Error("방을 만들지 못했어요."));
+          reject(roomError);
         };
 
         this.peer.on("open", (openedId) => {
@@ -354,13 +406,14 @@
       return new Promise((resolve, reject) => {
         let settled = false;
         const rejectOnce = (error) => {
+          const roomError = normalizePeerError(error, "방에 참가하지 못했어요.");
           if (settled) {
-            this.emitEvent("error", { message: error?.message || "온라인 연결이 끊겼어요." });
+            this.emitEvent("error", { code: roomError.code, message: roomError.message });
             return;
           }
           settled = true;
           this.leave(false);
-          reject(error instanceof Error ? error : new Error("방에 참가하지 못했어요."));
+          reject(roomError);
         };
 
         try {
@@ -371,8 +424,11 @@
         }
 
         this.connectionTimer = setTimeout(() => {
-          rejectOnce(new Error("방을 찾지 못했어요. 코드와 방장 접속 상태를 확인해 주세요."));
-        }, 12000);
+          rejectOnce(createRoomError(
+            "방을 찾지 못했어요. 방장 화면이 열려 있는지와 방 코드를 확인해 주세요.",
+            ERROR_CODES.ROOM_UNAVAILABLE,
+          ));
+        }, 18000);
 
         this.peer.on("open", (openedId) => {
           this.localPeerId = String(openedId || "");
@@ -388,7 +444,10 @@
           });
           connection.on("data", (message) => {
             if (message?.type === "reject") {
-              rejectOnce(new Error(String(message.message || "방에 참가할 수 없어요.")));
+              rejectOnce(createRoomError(
+                String(message.message || "방에 참가할 수 없어요."),
+                String(message.code || ""),
+              ));
               return;
             }
             if (message?.type === "closed") {
@@ -398,7 +457,10 @@
             }
             if (message?.type !== "state" || !message.room) return;
             if (message.room.version !== VERSION) {
-              rejectOnce(new Error("게임 버전이 달라요. 페이지를 새로고침해 주세요."));
+              rejectOnce(createRoomError(
+                "게임 버전이 달라요. 최신 버전으로 다시 연결할게요.",
+                ERROR_CODES.VERSION_MISMATCH,
+              ));
               return;
             }
             this.room = message.room;
@@ -440,8 +502,10 @@
         if (message.version !== VERSION) {
           connection.send({
             type: "reject",
+            code: ERROR_CODES.VERSION_MISMATCH,
             message: "게임 버전이 달라요. 페이지를 새로고침해 주세요.",
           });
+          this.emitEvent("version-mismatch", { peerId: connection.peer });
           connection.close();
           return;
         }
@@ -1247,6 +1311,7 @@
 
   return {
     VERSION,
+    ERROR_CODES,
     ROOM_PREFIX,
     ROOM_CODE_LENGTH,
     ROOM_ALPHABET,
